@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { fromHono } from 'chanfana'
 import type { HonoEnv } from './types'
 import { registerHealthRoutes } from './routes/health'
+import { registerAuthRoutes } from './routes/auth'
 
 const app = new Hono<HonoEnv>()
 
@@ -20,6 +21,7 @@ fromHono(app, {
 })
 
 registerHealthRoutes(app)
+registerAuthRoutes(app)
 
 export default app
 export { app }
