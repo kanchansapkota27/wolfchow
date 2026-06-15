@@ -27,14 +27,16 @@ function makeEnv(): Env {
   } as unknown as Env
 }
 
-// Stand-in for jwtMiddleware: sets claims from a header so we can key on `sub`.
+// Stand-in for jwtMiddleware: sets claims from headers. `X-Test-Restaurant`
+// present → tenant user; absent → platform role (restaurant_id null).
 const injectJwt = createMiddleware<HonoEnv>(async (c, next) => {
   const sub = c.req.header('X-Test-Sub')
   if (sub) {
+    const restaurant = c.req.header('X-Test-Restaurant') ?? null
     c.set('jwt', {
       sub,
-      role: 'restaurant_owner',
-      restaurant_id: 'rest-1',
+      role: restaurant ? 'restaurant_owner' : 'superadmin',
+      restaurant_id: restaurant,
       permissions: [],
       device_id: null,
       imp: false,
@@ -93,9 +95,9 @@ describe('STORY-004 · rate limiting middleware', () => {
     const env = makeEnv()
     // tracking limit is 10/min — easiest to breach
     for (let i = 0; i < 10; i++) {
-      await app.request('/track/ord_live_abc', {}, env)
+      await app.request('/track/ord_live_abc', { headers: ipHeaders }, env)
     }
-    const breach = await app.request('/track/ord_live_abc', {}, env)
+    const breach = await app.request('/track/ord_live_abc', { headers: ipHeaders }, env)
     expect(breach.status).toBe(429)
     expect(breach.headers.get('Retry-After')).toBe('60')
   })
@@ -123,5 +125,36 @@ describe('STORY-004 · rate limiting middleware', () => {
     }
     const other = await app.request('/public', { headers: { 'CF-Connecting-IP': '198.51.100.2' } }, env)
     expect(other.status).toBe(200)
+  })
+
+  // --- Security hardening (security review of STORY-004) ---
+
+  it('tracking limiter keys on IP: rotating the token does not bypass it', async () => {
+    const app = makeApp()
+    const env = makeEnv()
+    // 10 allowed from this IP, using one token...
+    for (let i = 0; i < 10; i++) {
+      const res = await app.request('/track/ord_live_aaa', { headers: ipHeaders }, env)
+      expect(res.status).toBe(200)
+    }
+    // ...an 11th request from the SAME IP but a DIFFERENT token is still blocked.
+    const rotated = await app.request('/track/ord_live_zzz', { headers: ipHeaders }, env)
+    expect(rotated.status).toBe(429)
+  })
+
+  it('writeRateLimit: platform admins (null restaurant_id) get isolated buckets', async () => {
+    const app = makeApp()
+    const env = makeEnv()
+    // Exhaust admin-1's 120/min bucket (no X-Test-Restaurant → restaurant_id null).
+    for (let i = 0; i < 120; i++) {
+      const res = await app.request('/write', { headers: { 'X-Test-Sub': 'admin-1' } }, env)
+      expect(res.status).toBe(200)
+    }
+    const adminOneBreach = await app.request('/write', { headers: { 'X-Test-Sub': 'admin-1' } }, env)
+    expect(adminOneBreach.status).toBe(429)
+
+    // A different platform admin is unaffected — no shared global bucket.
+    const adminTwo = await app.request('/write', { headers: { 'X-Test-Sub': 'admin-2' } }, env)
+    expect(adminTwo.status).toBe(200)
   })
 })
