@@ -1,0 +1,14 @@
+# Copy to .dev.vars for local development (gitignored).
+# Vars (also settable in wrangler.toml [vars]); secrets must live here locally
+# and be set in production via `wrangler secret put <NAME>`.
+
+SUPABASE_URL="http://127.0.0.1:54321"
+SUPABASE_ANON_KEY="your-local-supabase-anon-key"
+
+# --- Secrets (production: wrangler secret put) ---
+SUPABASE_SERVICE_ROLE_KEY="your-local-supabase-service-role-key"
+SUPABASE_JWT_SECRET="your-local-supabase-jwt-secret"
+MASTER_ENCRYPTION_KEY="32-byte-base64-key-for-aes-gcm"
+INTERNAL_CRON_SECRET="shared-secret-for-internal-endpoints"
+# Reserved, unused (no Stripe webhooks in this architecture)
+STRIPE_WEBHOOK_SECRET=""
