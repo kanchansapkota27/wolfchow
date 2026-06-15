@@ -39,10 +39,33 @@ export interface Env {
 }
 
 /**
- * Hono context variables, populated by middleware in later stories
- * (e.g. authenticated user, tenant id). Empty for the Slice 0 scaffold.
+ * Verified Supabase JWT claims attached to the Hono context by `jwtMiddleware`.
+ * All values come from the token itself — no database lookup during auth.
  */
-export type Variables = Record<string, never>
+export interface JwtClaims {
+  /** Supabase auth user id (`sub` claim). */
+  sub: string
+  /** superadmin | support | restaurant_owner | kitchen */
+  role: string
+  /** Tenant id, or null for platform-level roles (superadmin/support). */
+  restaurant_id: string | null
+  /** Fine-grained permissions, e.g. `orders:accept`. */
+  permissions: string[]
+  /** Set for tablet device accounts, otherwise null. */
+  device_id: string | null
+  /** True when this session is a superadmin impersonating a tenant. */
+  imp: boolean
+  /** User id of the impersonator, or null. */
+  imp_by: string | null
+}
+
+/**
+ * Hono context variables. `jwt` is populated by `jwtMiddleware` on protected
+ * routes; public routes (e.g. /health) never read it.
+ */
+export interface Variables {
+  jwt: JwtClaims
+}
 
 /** Convenience alias for typing Hono handlers: `Context<HonoEnv>`. */
 export interface HonoEnv {
