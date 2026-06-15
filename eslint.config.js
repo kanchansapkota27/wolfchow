@@ -19,4 +19,15 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
     },
   },
+  {
+    // Integration tests run in Node and use node globals + config files.
+    files: ['tests/**/*.ts', 'vitest.integration.config.ts'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+      },
+    },
+  },
 )
