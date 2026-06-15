@@ -22,8 +22,11 @@ export interface Env {
   // --- R2 ---
   MEDIA_BUCKET: R2Bucket
 
-  // --- Rate limiting ---
-  RATE_LIMITER: RateLimit
+  // --- Rate limiting (one binding per route group; see wrangler.toml) ---
+  RATE_LIMITER_PUBLIC: RateLimit
+  RATE_LIMITER_ORDER: RateLimit
+  RATE_LIMITER_WRITE: RateLimit
+  RATE_LIMITER_TRACKING: RateLimit
 
   // --- Vars (non-secret) ---
   SUPABASE_URL: string
