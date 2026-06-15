@@ -7,4 +7,9 @@ export default defineConfig({
       wrangler: { configPath: './wrangler.toml' },
     }),
   ],
+  test: {
+    // Workers-runtime unit tests only. Integration tests that hit a live local
+    // Supabase run under vitest.integration.config.ts (Node environment).
+    include: ['src/**/*.test.ts'],
+  },
 })
