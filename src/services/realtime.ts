@@ -17,6 +17,18 @@ export type EventType =
   | 'notice_created'
   | 'notice_removed'
   | 'closure_updated'
+  // Superadmin suspends a restaurant (STORY-008) — tells live clients to stop.
+  | 'suspension'
+
+/** The broadcast surface, so consumers can inject a fake in tests. */
+export interface Broadcaster {
+  broadcast(
+    restaurantId: string,
+    event: EventType,
+    payload: Record<string, unknown>,
+    ctx: ExecutionContext,
+  ): void
+}
 
 /** Channel a restaurant's clients subscribe to for live order/menu events. */
 export function orderChannel(restaurantId: string): string {
@@ -33,7 +45,7 @@ export function orderChannel(restaurantId: string): string {
  * so the unsubscribed `channel.send` uses Realtime's HTTP broadcast endpoint
  * rather than holding open a websocket.
  */
-export class RealtimeService {
+export class RealtimeService implements Broadcaster {
   private readonly client: SupabaseClient
 
   constructor(env: Env, client?: SupabaseClient) {
