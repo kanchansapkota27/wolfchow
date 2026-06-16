@@ -1,8 +1,16 @@
 import type { Context, Hono } from 'hono'
 import type { HonoEnv } from '../../types'
-import { createAnonClient } from '../../services/supabase'
+import { createAdminClient, createAnonClient } from '../../services/supabase'
 import { decodeJwtClaims, signJwt } from '../../services/tokens'
 import { deviceSchema, loginSchema, logoutSchema, refreshSchema, type DeviceRecord } from './schemas'
+
+interface InviteValidationRow {
+  used: boolean
+  expires_at: string
+  commission_rate: number
+  billing_note: string | null
+  plans: { name: string } | { name: string }[] | null
+}
 
 /** Tablet device sessions are long-lived (kitchen display stays signed in). */
 const DEVICE_TOKEN_TTL_SECONDS = 60 * 60 * 12
@@ -132,6 +140,33 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
         name: record.name,
         role: 'tablet_device',
       },
+    })
+  })
+
+  // Public, no auth: the signup page validates an invite token before showing
+  // the form. Order of checks: not found → 404, used/revoked → 409, expired →
+  // 410. A valid token returns the plan name + billing pre-fills.
+  app.get('/auth/invite/:token', async (c) => {
+    const token = c.req.param('token')
+    const admin = createAdminClient(c.env)
+    const { data } = await admin
+      .from('invites')
+      .select('used, expires_at, commission_rate, billing_note, plans(name)')
+      .eq('token', token)
+      .maybeSingle()
+
+    if (!data) return c.json({ error: 'invite_not_found' }, 404)
+    const invite = data as InviteValidationRow
+    if (invite.used) return c.json({ error: 'invite_used' }, 409)
+    if (new Date(invite.expires_at).getTime() <= Date.now()) {
+      return c.json({ error: 'invite_expired' }, 410)
+    }
+
+    const planName = Array.isArray(invite.plans) ? invite.plans[0]?.name : invite.plans?.name
+    return c.json({
+      plan_name: planName ?? null,
+      commission_rate: invite.commission_rate,
+      billing_note: invite.billing_note,
     })
   })
 }
