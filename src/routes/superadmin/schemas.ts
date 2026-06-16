@@ -43,3 +43,17 @@ export const updatePlanSchema = createPlanSchema.partial().refine(
 
 export type CreatePlanInput = z.infer<typeof createPlanSchema>
 export type UpdatePlanInput = z.infer<typeof updatePlanSchema>
+
+/**
+ * Create-invite body. `plan_id` is required and validated against the DB in the
+ * handler; the rest are optional billing pre-fills. `commission_rate` is a
+ * fraction (0.02 = 2%), bounded [0, 1).
+ */
+export const createInviteSchema = z.object({
+  plan_id: z.string().uuid(),
+  commission_rate: z.number().min(0).max(1).optional(),
+  billing_note: z.string().max(500).optional(),
+  email: z.string().email().optional(),
+})
+
+export type CreateInviteInput = z.infer<typeof createInviteSchema>
