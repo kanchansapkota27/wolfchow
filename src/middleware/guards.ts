@@ -47,6 +47,24 @@ export function requireRestaurant() {
 }
 
 /**
+ * Require multi-factor auth on the session. Reads the Supabase `amr` claim and
+ * passes only when a `totp` factor is present; otherwise 403 `mfa_required`.
+ * Applied to the whole `/superadmin/*` group so platform management always sits
+ * behind a second factor. TOTP enrollment is handled in Supabase Auth (client
+ * MFA enroll/verify); see the STORY-005 docs.
+ */
+export function requireMFA() {
+  return createMiddleware<HonoEnv>(async (c, next) => {
+    const jwt = c.get('jwt')
+    if (!jwt) return c.json({ error: 'unauthorized' }, 401)
+    if (!jwt.amr.some((m) => m.method === 'totp')) {
+      return c.json({ error: 'mfa_required' }, 403)
+    }
+    await next()
+  })
+}
+
+/**
  * Block sensitive actions (billing changes, API key rotation, …) while a
  * superadmin is impersonating a tenant. `blockedActions` labels what this guard
  * protects; any of them is disallowed when `jwt.imp === true`.

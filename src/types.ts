@@ -42,6 +42,15 @@ export interface Env {
 }
 
 /**
+ * A single Supabase `amr` (authenticator method reference) entry — which method
+ * the session authenticated with (e.g. `password`, `otp`, `totp`) and when.
+ */
+export interface AuthMethodReference {
+  method: string
+  timestamp: number | null
+}
+
+/**
  * Verified Supabase JWT claims attached to the Hono context by `jwtMiddleware`.
  * All values come from the token itself — no database lookup during auth.
  */
@@ -60,6 +69,8 @@ export interface JwtClaims {
   imp: boolean
   /** User id of the impersonator, or null. */
   imp_by: string | null
+  /** Authenticator method references — used by `requireMFA` to detect TOTP. */
+  amr: AuthMethodReference[]
 }
 
 /**
