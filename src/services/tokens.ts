@@ -42,6 +42,47 @@ export async function signJwt(payload: Record<string, unknown>, secret: string):
   return `${data}.${bytesToBase64Url(new Uint8Array(signature))}`
 }
 
+/**
+ * Verify an HS256 compact JWS and return its claims, or null if the signature is
+ * invalid, the algorithm is not HS256, the token is malformed, or it has expired.
+ */
+export async function verifyJwt(
+  token: string,
+  secret: string,
+): Promise<Record<string, unknown> | null> {
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  const [headerB64, payloadB64, signatureB64] = parts as [string, string, string]
+
+  let alg: unknown
+  try {
+    alg = (JSON.parse(new TextDecoder().decode(base64UrlToBytes(headerB64))) as Record<string, unknown>).alg
+  } catch {
+    return null
+  }
+  if (alg !== 'HS256') return null
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  )
+  const valid = await crypto.subtle.verify(
+    'HMAC',
+    key,
+    base64UrlToBytes(signatureB64),
+    new TextEncoder().encode(`${headerB64}.${payloadB64}`),
+  )
+  if (!valid) return null
+
+  const claims = decodeJwtClaims(token)
+  if (!claims) return null
+  if (typeof claims.exp === 'number' && claims.exp * 1000 <= Date.now()) return null
+  return claims
+}
+
 /** Decode (without verifying) the claims of a compact JWS. Returns null if malformed. */
 export function decodeJwtClaims(token: string): Record<string, unknown> | null {
   const parts = token.split('.')
