@@ -2,6 +2,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { jwtMiddleware } from '../../middleware/jwt'
 import { requireMFA, requireRole } from '../../middleware/guards'
+import { registerPlanRoutes } from './plans'
 
 /**
  * Superadmin (and support) route group. Every `/superadmin/*` route sits behind
@@ -23,4 +24,7 @@ export function registerSuperadminRoutes(app: Hono<HonoEnv>): void {
       mfa: true,
     })
   })
+
+  // Resource routers (registered after the guard `use` so they inherit it).
+  registerPlanRoutes(app)
 }
