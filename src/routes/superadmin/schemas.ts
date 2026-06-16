@@ -73,3 +73,21 @@ export const updateRestaurantSchema = z
   .refine((obj) => Object.keys(obj).length > 0, { message: 'at least one field is required' })
 
 export type UpdateRestaurantInput = z.infer<typeof updateRestaurantSchema>
+
+/** Global SMTP fallback config. Password is sealed before storage. */
+export const smtpGlobalSchema = z.object({
+  host: z.string().min(1).max(255),
+  port: z.number().int().min(1).max(65535),
+  username: z.string().min(1).max(255),
+  password: z.string().min(1).max(500),
+  from_email: z.string().email(),
+  from_name: z.string().min(1).max(255),
+})
+
+/** Per-restaurant SMTP override: the global fields plus a monthly send cap. */
+export const smtpOverrideSchema = smtpGlobalSchema.extend({
+  monthly_limit: z.number().int().min(0).nullable().optional(),
+})
+
+export type SmtpGlobalInput = z.infer<typeof smtpGlobalSchema>
+export type SmtpOverrideInput = z.infer<typeof smtpOverrideSchema>

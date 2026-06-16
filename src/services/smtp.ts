@@ -128,6 +128,24 @@ export class SmtpService {
     return resolved.source
   }
 
+  /**
+   * Send a one-off test email using the global config only (no restaurant
+   * resolution, no limit counter, no email_log). Used by the superadmin SMTP
+   * test endpoint. Throws {@link NoSmtpConfigError} if no global config exists;
+   * the transport error surfaces if no email provider is wired yet.
+   */
+  async sendGlobalTest(to: string, subject: string, html: string): Promise<void> {
+    const global = await this.admin
+      .from('smtp_config')
+      .select('*')
+      .is('restaurant_id', null)
+      .limit(1)
+      .maybeSingle()
+    const row = global.data as SmtpConfigRow | null
+    if (!row) throw new NoSmtpConfigError()
+    await this.transport.send({ credentials: await this.toCredentials(row), to, subject, html })
+  }
+
   private async resolveCredentials(restaurantId: string): Promise<ResolvedCredentials> {
     const own = await this.admin
       .from('smtp_config')
