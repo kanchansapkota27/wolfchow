@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient, createAnonClient } from '../../services/supabase'
-import { decodeJwtClaims, signJwt } from '../../services/tokens'
+import { decodeJwtClaims, signJwt, verifyJwt } from '../../services/tokens'
 import { deviceSchema, loginSchema, logoutSchema, refreshSchema, type DeviceRecord } from './schemas'
 
 interface InviteValidationRow {
@@ -82,6 +82,26 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
   })
 
   app.post('/auth/logout', async (c) => {
+    // Impersonation sessions are Worker-minted (no Supabase refresh token).
+    // Ending one is client-side (discard token); the server records the audit.
+    // If a valid impersonation access token is presented, log IMPERSONATION_END
+    // and return — these tokens have no refresh token to revoke.
+    const header = c.req.header('Authorization')
+    if (header?.startsWith('Bearer ')) {
+      const claims = await verifyJwt(header.slice('Bearer '.length).trim(), c.env.SUPABASE_JWT_SECRET)
+      if (claims?.imp === true) {
+        const admin = createAdminClient(c.env)
+        await admin.from('audit_log').insert({
+          restaurant_id: typeof claims.restaurant_id === 'string' ? claims.restaurant_id : null,
+          table_name: 'restaurants',
+          operation: 'IMPERSONATION_END',
+          user_id: typeof claims.imp_by === 'string' ? claims.imp_by : null,
+          new_data: { target_restaurant_id: claims.restaurant_id ?? null },
+        })
+        return c.body(null, 204)
+      }
+    }
+
     const parsed = logoutSchema.safeParse(await readJson(c))
     if (!parsed.success) {
       return c.json({ error: 'invalid_request', code: 'validation' }, 400)

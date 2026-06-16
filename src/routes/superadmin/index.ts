@@ -4,6 +4,7 @@ import { jwtMiddleware } from '../../middleware/jwt'
 import { requireMFA, requireRole } from '../../middleware/guards'
 import { registerPlanRoutes } from './plans'
 import { registerInviteRoutes } from './invites'
+import { registerImpersonateRoutes } from './impersonate'
 
 /**
  * Superadmin (and support) route group. Every `/superadmin/*` route sits behind
@@ -29,4 +30,5 @@ export function registerSuperadminRoutes(app: Hono<HonoEnv>): void {
   // Resource routers (registered after the guard `use` so they inherit it).
   registerPlanRoutes(app)
   registerInviteRoutes(app)
+  registerImpersonateRoutes(app)
 }
