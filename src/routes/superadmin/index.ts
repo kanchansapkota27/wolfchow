@@ -5,6 +5,7 @@ import { requireMFA, requireRole } from '../../middleware/guards'
 import { registerPlanRoutes } from './plans'
 import { registerInviteRoutes } from './invites'
 import { registerImpersonateRoutes } from './impersonate'
+import { registerRestaurantRoutes, type RestaurantRouteDeps } from './restaurants'
 
 /**
  * Superadmin (and support) route group. Every `/superadmin/*` route sits behind
@@ -12,8 +13,14 @@ import { registerImpersonateRoutes } from './impersonate'
  * tenant users get 403), and MFA (`requireMFA`, so the session must carry a TOTP
  * factor). Later Slice 1 stories register their handlers on this group; this
  * story establishes the mount point and a session probe.
+ *
+ * `deps` forwards injectable dependencies (e.g. a fake Realtime broadcaster) to
+ * the resource routers for testing.
  */
-export function registerSuperadminRoutes(app: Hono<HonoEnv>): void {
+export function registerSuperadminRoutes(
+  app: Hono<HonoEnv>,
+  deps: RestaurantRouteDeps = {},
+): void {
   app.use('/superadmin/*', jwtMiddleware, requireRole('superadmin', 'support'), requireMFA())
 
   // Lightweight probe: confirms the guard stack passed and echoes the identity.
@@ -31,4 +38,5 @@ export function registerSuperadminRoutes(app: Hono<HonoEnv>): void {
   registerPlanRoutes(app)
   registerInviteRoutes(app)
   registerImpersonateRoutes(app)
+  registerRestaurantRoutes(app, deps)
 }

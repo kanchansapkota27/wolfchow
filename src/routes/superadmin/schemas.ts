@@ -57,3 +57,19 @@ export const createInviteSchema = z.object({
 })
 
 export type CreateInviteInput = z.infer<typeof createInviteSchema>
+
+/**
+ * Superadmin restaurant update. Only billing/plan/active are mutable here; the
+ * tenant owns the rest of its profile. Rejects an empty object.
+ */
+export const updateRestaurantSchema = z
+  .object({
+    plan_id: z.string().uuid(),
+    commission_rate: z.number().min(0).max(1),
+    billing_note: z.string().max(500).nullable(),
+    active: z.boolean(),
+  })
+  .partial()
+  .refine((obj) => Object.keys(obj).length > 0, { message: 'at least one field is required' })
+
+export type UpdateRestaurantInput = z.infer<typeof updateRestaurantSchema>
