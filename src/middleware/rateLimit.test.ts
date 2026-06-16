@@ -41,6 +41,7 @@ const injectJwt = createMiddleware<HonoEnv>(async (c, next) => {
       device_id: null,
       imp: false,
       imp_by: null,
+      amr: [],
     } satisfies JwtClaims)
   }
   await next()

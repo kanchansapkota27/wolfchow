@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory'
-import type { HonoEnv, JwtClaims } from '../types'
+import type { AuthMethodReference, HonoEnv, JwtClaims } from '../types'
 
 /**
  * Verifies the Supabase JWT on the `Authorization: Bearer <token>` header and
@@ -45,7 +45,26 @@ function toClaims(payload: Record<string, unknown>): JwtClaims {
     device_id: typeof payload.device_id === 'string' ? payload.device_id : null,
     imp: payload.imp === true,
     imp_by: typeof payload.imp_by === 'string' ? payload.imp_by : null,
+    amr: toAmr(payload.amr),
   }
+}
+
+/**
+ * Narrow the Supabase `amr` claim into typed method references. Supabase emits
+ * an array of `{ method, timestamp }`; anything else (absent/malformed) yields
+ * an empty list, which `requireMFA` treats as "no MFA".
+ */
+function toAmr(value: unknown): AuthMethodReference[] {
+  if (!Array.isArray(value)) return []
+  const refs: AuthMethodReference[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const method = (entry as Record<string, unknown>).method
+    if (typeof method !== 'string') continue
+    const timestamp = (entry as Record<string, unknown>).timestamp
+    refs.push({ method, timestamp: typeof timestamp === 'number' ? timestamp : null })
+  }
+  return refs
 }
 
 interface VerifyResult {

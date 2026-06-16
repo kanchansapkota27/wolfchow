@@ -20,8 +20,8 @@ export default tseslint.config(
     },
   },
   {
-    // Integration tests run in Node and use node globals + config files.
-    files: ['tests/**/*.ts', 'vitest.integration.config.ts'],
+    // Integration tests and CLI scripts run in Node and use node globals.
+    files: ['tests/**/*.ts', 'scripts/**/*.ts', 'vitest.integration.config.ts'],
     languageOptions: {
       globals: {
         process: 'readonly',

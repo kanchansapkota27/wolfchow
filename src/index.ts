@@ -3,6 +3,7 @@ import { fromHono } from 'chanfana'
 import type { HonoEnv } from './types'
 import { registerHealthRoutes } from './routes/health'
 import { registerAuthRoutes } from './routes/auth'
+import { registerSuperadminRoutes } from './routes/superadmin'
 
 const app = new Hono<HonoEnv>()
 
@@ -22,6 +23,7 @@ fromHono(app, {
 
 registerHealthRoutes(app)
 registerAuthRoutes(app)
+registerSuperadminRoutes(app)
 
 export default app
 export { app }
