@@ -31,7 +31,20 @@ export function registerPlanRoutes(app: Hono<HonoEnv>): void {
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
     if (error) return c.json({ error: 'query_failed' }, 500)
-    return c.json({ plans: data })
+
+    // Attach how many restaurants reference each plan so the UI can block
+    // deletion of an in-use plan. One lightweight query (plan_id only), counted
+    // in memory — avoids depending on PostgREST aggregate support.
+    const usage = await admin.from('restaurants').select('plan_id')
+    const counts = new Map<string, number>()
+    for (const row of (usage.data ?? []) as Array<{ plan_id: string | null }>) {
+      if (row.plan_id) counts.set(row.plan_id, (counts.get(row.plan_id) ?? 0) + 1)
+    }
+    const plans = ((data ?? []) as Array<{ id: string }>).map((plan) => ({
+      ...plan,
+      restaurant_count: counts.get(plan.id) ?? 0,
+    }))
+    return c.json({ plans })
   })
 
   app.post('/superadmin/plans', async (c) => {

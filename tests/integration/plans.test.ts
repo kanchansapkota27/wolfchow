@@ -222,6 +222,32 @@ describe('STORY-006 · plan management', () => {
     expect(row.data?.deleted_at).not.toBeNull()
   })
 
+  it('GET /superadmin/plans: includes restaurant_count per plan', async () => {
+    const created = (await (await req('POST', '/superadmin/plans', SUPERADMIN, planBody())).json()) as {
+      plan: { id: string }
+    }
+    const planId = created.plan.id
+    createdPlanIds.push(planId)
+    const r = await admin
+      .from('restaurants')
+      .insert({
+        slug: `plan-${randomUUID().slice(0, 8)}`,
+        display_name: 'Count Test',
+        business_name: 'Count Test LLC',
+        timezone: 'Europe/Istanbul',
+        plan_id: planId,
+      })
+      .select('id')
+      .single()
+    createdRestaurantIds.push(r.data?.id as string)
+
+    const body = (await (await req('GET', '/superadmin/plans', SUPERADMIN)).json()) as {
+      plans: Array<{ id: string; restaurant_count: number }>
+    }
+    const row = body.plans.find((p) => p.id === planId)
+    expect(row?.restaurant_count).toBe(1)
+  })
+
   it('non-superadmin: 403', async () => {
     const ownerToken = await token('restaurant_owner', randomUUID())
     const res = await req('GET', '/superadmin/plans', ownerToken)
