@@ -22,23 +22,12 @@ export default tseslint.config(
     },
   },
   {
-    // Browser globals for app + UI source.
+    // Browser/DOM globals are resolved by TypeScript (DOM lib), so leave
+    // undefined-identifier checking to the compiler rather than enumerating
+    // every global here — the standard typescript-eslint recommendation.
     files: ['packages/**/*.{ts,tsx}', 'apps/**/*.{ts,tsx}'],
-    languageOptions: {
-      globals: {
-        window: 'readonly',
-        document: 'readonly',
-        localStorage: 'readonly',
-        fetch: 'readonly',
-        console: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        HTMLElement: 'readonly',
-        HTMLInputElement: 'readonly',
-        HTMLButtonElement: 'readonly',
-        HTMLDivElement: 'readonly',
-        KeyboardEvent: 'readonly',
-      },
+    rules: {
+      'no-undef': 'off',
     },
   },
 )
