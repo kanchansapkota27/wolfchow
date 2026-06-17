@@ -70,6 +70,21 @@ export interface Plan {
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
   created_at: string
+  /** Number of restaurants on this plan (present on the superadmin list). */
+  restaurant_count?: number
+}
+
+/** Settable fields when creating or updating a plan (no id/created_at). */
+export interface PlanInput {
+  name: string
+  staff_cap: number
+  item_cap: number
+  category_cap: number
+  modifier_cap: number
+  smtp_monthly_limit: number | null
+  transaction_history_days: number | null
+  feature_flags: FeatureFlags
+  payment_methods_allowed: PaymentMethod[]
 }
 
 export interface BrandColors {

@@ -3,6 +3,7 @@ import type {
   Invite,
   Order,
   Plan,
+  PlanInput,
   Restaurant,
 } from '@wolfchow/types'
 import { ApiError } from './errors'
@@ -170,10 +171,10 @@ export function createApiClient(config: ApiClientConfig) {
   const superadmin = {
     session: () => apiFetch<{ sub: string; role: string }>('/superadmin/session'),
     listPlans: () => apiFetch<{ plans: Plan[] }>('/superadmin/plans'),
-    createPlan: (data: Partial<Plan>) =>
-      apiFetch<Plan>('/superadmin/plans', { method: 'POST', body: data }),
-    updatePlan: (id: string, data: Partial<Plan>) =>
-      apiFetch<Plan>(`/superadmin/plans/${id}`, { method: 'PATCH', body: data }),
+    createPlan: (data: PlanInput) =>
+      apiFetch<{ plan: Plan }>('/superadmin/plans', { method: 'POST', body: data }).then((r) => r.plan),
+    updatePlan: (id: string, data: Partial<PlanInput>) =>
+      apiFetch<{ plan: Plan }>(`/superadmin/plans/${id}`, { method: 'PATCH', body: data }).then((r) => r.plan),
     deletePlan: (id: string) =>
       apiFetch<void>(`/superadmin/plans/${id}`, { method: 'DELETE' }),
     listInvites: () => apiFetch<{ invites: Invite[] }>('/superadmin/invites'),

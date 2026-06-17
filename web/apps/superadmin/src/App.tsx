@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router'
 import { RequireRole } from '@wolfchow/auth'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
+import { Plans } from './pages/Plans'
 import { Placeholder } from './pages/Placeholder'
 
 /**
@@ -19,7 +20,7 @@ export function App() {
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="restaurants" element={<Placeholder title="Restaurants" story="STORY-050" />} />
-          <Route path="plans" element={<Placeholder title="Plans" story="STORY-051" />} />
+          <Route path="plans" element={<Plans />} />
           <Route path="invites" element={<Placeholder title="Invites" story="STORY-052" />} />
           <Route path="smtp" element={<Placeholder title="SMTP" story="STORY-053" />} />
           <Route path="billing" element={<Placeholder title="Billing" story="STORY-054" />} />
