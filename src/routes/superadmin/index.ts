@@ -8,6 +8,7 @@ import { registerImpersonateRoutes } from './impersonate'
 import { registerRestaurantRoutes, type RestaurantRouteDeps } from './restaurants'
 import { registerSmtpRoutes } from './smtp'
 import { registerBillingRoutes } from './billing'
+import { registerAuditRoutes } from './audit'
 
 /**
  * Superadmin (and support) route group. Every `/superadmin/*` route sits behind
@@ -43,4 +44,5 @@ export function registerSuperadminRoutes(
   registerRestaurantRoutes(app, deps)
   registerSmtpRoutes(app)
   registerBillingRoutes(app)
+  registerAuditRoutes(app)
 }
