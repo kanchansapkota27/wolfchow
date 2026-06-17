@@ -1,25 +1,20 @@
 import { Hono } from 'hono'
-import { fromHono } from 'chanfana'
+import { getSwaggerUI } from 'chanfana'
 import type { HonoEnv } from './types'
+import { buildOpenApiDocument } from './openapi/document'
 import { registerHealthRoutes } from './routes/health'
 import { registerAuthRoutes } from './routes/auth'
 import { registerSuperadminRoutes } from './routes/superadmin'
 
 const app = new Hono<HonoEnv>()
 
-// Chanfana wraps the Hono app and serves Swagger UI at /docs and the
-// OpenAPI 3.1 document at /openapi.json.
-fromHono(app, {
-  docs_url: '/docs',
-  openapi_url: '/openapi.json',
-  schema: {
-    info: {
-      title: 'RestroAPI',
-      version: '0.1.0',
-      description: 'Multi-tenant restaurant ordering SaaS API',
-    },
-  },
-})
+// API documentation. Routes are plain Hono handlers (not Chanfana route
+// classes), so we serve a hand-authored OpenAPI 3.1 document and render it with
+// Chanfana's Swagger UI helper. Full decorator-based generation lands in the
+// complete STORY-044.
+const openApiDocument = buildOpenApiDocument()
+app.get('/openapi.json', () => Response.json(openApiDocument))
+app.get('/docs', (c) => c.html(getSwaggerUI('/openapi.json')))
 
 registerHealthRoutes(app)
 registerAuthRoutes(app)
