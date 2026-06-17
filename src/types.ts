@@ -46,6 +46,13 @@ export interface Env {
    * Lives only in `.dev.vars`; never set in `wrangler.toml` or a prod secret.
    */
   MFA_DEV_BYPASS?: string
+
+  /**
+   * Comma-separated list of browser origins allowed to call the API (CORS).
+   * In production set the apps' Cloudflare Pages origins; when unset, local Vite
+   * dev ports are allowed. Safe to keep in `wrangler.toml [vars]` (not a secret).
+   */
+  CORS_ALLOWED_ORIGINS?: string
 }
 
 /**
