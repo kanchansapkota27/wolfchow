@@ -10,6 +10,7 @@ const app = new Hono<HonoEnv>()
 registerSuperadminRoutes(app)
 
 const env = { SUPABASE_JWT_SECRET: JWT_SECRET } as unknown as Env
+const envBypass = { SUPABASE_JWT_SECRET: JWT_SECRET, MFA_DEV_BYPASS: 'true' } as unknown as Env
 
 interface TokenOpts {
   role: string
@@ -37,10 +38,10 @@ async function token(opts: TokenOpts): Promise<string> {
   )
 }
 
-async function getSession(bearer?: string): Promise<Response> {
+async function getSession(bearer?: string, withEnv: Env = env): Promise<Response> {
   const headers: Record<string, string> = {}
   if (bearer) headers.Authorization = `Bearer ${bearer}`
-  return await app.request('/superadmin/session', { headers }, env)
+  return await app.request('/superadmin/session', { headers }, withEnv)
 }
 
 describe('STORY-005 · superadmin auth & MFA guard', () => {
@@ -75,5 +76,20 @@ describe('STORY-005 · superadmin auth & MFA guard', () => {
     const res = await getSession()
     expect(res.status).toBe(401)
     expect(((await res.json()) as { error: string }).error).toBe('unauthorized')
+  })
+
+  it('MFA_DEV_BYPASS=true: superadmin without TOTP passes (local dev)', async () => {
+    const res = await getSession(await token({ role: 'superadmin', totp: false }), envBypass)
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { role: string }).role).toBe('superadmin')
+  })
+
+  it('MFA_DEV_BYPASS does not widen role access: tenant role still 403', async () => {
+    const res = await getSession(
+      await token({ role: 'restaurant_owner', restaurant_id: 'r1', totp: false }),
+      envBypass,
+    )
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { code: string }).code).toBe('insufficient_role')
   })
 })

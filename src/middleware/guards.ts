@@ -52,11 +52,20 @@ export function requireRestaurant() {
  * Applied to the whole `/superadmin/*` group so platform management always sits
  * behind a second factor. TOTP enrollment is handled in Supabase Auth (client
  * MFA enroll/verify); see the STORY-005 docs.
+ *
+ * LOCAL DEV ONLY: when `MFA_DEV_BYPASS === 'true'` the TOTP check is skipped, so
+ * a seeded superadmin can use the panel before the MFA enroll/challenge flow
+ * exists. This var lives only in `.dev.vars` (gitignored) — it must NEVER be set
+ * in `wrangler.toml` or a production secret.
  */
 export function requireMFA() {
   return createMiddleware<HonoEnv>(async (c, next) => {
     const jwt = c.get('jwt')
     if (!jwt) return c.json({ error: 'unauthorized' }, 401)
+    if (c.env.MFA_DEV_BYPASS === 'true') {
+      await next()
+      return
+    }
     if (!jwt.amr.some((m) => m.method === 'totp')) {
       return c.json({ error: 'mfa_required' }, 403)
     }
