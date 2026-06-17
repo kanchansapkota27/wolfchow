@@ -9,6 +9,9 @@ export default tseslint.config(
       'dist',
       'coverage',
       'worker-configuration.d.ts',
+      // The frontend monorepo is a separate pnpm workspace with its own
+      // lint/typecheck/test pipeline (see web/). Don't lint it from the backend.
+      'web',
     ],
   },
   js.configs.recommended,
