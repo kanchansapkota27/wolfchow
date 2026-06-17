@@ -7,7 +7,8 @@
       "@wolfchow/types": ["packages/types/src/index.ts"],
       "@wolfchow/utils": ["packages/utils/src/index.ts"],
       "@wolfchow/api-client": ["packages/api-client/src/index.ts"],
-      "@wolfchow/ui": ["packages/ui/src/index.ts"]
+      "@wolfchow/ui": ["packages/ui/src/index.ts"],
+      "@wolfchow/auth": ["packages/auth/src/index.ts"]
     }
   },
   "include": ["packages/*/src", "apps/*/src", "vitest.config.ts", "vitest.setup.ts"],

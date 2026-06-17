@@ -203,6 +203,24 @@ importers:
         specifier: workspace:*
         version: link:../types
 
+  packages/auth:
+    dependencies:
+      '@wolfchow/api-client':
+        specifier: workspace:*
+        version: link:../api-client
+      '@wolfchow/types':
+        specifier: workspace:*
+        version: link:../types
+      '@wolfchow/ui':
+        specifier: workspace:*
+        version: link:../ui
+      react:
+        specifier: ^19.0.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.7(react@19.2.7)
+
   packages/types: {}
 
   packages/ui:
