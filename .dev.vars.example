@@ -12,3 +12,8 @@ MASTER_ENCRYPTION_KEY="32-byte-base64-key-for-aes-gcm"
 INTERNAL_CRON_SECRET="shared-secret-for-internal-endpoints"
 # Reserved, unused (no Stripe webhooks in this architecture)
 STRIPE_WEBHOOK_SECRET=""
+
+# LOCAL DEV ONLY — set to "true" to bypass the superadmin TOTP/MFA check so a
+# seeded superadmin can use the panel before the MFA challenge flow is built.
+# NEVER set this in production (do not add to wrangler.toml or `wrangler secret put`).
+# MFA_DEV_BYPASS="true"

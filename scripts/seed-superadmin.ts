@@ -8,12 +8,13 @@
  *   support    → { role: 'support',    restaurant_id: null, permissions: [] }
  *
  * Idempotent: re-running updates the existing users' role rows instead of
- * failing on a duplicate. Run against local Supabase during development:
+ * failing on a duplicate. The support user is optional — omit its env vars to
+ * provision the superadmin alone. Run against local Supabase during development:
  *
  *   SUPABASE_URL=http://127.0.0.1:54321 \
  *   SUPABASE_SERVICE_ROLE_KEY=... \
  *   SUPERADMIN_EMAIL=admin@example.com SUPERADMIN_PASSWORD=... \
- *   SUPPORT_EMAIL=support@example.com SUPPORT_PASSWORD=... \
+ *   [SUPPORT_EMAIL=support@example.com SUPPORT_PASSWORD=...] \
  *   npx tsx scripts/seed-superadmin.ts
  *
  * --- TOTP (MFA) enrollment ---
@@ -98,17 +99,21 @@ async function main(): Promise<void> {
       password: requireEnv('SUPERADMIN_PASSWORD'),
       role: 'superadmin',
     },
-    {
-      email: requireEnv('SUPPORT_EMAIL'),
-      password: requireEnv('SUPPORT_PASSWORD'),
-      role: 'support',
-    },
   ]
+
+  // Support user is optional — only provisioned when its env vars are present.
+  if (process.env.SUPPORT_EMAIL && process.env.SUPPORT_PASSWORD) {
+    users.push({
+      email: process.env.SUPPORT_EMAIL,
+      password: process.env.SUPPORT_PASSWORD,
+      role: 'support',
+    })
+  }
 
   for (const user of users) {
     await provision(admin, user)
   }
-  console.info('Done. Reminder: each user must enrol TOTP on first sign-in (see header).')
+  console.info('Done. Reminder: enrol TOTP on first sign-in, or set MFA_DEV_BYPASS="true" in .dev.vars for local use (see header).')
 }
 
 main().catch((err: unknown) => {

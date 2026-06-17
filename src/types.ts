@@ -39,6 +39,13 @@ export interface Env {
   INTERNAL_CRON_SECRET: string
   /** Reserved, unused — no Stripe webhooks in this architecture. */
   STRIPE_WEBHOOK_SECRET: string
+
+  /**
+   * LOCAL DEV ONLY. When `'true'`, `requireMFA` skips the TOTP check so a seeded
+   * superadmin can use the panel before the MFA enroll/challenge flow exists.
+   * Lives only in `.dev.vars`; never set in `wrangler.toml` or a prod secret.
+   */
+  MFA_DEV_BYPASS?: string
 }
 
 /**
