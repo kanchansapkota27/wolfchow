@@ -17,7 +17,12 @@ function Providers() {
   const [searchParams] = useSearchParams()
   const session = useMemo(() => createLocalStorageSession(), [])
   const authNavigator = useMemo<AuthNavigator>(
-    () => ({ navigate: (to) => navigate(to), getQueryParam: (key) => searchParams.get(key) }),
+    () => ({
+      // This app is served at its own origin root, so the shared role-home
+      // target `/superadmin` maps to `/` here (post-login + impersonation exit).
+      navigate: (to) => navigate(to === '/superadmin' ? '/' : to),
+      getQueryParam: (key) => searchParams.get(key),
+    }),
     [navigate, searchParams],
   )
   const client = useMemo(

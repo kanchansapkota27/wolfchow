@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { AuthProvider, type AuthNavigator } from '@wolfchow/auth'
 import { createApiClient, createMemorySession } from '@wolfchow/api-client'
@@ -32,5 +32,24 @@ describe('STORY-049 · App role guard', () => {
     )
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login'))
+  })
+
+  it('/login renders the public login page (no role required)', async () => {
+    const session = createMemorySession()
+    const navigator: AuthNavigator = { navigate: vi.fn(), getQueryParam: () => null }
+    const client = createApiClient({ baseUrl: 'http://api.test', session, fetch: vi.fn() })
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <ApiProvider client={client}>
+          <AuthProvider client={client} session={session} navigator={navigator}>
+            <App />
+          </AuthProvider>
+        </ApiProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: /staff login/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 })
