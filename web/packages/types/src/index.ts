@@ -134,6 +134,36 @@ export interface Restaurant {
 
 export type InviteStatus = 'pending' | 'used' | 'expired' | 'revoked'
 
+/** A row in the superadmin invite list (`GET /superadmin/invites`). */
+export interface InviteSummary {
+  id: string
+  token: string
+  plan_id: string
+  commission_rate: number
+  billing_note: string | null
+  email: string | null
+  expires_at: string
+  created_at: string
+  used_at: string | null
+  status: InviteStatus
+}
+
+/** Body for creating an invite. `commission_rate` is a fraction (0.02 = 2%). */
+export interface CreateInviteInput {
+  plan_id: string
+  commission_rate?: number
+  billing_note?: string
+  email?: string
+}
+
+/** Response from `POST /superadmin/invites`. */
+export interface CreateInviteResult {
+  id: string
+  token: string
+  invite_url: string
+  expires_at: string
+}
+
 export interface Invite {
   id: string
   token: string
