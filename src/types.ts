@@ -53,6 +53,13 @@ export interface Env {
    * dev ports are allowed. Safe to keep in `wrangler.toml [vars]` (not a secret).
    */
   CORS_ALLOWED_ORIGINS?: string
+
+  /**
+   * Base URL of the admin signup page used in generated invite links. Defaults
+   * to the production admin origin; set per environment (the admin app deploys
+   * independently). Not a secret — fine in `wrangler.toml [vars]`.
+   */
+  SIGNUP_BASE_URL?: string
 }
 
 /**

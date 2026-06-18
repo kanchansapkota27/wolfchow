@@ -1,6 +1,9 @@
 import type {
   AuthSession,
+  CreateInviteInput,
+  CreateInviteResult,
   Invite,
+  InviteSummary,
   Order,
   Plan,
   PlanInput,
@@ -177,9 +180,9 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ plan: Plan }>(`/superadmin/plans/${id}`, { method: 'PATCH', body: data }).then((r) => r.plan),
     deletePlan: (id: string) =>
       apiFetch<void>(`/superadmin/plans/${id}`, { method: 'DELETE' }),
-    listInvites: () => apiFetch<{ invites: Invite[] }>('/superadmin/invites'),
-    createInvite: (data: { plan_id: string; commission_rate?: number; email?: string }) =>
-      apiFetch<Invite>('/superadmin/invites', { method: 'POST', body: data }),
+    listInvites: () => apiFetch<{ invites: InviteSummary[] }>('/superadmin/invites'),
+    createInvite: (data: CreateInviteInput) =>
+      apiFetch<CreateInviteResult>('/superadmin/invites', { method: 'POST', body: data }),
     revokeInvite: (id: string) =>
       apiFetch<void>(`/superadmin/invites/${id}`, { method: 'DELETE' }),
     listRestaurants: (query?: RequestOptions['query']) =>

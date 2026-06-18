@@ -7,10 +7,11 @@ import { createInviteSchema } from './schemas'
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000
 
 /**
- * Base URL of the admin signup page. The invite token is appended as a query
- * param. Hard-coded per spec; promote to an env var when domains are finalised.
+ * Base URL of the admin signup page; the invite token is appended as a query
+ * param. Configurable via `SIGNUP_BASE_URL` so the (independently-deployed)
+ * admin app's origin can differ per environment.
  */
-const SIGNUP_BASE_URL = 'https://admin.restroapi.com/signup'
+const DEFAULT_SIGNUP_BASE_URL = 'https://admin.restroapi.com/signup'
 
 interface InviteRow {
   id: string
@@ -98,11 +99,12 @@ export function registerInviteRoutes(app: Hono<HonoEnv>): void {
     if (error || !data) return c.json({ error: 'insert_failed' }, 500)
 
     const row = data as { id: string; token: string; expires_at: string }
+    const signupBase = c.env.SIGNUP_BASE_URL ?? DEFAULT_SIGNUP_BASE_URL
     return c.json(
       {
         id: row.id,
         token: row.token,
-        invite_url: `${SIGNUP_BASE_URL}?invite=${row.token}`,
+        invite_url: `${signupBase}?invite=${row.token}`,
         expires_at: row.expires_at,
       },
       201,

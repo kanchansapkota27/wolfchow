@@ -3,6 +3,7 @@ import { LoginPage, RequireRole } from '@wolfchow/auth'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Plans } from './pages/Plans'
+import { Invites } from './pages/Invites'
 import { Placeholder } from './pages/Placeholder'
 
 /** Gate + shell: only platform roles get in; others are bounced to /login. */
@@ -31,7 +32,7 @@ export function App() {
         <Route index element={<Dashboard />} />
         <Route path="restaurants" element={<Placeholder title="Restaurants" story="STORY-050" />} />
         <Route path="plans" element={<Plans />} />
-        <Route path="invites" element={<Placeholder title="Invites" story="STORY-052" />} />
+        <Route path="invites" element={<Invites />} />
         <Route path="smtp" element={<Placeholder title="SMTP" story="STORY-053" />} />
         <Route path="billing" element={<Placeholder title="Billing" story="STORY-054" />} />
         <Route path="audit" element={<Placeholder title="Audit Log" story="STORY-055" />} />
