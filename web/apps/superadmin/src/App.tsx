@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Plans } from './pages/Plans'
 import { Invites } from './pages/Invites'
+import { Restaurants } from './pages/Restaurants'
 import { Placeholder } from './pages/Placeholder'
 
 /** Gate + shell: only platform roles get in; others are bounced to /login. */
@@ -30,7 +31,7 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedLayout />}>
         <Route index element={<Dashboard />} />
-        <Route path="restaurants" element={<Placeholder title="Restaurants" story="STORY-050" />} />
+        <Route path="restaurants" element={<Restaurants />} />
         <Route path="plans" element={<Plans />} />
         <Route path="invites" element={<Invites />} />
         <Route path="smtp" element={<Placeholder title="SMTP" story="STORY-053" />} />

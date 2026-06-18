@@ -132,6 +132,28 @@ export interface Restaurant {
   created_at: string
 }
 
+/** A row in the superadmin restaurant list (`GET /superadmin/restaurants`). */
+export interface RestaurantListItem {
+  id: string
+  slug: string
+  display_name: string
+  plan_id: string | null
+  plan_name: string | null
+  active: boolean
+  commission_rate: number
+  billing_note: string | null
+  created_at: string
+  order_count_30d: number
+}
+
+/** Fields a superadmin may change on a restaurant (`PATCH`). */
+export interface RestaurantUpdate {
+  plan_id?: string
+  commission_rate?: number
+  billing_note?: string | null
+  active?: boolean
+}
+
 export type InviteStatus = 'pending' | 'used' | 'expired' | 'revoked'
 
 /** A row in the superadmin invite list (`GET /superadmin/invites`). */

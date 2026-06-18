@@ -8,6 +8,10 @@ import {
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8787'
 
+/** Origin of the (independently-deployed) restaurant admin app, for impersonation. */
+export const ADMIN_URL =
+  (import.meta.env.VITE_ADMIN_URL as string | undefined) ?? 'http://localhost:5174'
+
 const ApiContext = createContext<ApiClient | null>(null)
 
 /** Build the API client bound to this app's backend origin + session store. */

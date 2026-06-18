@@ -8,6 +8,8 @@ import type {
   Plan,
   PlanInput,
   Restaurant,
+  RestaurantListItem,
+  RestaurantUpdate,
 } from '@wolfchow/types'
 import { ApiError } from './errors'
 import { storeSession, type SessionStore } from './session'
@@ -186,18 +188,27 @@ export function createApiClient(config: ApiClientConfig) {
     revokeInvite: (id: string) =>
       apiFetch<void>(`/superadmin/invites/${id}`, { method: 'DELETE' }),
     listRestaurants: (query?: RequestOptions['query']) =>
-      apiFetch<{ restaurants: Restaurant[]; page: number; total: number }>(
-        '/superadmin/restaurants',
-        { query },
-      ),
+      apiFetch<{
+        restaurants: RestaurantListItem[]
+        page: number
+        page_size: number
+        total: number
+      }>('/superadmin/restaurants', { query }),
     getRestaurant: (id: string) =>
-      apiFetch<Restaurant>(`/superadmin/restaurants/${id}`),
-    updateRestaurant: (id: string, data: Partial<Restaurant>) =>
-      apiFetch<Restaurant>(`/superadmin/restaurants/${id}`, { method: 'PATCH', body: data }),
+      apiFetch<{ restaurant: Restaurant }>(`/superadmin/restaurants/${id}`).then((r) => r.restaurant),
+    updateRestaurant: (id: string, data: RestaurantUpdate) =>
+      apiFetch<{ restaurant: Partial<Restaurant> }>(`/superadmin/restaurants/${id}`, {
+        method: 'PATCH',
+        body: data,
+      }).then((r) => r.restaurant),
     suspendRestaurant: (id: string) =>
-      apiFetch<Restaurant>(`/superadmin/restaurants/${id}/suspend`, { method: 'POST' }),
+      apiFetch<{ id: string; active: boolean }>(`/superadmin/restaurants/${id}/suspend`, {
+        method: 'POST',
+      }),
     reactivateRestaurant: (id: string) =>
-      apiFetch<Restaurant>(`/superadmin/restaurants/${id}/reactivate`, { method: 'POST' }),
+      apiFetch<{ id: string; active: boolean }>(`/superadmin/restaurants/${id}/reactivate`, {
+        method: 'POST',
+      }),
     impersonate: (id: string) =>
       apiFetch<{ access_token: string; expires_in: number }>(
         `/superadmin/restaurants/${id}/impersonate`,
