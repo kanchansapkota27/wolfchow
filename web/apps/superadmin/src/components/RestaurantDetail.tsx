@@ -56,11 +56,26 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
 
   function impersonate() {
     void api.superadmin.impersonate(restaurantId).then((res) => {
-      window.open(
-        `${ADMIN_URL}/?access_token=${encodeURIComponent(res.access_token)}`,
-        '_blank',
-        'noopener',
-      )
+      // Never put the token in the URL (it would leak via server logs, Referer,
+      // and history). Open the admin app with no token, then hand the
+      // short-lived token to it via postMessage — scoped to the exact admin
+      // origin — once it signals it's ready. (Can't use `noopener` here: we need
+      // the window handle to post to it; the origin check is the guard.)
+      const adminOrigin = new URL(ADMIN_URL).origin
+      const popup = window.open(ADMIN_URL, '_blank')
+      if (!popup) return
+
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin !== adminOrigin || event.data !== 'impersonation:ready') return
+        popup.postMessage(
+          { type: 'impersonation:token', access_token: res.access_token },
+          adminOrigin,
+        )
+        window.removeEventListener('message', onMessage)
+      }
+      window.addEventListener('message', onMessage)
+      // Don't leak the listener if the admin app never signals readiness.
+      setTimeout(() => window.removeEventListener('message', onMessage), 30_000)
     })
   }
 

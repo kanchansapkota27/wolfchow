@@ -172,7 +172,7 @@ describe('STORY-050 · Restaurants UI', () => {
     expect(updateRestaurant).toHaveBeenCalledTimes(1)
   })
 
-  it('impersonate: opens admin app URL with token', async () => {
+  it('impersonate: token handed off via postMessage, never in the URL', async () => {
     const listRestaurants = vi
       .fn<SuperadminApi['listRestaurants']>()
       .mockResolvedValue({ restaurants: [item('Acme', 'acme', { id: 'r1' })], page: 1, page_size: 20, total: 1 })
@@ -181,17 +181,30 @@ describe('STORY-050 · Restaurants UI', () => {
     const impersonate = vi
       .fn<SuperadminApi['impersonate']>()
       .mockResolvedValue({ access_token: 'imp_tok_123', expires_in: 1800 })
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    const postMessage = vi.fn()
+    const openSpy = vi
+      .spyOn(window, 'open')
+      .mockReturnValue({ postMessage } as unknown as Window)
     renderPage(fakeClient({ listRestaurants, listPlans, getRestaurant, impersonate }))
 
     await userEvent.click(await screen.findByText('Acme'))
     const panel = await screen.findByRole('dialog', { name: /restaurant acme/i })
     await userEvent.click(within(panel).getByRole('button', { name: /view as admin/i }))
 
-    await waitFor(() => {
-      expect(openSpy).toHaveBeenCalled()
-      expect(String(openSpy.mock.calls[0]![0])).toContain('imp_tok_123')
-    })
+    // Admin app opened with NO token in the URL.
+    await waitFor(() => expect(openSpy).toHaveBeenCalled())
+    expect(String(openSpy.mock.calls[0]![0])).not.toContain('imp_tok_123')
+
+    // Token is only delivered after the admin app signals readiness, scoped to origin.
+    window.dispatchEvent(
+      new MessageEvent('message', { origin: 'http://localhost:5174', data: 'impersonation:ready' }),
+    )
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'impersonation:token', access_token: 'imp_tok_123' },
+        'http://localhost:5174',
+      ),
+    )
     openSpy.mockRestore()
   })
 })
