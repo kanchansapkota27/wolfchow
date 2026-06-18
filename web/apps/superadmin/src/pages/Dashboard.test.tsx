@@ -29,7 +29,7 @@ describe('STORY-049 · Dashboard', () => {
           { total_orders_30d: 0, estimated_commission_30d: 0 },
         ],
       })),
-      listRestaurants: vi.fn(async () => ({ restaurants: [], page: 1, total: 2 })),
+      listRestaurants: vi.fn(async () => ({ restaurants: [], page: 1, page_size: 20, total: 2 })),
     })
 
     renderDashboard(client)
@@ -54,7 +54,7 @@ describe('STORY-049 · Dashboard', () => {
       .fn<SuperadminApi['getBilling']>()
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce({ summary: [] })
-    const listRestaurants = vi.fn(async () => ({ restaurants: [], page: 1, total: 0 }))
+    const listRestaurants = vi.fn(async () => ({ restaurants: [], page: 1, page_size: 20, total: 0 }))
     const client = fakeClient({ getBilling, listRestaurants })
 
     renderDashboard(client)
