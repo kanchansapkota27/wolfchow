@@ -8,14 +8,18 @@
  *   support    → { role: 'support',    restaurant_id: null, permissions: [] }
  *
  * Idempotent: re-running updates the existing users' role rows instead of
- * failing on a duplicate. The support user is optional — omit its env vars to
- * provision the superadmin alone. Run against local Supabase during development:
+ * failing on a duplicate. The support user is optional — omit it to provision
+ * the superadmin alone.
  *
- *   SUPABASE_URL=http://127.0.0.1:54321 \
- *   SUPABASE_SERVICE_ROLE_KEY=... \
+ * Each setting resolves from the environment first, then the `LOCAL` fallback
+ * block below, else throws. The local Supabase URL/key are pre-filled there, so
+ * locally you only need to supply the credentials:
+ *
  *   SUPERADMIN_EMAIL=admin@example.com SUPERADMIN_PASSWORD=... \
  *   [SUPPORT_EMAIL=support@example.com SUPPORT_PASSWORD=...] \
  *   npx tsx scripts/seed-superadmin.ts
+ *
+ * In production, pass every value via the environment (never rely on LOCAL).
  *
  * --- TOTP (MFA) enrollment ---
  * `requireMFA` gates every /superadmin/* route on a `totp` factor in the JWT
@@ -35,10 +39,39 @@ interface SeedUser {
   role: 'superadmin' | 'support'
 }
 
-function requireEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) throw new Error(`Missing required env var: ${name}`)
+/**
+ * In-script fallbacks for local convenience. Environment variables ALWAYS take
+ * precedence; these are only used when the matching env var is unset.
+ *
+ * Pre-filled with the NON-SECRET local Supabase values (the demo service-role
+ * key is public — same on every local install, also in .dev.vars.example).
+ * Leave the email/password BLANK and pass them via env, or fill them only in
+ * your local working copy. Do NOT commit real keys or passwords here.
+ */
+const LOCAL: Record<string, string> = {
+  SUPABASE_URL: 'http://127.0.0.1:54321',
+  SUPABASE_SERVICE_ROLE_KEY:
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU',
+  SUPERADMIN_EMAIL: '',
+  SUPERADMIN_PASSWORD: '',
+  SUPPORT_EMAIL: '',
+  SUPPORT_PASSWORD: '',
+}
+
+/** Env first, then the LOCAL fallback; throws if neither is set. */
+function resolve(name: string): string {
+  const value = process.env[name] || LOCAL[name]
+  if (!value) {
+    throw new Error(
+      `Missing ${name}: set the ${name} env var or fill LOCAL.${name} in scripts/seed-superadmin.ts`,
+    )
+  }
   return value
+}
+
+/** Env first, then the LOCAL fallback; undefined if neither is set. */
+function optional(name: string): string | undefined {
+  return process.env[name] || LOCAL[name] || undefined
 }
 
 /** Find an existing auth user by email (admin API has no direct get-by-email). */
@@ -89,25 +122,23 @@ async function provision(admin: SupabaseClient, user: SeedUser): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const admin = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'), {
+  const admin = createClient(resolve('SUPABASE_URL'), resolve('SUPABASE_SERVICE_ROLE_KEY'), {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
   const users: SeedUser[] = [
     {
-      email: requireEnv('SUPERADMIN_EMAIL'),
-      password: requireEnv('SUPERADMIN_PASSWORD'),
+      email: resolve('SUPERADMIN_EMAIL'),
+      password: resolve('SUPERADMIN_PASSWORD'),
       role: 'superadmin',
     },
   ]
 
-  // Support user is optional — only provisioned when its env vars are present.
-  if (process.env.SUPPORT_EMAIL && process.env.SUPPORT_PASSWORD) {
-    users.push({
-      email: process.env.SUPPORT_EMAIL,
-      password: process.env.SUPPORT_PASSWORD,
-      role: 'support',
-    })
+  // Support user is optional — only provisioned when both values resolve.
+  const supportEmail = optional('SUPPORT_EMAIL')
+  const supportPassword = optional('SUPPORT_PASSWORD')
+  if (supportEmail && supportPassword) {
+    users.push({ email: supportEmail, password: supportPassword, role: 'support' })
   }
 
   for (const user of users) {
