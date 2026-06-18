@@ -207,4 +207,24 @@ describe('STORY-048 · auth flows', () => {
     expect(result.current.user?.id).toBe('u9')
     expect(result.current.hasPermission('inventory:write')).toBe(true)
   })
+
+  it('LoginPage methods=[staff]: no method tabs, staff form shown', async () => {
+    const token = makeToken({ sub: 'u1', role: 'superadmin', restaurant_id: null, permissions: [] })
+    const { wrapper } = makeHarness({ token, role: 'superadmin' })
+    const { LoginPage } = await import('./LoginPage')
+    render(<LoginPage methods={['staff']} />, { wrapper })
+
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+  })
+
+  it('LoginPage default: both method tabs shown', async () => {
+    const token = makeToken({ sub: 'u1', role: 'superadmin', restaurant_id: null, permissions: [] })
+    const { wrapper } = makeHarness({ token, role: 'superadmin' })
+    const { LoginPage } = await import('./LoginPage')
+    render(<LoginPage />, { wrapper })
+
+    expect(screen.getByRole('tab', { name: /staff login/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /device token/i })).toBeInTheDocument()
+  })
 })
