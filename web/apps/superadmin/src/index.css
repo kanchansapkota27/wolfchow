@@ -1,9 +1,33 @@
 @import 'tailwindcss';
 @import '@wolfchow/ui/styles.css';
+@import '@wolfchow/auth/styles.css';
+
+/* Dark theme for the shared `wc-*` primitives, so the login, modals, inputs,
+ * and the Tailwind panel chrome are cohesive. */
+:root {
+  --wc-bg: #030712;
+  --wc-surface: #111827;
+  --wc-surface-2: #1f2937;
+  --wc-text: #f3f4f6;
+  --wc-muted: #9ca3af;
+  --wc-border: #1f2937;
+  --wc-input-bg: #1f2937;
+}
 
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
+}
+
+body {
+  background: var(--wc-bg);
+  color: var(--wc-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
 }
