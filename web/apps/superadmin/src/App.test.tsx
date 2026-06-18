@@ -49,7 +49,9 @@ describe('STORY-049 · App role guard', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('tab', { name: /staff login/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    // Superadmin offers staff login only — the staff form renders, no method tabs.
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /device token/i })).not.toBeInTheDocument()
   })
 })

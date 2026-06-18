@@ -28,7 +28,7 @@ function ProtectedLayout() {
 export function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage methods={['staff']} />} />
       <Route element={<ProtectedLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="restaurants" element={<Restaurants />} />
