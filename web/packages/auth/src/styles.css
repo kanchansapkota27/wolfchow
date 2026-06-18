@@ -1,0 +1,94 @@
+/*
+ * @wolfchow/auth component styles (login, suspended, impersonation banner).
+ * Uses the same `--wc-*` theme variables as @wolfchow/ui, so an app's theme
+ * applies here too. Import after @wolfchow/ui/styles.css.
+ */
+
+.wc-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--wc-bg);
+}
+.wc-login__card {
+  width: 100%;
+  max-width: 24rem;
+  background: var(--wc-surface);
+  color: var(--wc-text);
+  border: 1px solid var(--wc-border);
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+.wc-login__title {
+  margin: 0 0 0.25rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+}
+.wc-login__subtitle {
+  margin: 0 0 1.5rem;
+  font-size: 0.875rem;
+  color: var(--wc-muted);
+}
+.wc-login__tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+  background: var(--wc-surface-2);
+  border-radius: var(--wc-radius);
+}
+.wc-login__tabs button {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--wc-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wc-login__tabs button[aria-selected='true'] {
+  background: var(--wc-surface);
+  color: var(--wc-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+.wc-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.wc-login__form .wc-btn {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+.wc-login__error {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--wc-radius);
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--wc-danger);
+  font-size: 0.8125rem;
+}
+
+.wc-suspended {
+  max-width: 28rem;
+  margin: 4rem auto;
+  padding: 2rem;
+  text-align: center;
+  color: var(--wc-text);
+}
+
+.wc-imp-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: #b45309;
+  color: #fff;
+  font-size: 0.875rem;
+}

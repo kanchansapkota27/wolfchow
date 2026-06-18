@@ -38,73 +38,80 @@ export function LoginPage() {
 
   return (
     <div className="wc-login">
-      <div className="wc-login__tabs" role="tablist" aria-label="Login method">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'staff'}
-          onClick={() => setTab('staff')}
-        >
-          Staff login
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'device'}
-          onClick={() => setTab('device')}
-        >
-          Device token
-        </button>
+      <div className="wc-login__card">
+        <h1 className="wc-login__title">Welcome back</h1>
+        <p className="wc-login__subtitle">Sign in to continue</p>
+
+        <div className="wc-login__tabs" role="tablist" aria-label="Login method">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'staff'}
+            onClick={() => setTab('staff')}
+          >
+            Staff login
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'device'}
+            onClick={() => setTab('device')}
+          >
+            Device token
+          </button>
+        </div>
+
+        {error && (
+          <p className="wc-login__error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {tab === 'staff' ? (
+          <form
+            className="wc-login__form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(() => signInWithPassword(email, password))
+            }}
+          >
+            <Input
+              label="Email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+            <Input
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <Button type="submit" loading={submitting}>
+              Sign in
+            </Button>
+          </form>
+        ) : (
+          <form
+            className="wc-login__form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void run(() => signInWithDeviceToken(deviceToken))
+            }}
+          >
+            <Input
+              label="Device token"
+              value={deviceToken}
+              onChange={(event) => setDeviceToken(event.target.value)}
+            />
+            <Button type="submit" loading={submitting}>
+              Connect device
+            </Button>
+          </form>
+        )}
       </div>
-
-      {error && (
-        <p className="wc-login__error" role="alert">
-          {error}
-        </p>
-      )}
-
-      {tab === 'staff' ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            void run(() => signInWithPassword(email, password))
-          }}
-        >
-          <Input
-            label="Email"
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <Input
-            label="Password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <Button type="submit" loading={submitting}>
-            Sign in
-          </Button>
-        </form>
-      ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            void run(() => signInWithDeviceToken(deviceToken))
-          }}
-        >
-          <Input
-            label="Device token"
-            value={deviceToken}
-            onChange={(event) => setDeviceToken(event.target.value)}
-          />
-          <Button type="submit" loading={submitting}>
-            Connect device
-          </Button>
-        </form>
-      )}
     </div>
   )
 }

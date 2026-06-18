@@ -1,8 +1,28 @@
 /*
- * Minimal base styles for @wolfchow/ui primitives. Apps layer their Tailwind
- * theme (brand `b-*` colors) on top; this file only provides structural rules
- * and the spinner animation so components are usable without app styling.
+ * @wolfchow/ui base styles. The shared components use semantic `wc-*` class
+ * names (not Tailwind utilities, since Tailwind doesn't scan workspace
+ * packages), so this stylesheet must fully style them. It is themed with CSS
+ * variables (light defaults); an app can override the variables — e.g. the
+ * superadmin app applies a dark theme — and every primitive follows.
  */
+
+:root {
+  --wc-bg: #f9fafb;
+  --wc-surface: #ffffff;
+  --wc-surface-2: #f3f4f6;
+  --wc-text: #111827;
+  --wc-muted: #6b7280;
+  --wc-border: #e5e7eb;
+  --wc-input-bg: #ffffff;
+  --wc-primary: #4f46e5;
+  --wc-primary-hover: #4338ca;
+  --wc-on-primary: #ffffff;
+  --wc-danger: #dc2626;
+  --wc-danger-hover: #b91c1c;
+  --wc-on-danger: #ffffff;
+  --wc-ring: rgba(99, 102, 241, 0.45);
+  --wc-radius: 0.5rem;
+}
 
 .wc-visually-hidden {
   position: absolute;
@@ -16,50 +36,186 @@
   border: 0;
 }
 
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
 @keyframes wc-spin {
   to {
     transform: rotate(360deg);
   }
 }
-
 .wc-spinner {
   display: inline-flex;
   align-items: center;
 }
-
 .wc-spinner__svg {
   animation: wc-spin 0.7s linear infinite;
 }
 
+/* ── Button ──────────────────────────────────────────────────────────────── */
 .wc-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--wc-radius);
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
   cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, opacity 0.15s;
 }
-
+.wc-btn:focus-visible {
+  outline: 2px solid var(--wc-primary);
+  outline-offset: 2px;
+}
 .wc-btn[disabled] {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.55;
+}
+.wc-btn--primary {
+  background: var(--wc-primary);
+  color: var(--wc-on-primary);
+}
+.wc-btn--primary:hover:not([disabled]) {
+  background: var(--wc-primary-hover);
+}
+.wc-btn--secondary {
+  background: var(--wc-surface-2);
+  color: var(--wc-text);
+  border-color: var(--wc-border);
+}
+.wc-btn--secondary:hover:not([disabled]) {
+  border-color: var(--wc-muted);
+}
+.wc-btn--danger {
+  background: var(--wc-danger);
+  color: var(--wc-on-danger);
+}
+.wc-btn--danger:hover:not([disabled]) {
+  background: var(--wc-danger-hover);
+}
+.wc-btn--ghost {
+  background: transparent;
+  color: var(--wc-text);
+}
+.wc-btn--ghost:hover:not([disabled]) {
+  background: var(--wc-surface-2);
 }
 
+/* ── Field / Input ───────────────────────────────────────────────────────── */
+.wc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.wc-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--wc-text);
+  opacity: 0.85;
+}
+.wc-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--wc-border);
+  border-radius: var(--wc-radius);
+  font-size: 0.875rem;
+  background: var(--wc-input-bg);
+  color: var(--wc-text);
+}
+.wc-input::placeholder {
+  color: var(--wc-muted);
+}
+.wc-input:focus {
+  outline: none;
+  border-color: var(--wc-primary);
+  box-shadow: 0 0 0 3px var(--wc-ring);
+}
+.wc-input[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.wc-input--error {
+  border-color: var(--wc-danger);
+}
+.wc-error {
+  font-size: 0.8125rem;
+  color: var(--wc-danger);
+}
+.wc-help {
+  font-size: 0.8125rem;
+  color: var(--wc-muted);
+}
+
+/* ── Badge ───────────────────────────────────────────────────────────────── */
+.wc-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1rem;
+}
+.wc-badge--gray {
+  background: #e5e7eb;
+  color: #374151;
+}
+.wc-badge--blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.wc-badge--green {
+  background: #dcfce7;
+  color: #15803d;
+}
+.wc-badge--amber {
+  background: #fef3c7;
+  color: #b45309;
+}
+.wc-badge--red {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.wc-badge--indigo {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+.wc-badge--purple {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
 .wc-modal-overlay {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 40;
 }
-
 .wc-modal {
-  background: #fff;
-  border-radius: 0.5rem;
+  background: var(--wc-surface);
+  color: var(--wc-text);
+  border: 1px solid var(--wc-border);
+  border-radius: 0.75rem;
   padding: 1.5rem;
   max-width: 32rem;
   width: 100%;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+.wc-modal__title {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+  font-weight: 600;
 }
 
+/* ── Toast ───────────────────────────────────────────────────────────────── */
 .wc-toasts {
   position: fixed;
   top: 1rem;
@@ -69,30 +225,120 @@
   gap: 0.5rem;
   z-index: 50;
 }
+.wc-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--wc-radius);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+.wc-toast--success {
+  background: #16a34a;
+}
+.wc-toast--error {
+  background: #dc2626;
+}
+.wc-toast--warning {
+  background: #d97706;
+}
+.wc-toast__close {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
 
+/* ── Select ──────────────────────────────────────────────────────────────── */
 .wc-select {
   position: relative;
 }
-
 .wc-select__list {
   position: absolute;
   z-index: 20;
-  margin: 0;
-  padding: 0;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
   list-style: none;
   width: 100%;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.375rem;
+  background: var(--wc-surface);
+  color: var(--wc-text);
+  border: 1px solid var(--wc-border);
+  border-radius: var(--wc-radius);
   max-height: 14rem;
   overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
-
 .wc-select__option {
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.375rem;
   cursor: pointer;
 }
-
+.wc-select__option:hover {
+  background: var(--wc-surface-2);
+}
 .wc-select__option[aria-selected='true'] {
   font-weight: 600;
+}
+.wc-select__empty {
+  padding: 0.5rem 0.6rem;
+  color: var(--wc-muted);
+}
+
+/* ── Card / Table / EmptyState ───────────────────────────────────────────── */
+.wc-card {
+  background: var(--wc-surface);
+  border: 1px solid var(--wc-border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.wc-card__header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--wc-border);
+  font-weight: 600;
+}
+.wc-card__body {
+  padding: 1.25rem;
+}
+.wc-card__footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--wc-border);
+}
+.wc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.wc-table th,
+.wc-table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+}
+.wc-table thead {
+  color: var(--wc-muted);
+}
+.wc-table tbody tr {
+  border-top: 1px solid var(--wc-border);
+}
+.wc-table__empty {
+  text-align: center;
+  color: var(--wc-muted);
+  padding: 1.5rem;
+}
+.wc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--wc-muted);
+}
+.wc-empty__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--wc-text);
 }
