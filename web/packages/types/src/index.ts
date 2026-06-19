@@ -439,6 +439,31 @@ export interface SpecialClosure {
   created_at: string
 }
 
+// ── Billing ───────────────────────────────────────────────────────────────────
+
+/** One row from `superadmin_billing_summary()` — cross-tenant commission aggregate. */
+export interface BillingSummaryRow {
+  id: string
+  display_name: string
+  slug: string
+  plan_id: string | null
+  commission_rate: number
+  billing_note: string | null
+  total_orders: number
+  total_order_value: number
+  total_orders_30d: number
+  total_order_value_30d: number
+  estimated_commission_30d: number
+}
+
+/** One month from `superadmin_billing_monthly(restaurant_id)`. */
+export interface BillingMonthRow {
+  month: string
+  order_count: number
+  order_value: number
+  estimated_commission: number
+}
+
 // ── SMTP ─────────────────────────────────────────────────────────────────────
 
 /** Public SMTP config row (password is never returned; `has_password` is the signal). */
