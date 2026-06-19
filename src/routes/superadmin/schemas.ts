@@ -33,6 +33,8 @@ export const createPlanSchema = z.object({
   transaction_history_days: z.number().int().min(1).nullable(),
   feature_flags: featureFlagsSchema,
   payment_methods_allowed: z.array(paymentMethodSchema).min(1),
+  commission_type: z.enum(['percentage', 'fixed']).default('percentage'),
+  public: z.boolean().default(false),
 })
 
 /** Update-plan body: any subset of create fields. Rejects an empty object. */

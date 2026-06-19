@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PaymentMethod, Plan, PlanInput } from '@wolfchow/types'
 import { Button, Input, Modal } from '@wolfchow/ui'
-import { FEATURE_FLAGS, PAYMENT_METHODS, emptyPlanInput, planToInput } from '../lib/planMeta'
+import { COMMISSION_TYPES, FEATURE_FLAGS, PAYMENT_METHODS, emptyPlanInput, planToInput } from '../lib/planMeta'
 
 interface PlanFormModalProps {
   open: boolean
@@ -121,6 +121,39 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
             ))}
           </div>
         </fieldset>
+
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium text-gray-300">Commission type</legend>
+          <div className="flex gap-4">
+            {COMMISSION_TYPES.map((ct) => (
+              <label key={ct.value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="commission_type"
+                  value={ct.value}
+                  checked={form.commission_type === ct.value}
+                  onChange={() => patch({ commission_type: ct.value })}
+                />
+                <span>
+                  {ct.label}{' '}
+                  <span className="text-gray-500">({ct.hint})</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.public}
+            onChange={(e) => patch({ public: e.target.checked })}
+          />
+          <span>
+            Public plan{' '}
+            <span className="text-gray-500">(can appear on a public pricing page)</span>
+          </span>
+        </label>
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium text-gray-300">Payment methods</legend>

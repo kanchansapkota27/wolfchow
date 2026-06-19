@@ -1,4 +1,4 @@
-import type { FeatureFlags, PaymentMethod, Plan, PlanInput } from '@wolfchow/types'
+import type { CommissionType, FeatureFlags, PaymentMethod, Plan, PlanInput } from '@wolfchow/types'
 
 /** The 11 settable feature flags with their human labels, in display order. */
 export const FEATURE_FLAGS: Array<{ key: keyof FeatureFlags; label: string }> = [
@@ -13,6 +13,11 @@ export const FEATURE_FLAGS: Array<{ key: keyof FeatureFlags; label: string }> = 
   { key: 'remove_powered_by', label: "Remove 'Powered by'" },
   { key: 'promotions_enabled', label: 'Promotions & discounts' },
   { key: 'scheduled_orders_enabled', label: 'Scheduled orders' },
+]
+
+export const COMMISSION_TYPES: Array<{ value: CommissionType; label: string; hint: string }> = [
+  { value: 'percentage', label: 'Percentage', hint: '% of order total' },
+  { value: 'fixed', label: 'Fixed amount', hint: 'flat $ per order' },
 ]
 
 export const PAYMENT_METHODS: Array<{ value: PaymentMethod; label: string }> = [
@@ -37,6 +42,8 @@ export function emptyPlanInput(): PlanInput {
     transaction_history_days: 30,
     feature_flags: emptyFlags(),
     payment_methods_allowed: ['card'],
+    commission_type: 'percentage',
+    public: false,
   }
 }
 
@@ -52,5 +59,7 @@ export function planToInput(plan: Plan): PlanInput {
     transaction_history_days: plan.transaction_history_days,
     feature_flags: { ...emptyFlags(), ...plan.feature_flags },
     payment_methods_allowed: [...plan.payment_methods_allowed],
+    commission_type: plan.commission_type ?? 'percentage',
+    public: plan.public ?? false,
   }
 }

@@ -56,6 +56,8 @@ export interface FeatureFlags {
   webhook_export?: boolean
 }
 
+export type CommissionType = 'percentage' | 'fixed'
+
 export interface Plan {
   id: string
   name: string
@@ -69,6 +71,10 @@ export interface Plan {
   transaction_history_days: number | null
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
+  /** How commission_rate is applied: fraction of order total or flat per-order amount. */
+  commission_type: CommissionType
+  /** Whether this plan may appear on a public pricing page. */
+  public: boolean
   created_at: string
   /** Number of restaurants on this plan (present on the superadmin list). */
   restaurant_count?: number
@@ -85,6 +91,8 @@ export interface PlanInput {
   transaction_history_days: number | null
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
+  commission_type: CommissionType
+  public: boolean
 }
 
 export interface BrandColors {
