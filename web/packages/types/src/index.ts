@@ -164,10 +164,24 @@ export interface InviteSummary {
   commission_rate: number
   billing_note: string | null
   email: string | null
+  restaurant_name: string | null
   expires_at: string
   created_at: string
   used_at: string | null
   status: InviteStatus
+}
+
+/** Body for creating a restaurant directly (no invite flow). */
+export interface CreateRestaurantInput {
+  business_name: string
+  display_name?: string
+  slug: string
+  timezone: string
+  currency: string
+  country?: string
+  state?: string
+  plan_id?: string
+  commission_rate?: number
 }
 
 /** Body for creating an invite. `commission_rate` is a fraction (0.02 = 2%). */
@@ -176,6 +190,7 @@ export interface CreateInviteInput {
   commission_rate?: number
   billing_note?: string
   email?: string
+  restaurant_name?: string
 }
 
 /** Response from `POST /superadmin/invites`. */
@@ -422,6 +437,41 @@ export interface SpecialClosure {
   recurring: boolean
   reason: string | null
   created_at: string
+}
+
+// ── SMTP ─────────────────────────────────────────────────────────────────────
+
+/** Public SMTP config row (password is never returned; `has_password` is the signal). */
+export interface SmtpConfig {
+  id: string
+  restaurant_id: string | null
+  host: string
+  port: number
+  username: string
+  from_email: string
+  from_name: string
+  monthly_limit: number | null
+  has_password: boolean
+}
+
+/** An entry in the per-restaurant SMTP overrides list. */
+export interface SmtpOverrideItem extends SmtpConfig {
+  restaurant_id: string
+  restaurant_name: string | null
+  monthly_used: number
+}
+
+export interface SmtpGlobalInput {
+  host: string
+  port: number
+  username: string
+  password: string
+  from_email: string
+  from_name: string
+}
+
+export interface SmtpOverrideInput extends SmtpGlobalInput {
+  monthly_limit?: number | null
 }
 
 // ── Auth payloads ─────────────────────────────────────────────────────────────

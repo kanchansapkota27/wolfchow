@@ -13,10 +13,11 @@ INTERNAL_CRON_SECRET="shared-secret-for-internal-endpoints"
 # Reserved, unused (no Stripe webhooks in this architecture)
 STRIPE_WEBHOOK_SECRET=""
 
-# LOCAL DEV ONLY — set to "true" to bypass the superadmin TOTP/MFA check so a
-# seeded superadmin can use the panel before the MFA challenge flow is built.
-# NEVER set this in production (do not add to wrangler.toml or `wrangler secret put`).
-# MFA_DEV_BYPASS="true"
+# LOCAL DEV ONLY — controls the superadmin TOTP/MFA check.
+#   "true"  = MFA check is SKIPPED  (use for local dev until MFA enroll UI is built)
+#   "false" = MFA check is ENFORCED (must have TOTP in JWT amr)
+# NEVER set this in production (never add to wrangler.toml or `wrangler secret put`).
+MFA_DEV_BYPASS="true"
 
 # Browser origins allowed to call the API (CORS), comma-separated. Unset = local
 # Vite dev ports (5173–5177). In production set the apps' Pages origins.

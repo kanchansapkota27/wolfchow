@@ -3,13 +3,20 @@ import type { AuthMethodReference, HonoEnv, JwtClaims } from '../types'
 
 /**
  * Verifies the Supabase JWT on the `Authorization: Bearer <token>` header and
- * attaches the typed claims to `c.get('jwt')`. HS256 is verified with the
- * shared `SUPABASE_JWT_SECRET` via the Web Crypto API — no database query.
+ * attaches the typed claims to `c.get('jwt')`.
+ *
+ * Supports both signing algorithms Supabase uses:
+ *   - HS256 (older projects): symmetric HMAC, verified against SUPABASE_JWT_SECRET
+ *   - ES256 (current default): asymmetric ECDSA, verified against the project's
+ *     JWKS fetched from {SUPABASE_URL}/auth/v1/.well-known/jwks.json
+ *
+ * JWKS are cached in the Worker isolate for 5 minutes so the key endpoint is
+ * not hit on every request.
  *
  * Error responses follow the standard `{ error, code? }` shape:
- *   - missing/!Bearer header → 401 { error: 'unauthorized' }
- *   - bad signature / malformed / wrong alg → 401 { error: 'token_invalid' }
- *   - valid signature but past `exp` → 401 { error: 'token_expired' }
+ *   - missing/!Bearer header       → 401 { error: 'unauthorized' }
+ *   - bad signature / malformed    → 401 { error: 'token_invalid' }
+ *   - valid signature but past exp → 401 { error: 'token_expired' }
  */
 export const jwtMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
   const header = c.req.header('Authorization')
@@ -18,7 +25,29 @@ export const jwtMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
   }
 
   const token = header.slice('Bearer '.length).trim()
-  const verified = await verifyHs256(token, c.env.SUPABASE_JWT_SECRET)
+
+  const parts = token.split('.')
+  if (parts.length !== 3) return c.json({ error: 'token_invalid' }, 401)
+
+  let alg: string
+  let kid: string | undefined
+  try {
+    const h = decodeJson(parts[0] as string) as Record<string, unknown>
+    alg = typeof h.alg === 'string' ? h.alg : ''
+    kid = typeof h.kid === 'string' ? h.kid : undefined
+  } catch {
+    return c.json({ error: 'token_invalid' }, 401)
+  }
+
+  let verified: VerifyResult
+  if (alg === 'HS256') {
+    verified = await verifyHs256(token, c.env.SUPABASE_JWT_SECRET)
+  } else if (alg === 'ES256') {
+    verified = await verifyEs256(token, kid, c.env.SUPABASE_URL)
+  } else {
+    return c.json({ error: 'token_invalid' }, 401)
+  }
+
   if (!verified.valid) {
     return c.json({ error: 'token_invalid' }, 401)
   }
@@ -32,6 +61,151 @@ export const jwtMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
   c.set('jwt', toClaims(payload))
   await next()
 })
+
+// ── JWKS cache ────────────────────────────────────────────────────────────────
+
+interface JwkEntry {
+  kid?: string
+  kty?: string
+  crv?: string
+  x?: string
+  y?: string
+  use?: string
+  alg?: string
+  n?: string
+  e?: string
+}
+
+interface JwksCache {
+  keys: JwkEntry[]
+  fetchedAt: number
+}
+
+/** Module-level cache — one entry per Supabase URL, refreshed every 5 minutes. */
+const jwksStore = new Map<string, JwksCache>()
+const JWKS_TTL_MS = 5 * 60 * 1000
+
+async function getJwks(supabaseUrl: string): Promise<JwkEntry[]> {
+  const cached = jwksStore.get(supabaseUrl)
+  if (cached && Date.now() - cached.fetchedAt < JWKS_TTL_MS) return cached.keys
+
+  const res = await fetch(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
+  if (!res.ok) throw new Error(`JWKS endpoint returned ${res.status}`)
+  const body = (await res.json()) as { keys?: unknown }
+  const keys = Array.isArray(body.keys) ? (body.keys as JwkEntry[]) : []
+  jwksStore.set(supabaseUrl, { keys, fetchedAt: Date.now() })
+  return keys
+}
+
+// ── Signature verification ────────────────────────────────────────────────────
+
+interface VerifyResult {
+  valid: boolean
+  payload: Record<string, unknown>
+}
+
+const INVALID: VerifyResult = { valid: false, payload: {} }
+
+/** HS256: HMAC-SHA256 using the shared SUPABASE_JWT_SECRET. */
+async function verifyHs256(token: string, secret: string): Promise<VerifyResult> {
+  const parts = token.split('.')
+  if (parts.length !== 3) return INVALID
+  const [headerB64, payloadB64, signatureB64] = parts as [string, string, string]
+
+  let alg: unknown
+  try {
+    alg = (decodeJson(headerB64) as Record<string, unknown>).alg
+  } catch {
+    return INVALID
+  }
+  if (alg !== 'HS256') return INVALID
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  )
+  const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`)
+  const ok = await crypto.subtle.verify('HMAC', key, base64UrlToBytes(signatureB64), data)
+  if (!ok) return INVALID
+
+  try {
+    const payload = decodeJson(payloadB64)
+    if (typeof payload !== 'object' || payload === null) return INVALID
+    return { valid: true, payload: payload as Record<string, unknown> }
+  } catch {
+    return INVALID
+  }
+}
+
+/**
+ * ES256: ECDSA-P256-SHA256, key from the project JWKS.
+ * JWT ECDSA signatures are in IEEE P1363 format (R || S, 64 bytes for P-256),
+ * which is exactly what Web Crypto's ECDSA verify expects — no DER conversion.
+ */
+async function verifyEs256(
+  token: string,
+  kid: string | undefined,
+  supabaseUrl: string,
+): Promise<VerifyResult> {
+  const parts = token.split('.')
+  if (parts.length !== 3) return INVALID
+  const [headerB64, payloadB64, signatureB64] = parts as [string, string, string]
+
+  let keys: JwkEntry[]
+  try {
+    keys = await getJwks(supabaseUrl)
+  } catch {
+    return INVALID
+  }
+
+  // Prefer the key whose kid matches the token header; fall back to the first EC P-256 key.
+  const jwk = kid
+    ? (keys.find((k) => k.kid === kid) ?? keys.find((k) => k.kty === 'EC' && k.crv === 'P-256'))
+    : keys.find((k) => k.kty === 'EC' && k.crv === 'P-256')
+
+  if (!jwk) return INVALID
+
+  let cryptoKey: CryptoKey
+  try {
+    cryptoKey = await crypto.subtle.importKey(
+      'jwk',
+      jwk as JsonWebKey,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify'],
+    )
+  } catch {
+    return INVALID
+  }
+
+  const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`)
+  let ok: boolean
+  try {
+    ok = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      cryptoKey,
+      base64UrlToBytes(signatureB64),
+      data,
+    )
+  } catch {
+    return INVALID
+  }
+
+  if (!ok) return INVALID
+
+  try {
+    const payload = decodeJson(payloadB64)
+    if (typeof payload !== 'object' || payload === null) return INVALID
+    return { valid: true, payload: payload as Record<string, unknown> }
+  } catch {
+    return INVALID
+  }
+}
+
+// ── Claims narrowing ──────────────────────────────────────────────────────────
 
 /** Narrow an unknown JWT payload into typed, defaulted claims. */
 function toClaims(payload: Record<string, unknown>): JwtClaims {
@@ -51,8 +225,8 @@ function toClaims(payload: Record<string, unknown>): JwtClaims {
 
 /**
  * Narrow the Supabase `amr` claim into typed method references. Supabase emits
- * an array of `{ method, timestamp }`; anything else (absent/malformed) yields
- * an empty list, which `requireMFA` treats as "no MFA".
+ * an array of `{ method, timestamp }`; anything else yields an empty list,
+ * which `requireMFA` treats as "no MFA".
  */
 function toAmr(value: unknown): AuthMethodReference[] {
   if (!Array.isArray(value)) return []
@@ -67,45 +241,7 @@ function toAmr(value: unknown): AuthMethodReference[] {
   return refs
 }
 
-interface VerifyResult {
-  valid: boolean
-  payload: Record<string, unknown>
-}
-
-/** Verify a compact JWS (HS256 only) and return its decoded payload. */
-async function verifyHs256(token: string, secret: string): Promise<VerifyResult> {
-  const invalid: VerifyResult = { valid: false, payload: {} }
-  const parts = token.split('.')
-  if (parts.length !== 3) return invalid
-  const [headerB64, payloadB64, signatureB64] = parts as [string, string, string]
-
-  let alg: unknown
-  try {
-    alg = (decodeJson(headerB64) as Record<string, unknown>).alg
-  } catch {
-    return invalid
-  }
-  if (alg !== 'HS256') return invalid
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['verify'],
-  )
-  const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`)
-  const signatureValid = await crypto.subtle.verify('HMAC', key, base64UrlToBytes(signatureB64), data)
-  if (!signatureValid) return invalid
-
-  try {
-    const payload = decodeJson(payloadB64)
-    if (typeof payload !== 'object' || payload === null) return invalid
-    return { valid: true, payload: payload as Record<string, unknown> }
-  } catch {
-    return invalid
-  }
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function decodeJson(b64url: string): unknown {
   return JSON.parse(new TextDecoder().decode(base64UrlToBytes(b64url)))

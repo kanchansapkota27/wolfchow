@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Badge, Input } from '@wolfchow/ui'
+import { Badge, Button, Input } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
 import { useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
 import { RestaurantDetail } from '../components/RestaurantDetail'
+import { CreateRestaurantModal } from '../components/CreateRestaurantModal'
 
 export function Restaurants() {
   const api = useApi()
@@ -12,6 +13,7 @@ export function Restaurants() {
   const [planFilter, setPlanFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const plansAsync = useAsync(() => api.superadmin.listPlans(), [api])
   const list = useAsync(
@@ -29,7 +31,10 @@ export function Restaurants() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Restaurants</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Restaurants</h1>
+        <Button onClick={() => setCreateOpen(true)}>Create restaurant</Button>
+      </div>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Input
@@ -132,6 +137,13 @@ export function Restaurants() {
           onChanged={() => list.reload()}
         />
       )}
+
+      <CreateRestaurantModal
+        open={createOpen}
+        plans={plans}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => list.reload()}
+      />
     </div>
   )
 }

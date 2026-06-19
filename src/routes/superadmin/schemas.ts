@@ -54,7 +54,23 @@ export const createInviteSchema = z.object({
   commission_rate: z.number().min(0).max(1).optional(),
   billing_note: z.string().max(500).optional(),
   email: z.string().email().optional(),
+  restaurant_name: z.string().min(1).max(255).optional(),
 })
+
+/** Direct restaurant creation by superadmin (bypasses invite flow). */
+export const createRestaurantDirectSchema = z.object({
+  business_name: z.string().min(1).max(255),
+  display_name: z.string().min(1).max(255).optional(),
+  slug: z.string().min(2).max(63).regex(/^[a-z0-9-]+$/, 'slug must be lowercase alphanumeric and hyphens'),
+  timezone: z.string().min(1).max(100),
+  currency: z.string().length(3),
+  country: z.string().max(100).optional(),
+  state: z.string().max(100).optional(),
+  plan_id: z.string().uuid().optional(),
+  commission_rate: z.number().min(0).max(1).optional(),
+})
+
+export type CreateRestaurantDirectInput = z.infer<typeof createRestaurantDirectSchema>
 
 export type CreateInviteInput = z.infer<typeof createInviteSchema>
 

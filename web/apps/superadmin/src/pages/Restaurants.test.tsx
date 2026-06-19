@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ApiClient } from '@wolfchow/api-client'
 import type { Plan, Restaurant, RestaurantListItem } from '@wolfchow/types'
+import { ToastProvider } from '@wolfchow/ui'
 import { ApiProvider } from '../lib/api'
 import { Restaurants } from './Restaurants'
 
@@ -99,9 +100,11 @@ function fakeClient(superadmin: Partial<SuperadminApi>): ApiClient {
 
 function renderPage(client: ApiClient) {
   return render(
-    <ApiProvider client={client}>
-      <Restaurants />
-    </ApiProvider>,
+    <ToastProvider>
+      <ApiProvider client={client}>
+        <Restaurants />
+      </ApiProvider>
+    </ToastProvider>,
   )
 }
 

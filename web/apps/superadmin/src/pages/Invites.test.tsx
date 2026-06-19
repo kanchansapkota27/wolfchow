@@ -45,6 +45,7 @@ function invite(status: InviteStatus, over: Partial<InviteSummary> = {}): Invite
     commission_rate: 0.05,
     billing_note: null,
     email: null,
+    restaurant_name: null,
     expires_at: '2026-12-31T00:00:00Z',
     created_at: '2026-06-01T00:00:00Z',
     used_at: null,

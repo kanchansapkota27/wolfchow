@@ -3,7 +3,7 @@ import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { KvCache } from '../../services/kv'
 import { RealtimeService, type Broadcaster } from '../../services/realtime'
-import { updateRestaurantSchema } from './schemas'
+import { createRestaurantDirectSchema, updateRestaurantSchema } from './schemas'
 
 const PAGE_SIZE = 20
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
@@ -65,6 +65,37 @@ async function invalidateRestaurantKv(env: Env, restaurantId: string): Promise<v
  */
 export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRouteDeps = {}): void {
   const makeBroadcaster = deps.broadcaster ?? ((env: Env) => new RealtimeService(env))
+
+  app.post('/superadmin/restaurants', async (c) => {
+    const parsed = createRestaurantDirectSchema.safeParse(await readJson(c))
+    if (!parsed.success) return c.json({ error: 'validation', issues: parsed.error.issues }, 422)
+
+    const admin = createAdminClient(c.env)
+    const address: Record<string, string> = {}
+    if (parsed.data.country) address.country = parsed.data.country
+    if (parsed.data.state) address.state = parsed.data.state
+
+    const { data, error } = await admin
+      .from('restaurants')
+      .insert({
+        slug: parsed.data.slug,
+        business_name: parsed.data.business_name,
+        display_name: parsed.data.display_name ?? parsed.data.business_name,
+        timezone: parsed.data.timezone,
+        currency: parsed.data.currency,
+        address,
+        plan_id: parsed.data.plan_id ?? null,
+        commission_rate: parsed.data.commission_rate ?? 0,
+      })
+      .select('id, slug, display_name, business_name, created_at')
+      .single()
+
+    if (error) {
+      if (error.code === '23505') return c.json({ error: 'slug_taken' }, 409)
+      return c.json({ error: 'insert_failed' }, 500)
+    }
+    return c.json({ restaurant: data }, 201)
+  })
 
   app.get('/superadmin/restaurants', async (c) => {
     const admin = createAdminClient(c.env)

@@ -60,7 +60,9 @@ describe('STORY-049 · Dashboard', () => {
     renderDashboard(client)
 
     const retry = await screen.findByRole('button', { name: /retry/i })
-    expect(screen.getByText(/failed to load/i)).toBeInTheDocument()
+    // SectionError has role="alert"; error message is the actual Error.message
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.getByText('boom')).toBeInTheDocument()
 
     await userEvent.click(retry)
 

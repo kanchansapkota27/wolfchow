@@ -20,6 +20,7 @@ interface InviteRow {
   commission_rate: number
   billing_note: string | null
   email: string | null
+  restaurant_name: string | null
   used: boolean
   used_at: string | null
   used_by_restaurant_id: string | null
@@ -91,6 +92,7 @@ export function registerInviteRoutes(app: Hono<HonoEnv>): void {
         commission_rate: parsed.data.commission_rate ?? 0,
         billing_note: parsed.data.billing_note ?? null,
         email: parsed.data.email ?? null,
+        restaurant_name: parsed.data.restaurant_name ?? null,
         used: false,
         expires_at: expiresAt,
       })
@@ -127,6 +129,7 @@ export function registerInviteRoutes(app: Hono<HonoEnv>): void {
       commission_rate: inv.commission_rate,
       billing_note: inv.billing_note,
       email: inv.email,
+      restaurant_name: inv.restaurant_name,
       expires_at: inv.expires_at,
       created_at: inv.created_at,
       used_at: inv.used_at,

@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Plans } from './pages/Plans'
 import { Invites } from './pages/Invites'
 import { Restaurants } from './pages/Restaurants'
+import { Smtp } from './pages/Smtp'
 import { Placeholder } from './pages/Placeholder'
 
 /** Gate + shell: only platform roles get in; others are bounced to /login. */
@@ -34,7 +35,7 @@ export function App() {
         <Route path="restaurants" element={<Restaurants />} />
         <Route path="plans" element={<Plans />} />
         <Route path="invites" element={<Invites />} />
-        <Route path="smtp" element={<Placeholder title="SMTP" story="STORY-053" />} />
+        <Route path="smtp" element={<Smtp />} />
         <Route path="billing" element={<Placeholder title="Billing" story="STORY-054" />} />
         <Route path="audit" element={<Placeholder title="Audit Log" story="STORY-055" />} />
       </Route>
