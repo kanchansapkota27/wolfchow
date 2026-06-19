@@ -156,6 +156,32 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     return c.json({ config: { ...publicConfig(data as SmtpConfigRow), monthly_used } })
   })
 
+  app.get('/superadmin/smtp/overrides', async (c) => {
+    const admin = createAdminClient(c.env)
+    const { data, error } = await admin
+      .from('smtp_config')
+      .select('*, restaurants(display_name)')
+      .not('restaurant_id', 'is', null)
+    if (error) return c.json({ error: 'list_failed' }, 500)
+
+    const month = new Date().toISOString().slice(0, 7)
+    type OverrideRow = SmtpConfigRow & {
+      restaurants: { display_name: string } | { display_name: string }[] | null
+    }
+    const rows = (data ?? []) as OverrideRow[]
+    const overrides = await Promise.all(
+      rows.map(async (row) => {
+        const raw = await c.env.SMTP_COUNTERS.get(`smtp:${row.restaurant_id!}:${month}`)
+        const monthly_used = Number.parseInt(raw ?? '0', 10) || 0
+        const restaurant_name = Array.isArray(row.restaurants)
+          ? (row.restaurants[0]?.display_name ?? null)
+          : (row.restaurants?.display_name ?? null)
+        return { ...publicConfig(row), monthly_used, restaurant_name }
+      }),
+    )
+    return c.json({ overrides })
+  })
+
   app.delete('/superadmin/smtp/restaurants/:id', async (c) => {
     const admin = createAdminClient(c.env)
     const { error } = await admin.from('smtp_config').delete().eq('restaurant_id', c.req.param('id'))

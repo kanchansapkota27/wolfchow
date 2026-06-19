@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import type { Env, HonoEnv, JwtClaims } from '../types'
 import { jwtMiddleware } from './jwt'
@@ -10,7 +10,7 @@ import {
 } from './guards'
 
 const SECRET = 'test-secret-key-at-least-32-characters-long-000'
-const testEnv = { SUPABASE_JWT_SECRET: SECRET } as unknown as Env
+const testEnv = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://unused' } as unknown as Env
 
 function bytesToB64url(bytes: Uint8Array): string {
   let binary = ''
@@ -144,5 +144,99 @@ describe('STORY-003 · JWT middleware + permission guard', () => {
     const res = await app.request('/billing', auth(token), testEnv)
     expect(res.status).toBe(403)
     expect((await res.json() as { code: string }).code).toBe('impersonation_blocked')
+  })
+})
+
+// ── ES256 (ECDSA + JWKS) ──────────────────────────────────────────────────────
+
+async function makeEs256Token(
+  claims: Record<string, unknown>,
+  privateKey: CryptoKey,
+  kid: string,
+): Promise<string> {
+  const header = b64url(JSON.stringify({ alg: 'ES256', kid, typ: 'JWT' }))
+  const now = Math.floor(Date.now() / 1000)
+  const payload = b64url(JSON.stringify({ iat: now, exp: now + 3600, ...claims }))
+  const data = new TextEncoder().encode(`${header}.${payload}`)
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, data)
+  return `${header}.${payload}.${bytesToB64url(new Uint8Array(sig))}`
+}
+
+describe('STORY-003 · JWT middleware — ES256', () => {
+  it('valid ES256 token: accepted, claims attached', async () => {
+    const { privateKey, publicKey } = (await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    )) as CryptoKeyPair
+    const kid = 'ec-key-1'
+    const pubJwk = await crypto.subtle.exportKey('jwk', publicKey)
+    const jwks = { keys: [{ ...pubJwk, kid, use: 'sig', alg: 'ES256' }] }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(jwks), { headers: { 'Content-Type': 'application/json' } }),
+    )
+
+    const token = await makeEs256Token(
+      { sub: 'u-ec', role: 'superadmin', restaurant_id: null, permissions: [] },
+      privateKey,
+      kid,
+    )
+
+    const app = makeApp()
+    const env = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://supa-ec1.test' } as unknown as Env
+    const res = await app.request('/me', auth(token), env)
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { jwt: JwtClaims }
+    expect(body.jwt.sub).toBe('u-ec')
+    expect(body.jwt.role).toBe('superadmin')
+  })
+
+  it('ES256 token, wrong key (tampered): 401 token_invalid', async () => {
+    // Sign with key-A, but publish key-B in the JWKS.
+    const { privateKey: keyA } = (await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    )) as CryptoKeyPair
+    const { publicKey: keyB } = (await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    )) as CryptoKeyPair
+    const kid = 'ec-key-2'
+    const pubJwkB = await crypto.subtle.exportKey('jwk', keyB)
+    const jwks = { keys: [{ ...pubJwkB, kid, use: 'sig', alg: 'ES256' }] }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(jwks), { headers: { 'Content-Type': 'application/json' } }),
+    )
+
+    const token = await makeEs256Token({ sub: 'u', role: 'superadmin' }, keyA, kid)
+
+    const app = makeApp()
+    const env = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://supa-ec2.test' } as unknown as Env
+    const res = await app.request('/me', auth(token), env)
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'token_invalid' })
+  })
+
+  it('ES256 token, JWKS endpoint down: 401 token_invalid', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('{}', { status: 503 }),
+    )
+    const { privateKey } = (await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    )) as CryptoKeyPair
+    const token = await makeEs256Token({ sub: 'u', role: 'superadmin' }, privateKey, 'ec-key-3')
+
+    const app = makeApp()
+    const env = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://supa-ec3.test' } as unknown as Env
+    const res = await app.request('/me', auth(token), env)
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'token_invalid' })
   })
 })

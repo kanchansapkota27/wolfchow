@@ -1,9 +1,15 @@
-@import 'tailwindcss';
+/* Package hand-written CSS (wc-* primitives) loaded unconditionally, before
+   Tailwind so they resolve even if the Tailwind compiler doesn't run. */
 @import '@wolfchow/ui/styles.css';
 @import '@wolfchow/auth/styles.css';
 
-/* Dark theme for the shared `wc-*` primitives, so the login, modals, inputs,
- * and the Tailwind panel chrome are cohesive. */
+/* Tailwind v4 — generates utility classes from files scanned under this app.
+   The @source directive points to the directory containing this file so the
+   scanner uses a concrete path rather than relying solely on auto-detection. */
+@import 'tailwindcss';
+@source "./";
+
+/* Dark theme overrides for the shared wc-* CSS variables. */
 :root {
   --wc-bg: #030712;
   --wc-surface: #111827;

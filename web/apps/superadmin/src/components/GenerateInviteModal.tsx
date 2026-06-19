@@ -19,6 +19,7 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
   const [commissionPct, setCommissionPct] = useState('0')
   const [billingNote, setBillingNote] = useState('')
   const [email, setEmail] = useState('')
+  const [restaurantName, setRestaurantName] = useState('')
   const [result, setResult] = useState<CreateInviteResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -30,6 +31,7 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
       setCommissionPct('0')
       setBillingNote('')
       setEmail('')
+      setRestaurantName('')
       setResult(null)
       setError(null)
       setCopied(false)
@@ -54,6 +56,7 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
         commission_rate: pct / 100,
         billing_note: billingNote.trim() || undefined,
         email: email.trim() || undefined,
+        restaurant_name: restaurantName.trim() || undefined,
       })
       setResult(res)
     } catch {
@@ -126,6 +129,13 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
               className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2"
             />
           </label>
+
+          <Input
+            label="Restaurant name (optional pre-fill)"
+            value={restaurantName}
+            onChange={(e) => setRestaurantName(e.target.value)}
+            placeholder="The Burger Place"
+          />
 
           <Input
             label="Pre-assign email (optional)"

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, useNavigate, useSearchParams } from 'react-router'
 import { AuthProvider, type AuthNavigator } from '@wolfchow/auth'
 import { createLocalStorageSession } from '@wolfchow/api-client'
+import { ToastProvider } from '@wolfchow/ui'
 import { ApiProvider, buildApiClient } from './lib/api'
 import { App } from './App'
 import './index.css'
@@ -31,11 +32,13 @@ function Providers() {
   )
 
   return (
-    <ApiProvider client={client}>
-      <AuthProvider client={client} session={session} navigator={authNavigator}>
-        <App />
-      </AuthProvider>
-    </ApiProvider>
+    <ToastProvider>
+      <ApiProvider client={client}>
+        <AuthProvider client={client} session={session} navigator={authNavigator}>
+          <App />
+        </AuthProvider>
+      </ApiProvider>
+    </ToastProvider>
   )
 }
 

@@ -1,8 +1,17 @@
 import { formatCurrency } from '@wolfchow/utils'
+import { ApiError } from '@wolfchow/api-client'
 import { useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
 import { MetricCard, MetricCardSkeleton } from '../components/MetricCard'
 import { SectionError } from '../components/SectionError'
+
+function toMessage(err: unknown): string {
+  if (err instanceof ApiError) return `${err.status}: ${err.message}`
+  if (err instanceof TypeError && err.message.includes('fetch'))
+    return 'Cannot reach API — is the Worker running on localhost:8787?'
+  if (err instanceof Error) return err.message
+  return 'Failed to load'
+}
 
 interface SummaryRow {
   total_orders_30d?: number | string
@@ -15,7 +24,7 @@ const sum = (rows: SummaryRow[], key: keyof SummaryRow): number =>
 /** Platform home: four summary cards over the billing summary + active count. */
 export function Dashboard() {
   const api = useApi()
-  const { status, data, reload } = useAsync(async () => {
+  const { status, data, error, reload } = useAsync(async () => {
     const [billing, active] = await Promise.all([
       api.superadmin.getBilling(),
       api.superadmin.listRestaurants({ active: true }),
@@ -37,7 +46,7 @@ export function Dashboard() {
           ))}
         </div>
       ) : status === 'error' || !data ? (
-        <SectionError onRetry={reload} />
+        <SectionError message={toMessage(error)} onRetry={reload} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard label="Total restaurants" value={data.summary.length} />

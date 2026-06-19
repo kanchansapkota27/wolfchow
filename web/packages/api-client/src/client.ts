@@ -2,6 +2,7 @@ import type {
   AuthSession,
   CreateInviteInput,
   CreateInviteResult,
+  CreateRestaurantInput,
   Invite,
   InviteSummary,
   Order,
@@ -10,6 +11,10 @@ import type {
   Restaurant,
   RestaurantListItem,
   RestaurantUpdate,
+  SmtpConfig,
+  SmtpGlobalInput,
+  SmtpOverrideInput,
+  SmtpOverrideItem,
 } from '@wolfchow/types'
 import { ApiError } from './errors'
 import { storeSession, type SessionStore } from './session'
@@ -187,6 +192,11 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<CreateInviteResult>('/superadmin/invites', { method: 'POST', body: data }),
     revokeInvite: (id: string) =>
       apiFetch<void>(`/superadmin/invites/${id}`, { method: 'DELETE' }),
+    createRestaurant: (data: CreateRestaurantInput) =>
+      apiFetch<{ restaurant: Pick<Restaurant, 'id' | 'slug' | 'display_name' | 'business_name' | 'created_at'> }>(
+        '/superadmin/restaurants',
+        { method: 'POST', body: data },
+      ),
     listRestaurants: (query?: RequestOptions['query']) =>
       apiFetch<{
         restaurants: RestaurantListItem[]
@@ -214,9 +224,21 @@ export function createApiClient(config: ApiClientConfig) {
         `/superadmin/restaurants/${id}/impersonate`,
         { method: 'POST' },
       ),
-    getSmtpGlobal: () => apiFetch<Record<string, unknown>>('/superadmin/smtp/global'),
-    putSmtpGlobal: (data: Record<string, unknown>) =>
-      apiFetch<Record<string, unknown>>('/superadmin/smtp/global', { method: 'POST', body: data }),
+    getSmtpGlobal: () =>
+      apiFetch<{ config: SmtpConfig }>('/superadmin/smtp/global'),
+    putSmtpGlobal: (data: SmtpGlobalInput) =>
+      apiFetch<{ ok: boolean }>('/superadmin/smtp/global', { method: 'POST', body: data }),
+    testSmtpGlobal: () =>
+      apiFetch<{ ok: boolean; sent_to: string }>('/superadmin/smtp/test', { method: 'POST' }),
+    listSmtpOverrides: () =>
+      apiFetch<{ overrides: SmtpOverrideItem[] }>('/superadmin/smtp/overrides'),
+    putSmtpOverride: (restaurantId: string, data: SmtpOverrideInput) =>
+      apiFetch<{ ok: boolean }>(`/superadmin/smtp/restaurants/${restaurantId}`, {
+        method: 'POST',
+        body: data,
+      }),
+    deleteSmtpOverride: (restaurantId: string) =>
+      apiFetch<void>(`/superadmin/smtp/restaurants/${restaurantId}`, { method: 'DELETE' }),
     getBilling: () => apiFetch<{ summary: unknown[] }>('/superadmin/billing'),
     getRestaurantBilling: (id: string) =>
       apiFetch<{ months: unknown[] }>(`/superadmin/billing/${id}`),
