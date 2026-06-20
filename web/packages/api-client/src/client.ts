@@ -1,4 +1,5 @@
 import type {
+  AuditEntry,
   AuthSession,
   BillingMonthRow,
   BillingSummaryRow,
@@ -246,7 +247,7 @@ export function createApiClient(config: ApiClientConfig) {
     getRestaurantBilling: (id: string) =>
       apiFetch<{ months: BillingMonthRow[] }>(`/superadmin/billing/${id}`),
     listAudit: (query?: RequestOptions['query']) =>
-      apiFetch<{ entries: unknown[]; page: number; total: number }>('/superadmin/audit', { query }),
+      apiFetch<{ entries: AuditEntry[]; page: number; page_size: number; total: number }>('/superadmin/audit', { query }),
   }
 
   // Forward-looking named functions for routes landing in later slices. They are

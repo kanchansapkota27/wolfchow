@@ -488,6 +488,21 @@ export interface BillingMonthRow {
 
 // ── SMTP ─────────────────────────────────────────────────────────────────────
 
+export type AuditOperation = 'INSERT' | 'UPDATE' | 'DELETE' | 'IMPERSONATION_START' | 'IMPERSONATION_END'
+
+/** One row from `GET /superadmin/audit`. */
+export interface AuditEntry {
+  id: string
+  restaurant_id: string | null
+  table_name: string | null
+  operation: AuditOperation | string
+  old_data: Record<string, unknown> | null
+  new_data: Record<string, unknown> | null
+  user_id: string | null
+  user_name: string | null
+  created_at: string
+}
+
 /** Public SMTP config row (password is never returned; `has_password` is the signal). */
 export interface SmtpConfig {
   id: string

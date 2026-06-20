@@ -7,7 +7,7 @@ import { Invites } from './pages/Invites'
 import { Restaurants } from './pages/Restaurants'
 import { Smtp } from './pages/Smtp'
 import { Billing } from './pages/Billing'
-import { Placeholder } from './pages/Placeholder'
+import { Audit } from './pages/Audit'
 
 /** Gate + shell: only platform roles get in; others are bounced to /login. */
 function ProtectedLayout() {
@@ -38,7 +38,7 @@ export function App() {
         <Route path="invites" element={<Invites />} />
         <Route path="smtp" element={<Smtp />} />
         <Route path="billing" element={<Billing />} />
-        <Route path="audit" element={<Placeholder title="Audit Log" story="STORY-055" />} />
+        <Route path="audit" element={<Audit />} />
       </Route>
     </Routes>
   )
