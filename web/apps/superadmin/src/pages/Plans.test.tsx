@@ -37,7 +37,7 @@ function makePlan(over: Partial<Plan> = {}): Plan {
     feature_flags: flags(),
     payment_methods_allowed: ['card'],
     commission_type: 'percentage',
-    public: false,
+    is_public: false,
     created_at: '2026-01-01T00:00:00Z',
     restaurant_count: 0,
     ...over,

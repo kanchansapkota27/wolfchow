@@ -146,8 +146,8 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={form.public}
-            onChange={(e) => patch({ public: e.target.checked })}
+            checked={form.is_public}
+            onChange={(e) => patch({ is_public: e.target.checked })}
           />
           <span>
             Public plan{' '}

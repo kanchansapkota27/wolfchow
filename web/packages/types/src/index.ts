@@ -74,7 +74,7 @@ export interface Plan {
   /** How commission_rate is applied: fraction of order total or flat per-order amount. */
   commission_type: CommissionType
   /** Whether this plan may appear on a public pricing page. */
-  public: boolean
+  is_public: boolean
   created_at: string
   /** Number of restaurants on this plan (present on the superadmin list). */
   restaurant_count?: number
@@ -92,7 +92,7 @@ export interface PlanInput {
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
   commission_type: CommissionType
-  public: boolean
+  is_public: boolean
 }
 
 export interface BrandColors {

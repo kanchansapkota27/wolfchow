@@ -103,7 +103,7 @@ function PlanCard({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">{plan.name}</h2>
-          {plan.public && (
+          {plan.is_public && (
             <span className="rounded bg-indigo-900 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300">
               PUBLIC
             </span>
