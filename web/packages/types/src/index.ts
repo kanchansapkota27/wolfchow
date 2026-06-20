@@ -462,6 +462,7 @@ export interface SpecialClosure {
 
 // ── Billing ───────────────────────────────────────────────────────────────────
 
+/** One row from `superadmin_billing_summary()` — cross-tenant commission aggregate. */
 export interface BillingSummaryRow {
   id: string
   display_name: string
@@ -477,6 +478,7 @@ export interface BillingSummaryRow {
   estimated_commission_30d: number
 }
 
+/** One month from `superadmin_billing_monthly(restaurant_id)`. */
 export interface BillingMonthRow {
   month: string
   order_count: number
