@@ -1,0 +1,175 @@
+import type { Hono } from 'hono'
+import type { HonoEnv } from '../../types'
+import { createAdminClient, createAnonClient } from '../../services/supabase'
+import { buildKey, KvCache } from '../../services/kv'
+import { generatePresignedPutUrl, randomId } from '../../services/r2'
+import { patchPasswordSchema, patchProfileSchema, patchRestaurantSchema } from './schemas'
+
+/** Fields the restaurant owner may NOT update via PATCH /admin/restaurant. */
+const PROTECTED_FIELDS = new Set([
+  'timezone',
+  'currency',
+  'slug',
+  'plan_id',
+  'commission_rate',
+  'active',
+])
+
+async function readJson(c: Parameters<typeof createAdminClient>[0] extends unknown ? unknown : never): Promise<unknown> {
+  // This is typed via the route context below; kept here to avoid repetition.
+  return null
+}
+
+/** Read and parse JSON body; returns null on malformed/empty input. */
+async function parseBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json()
+  } catch {
+    return null
+  }
+}
+
+export interface RestaurantAdminDeps {
+  generateUploadUrl?: (env: HonoEnv['Bindings'], key: string, expiresIn: number) => Promise<string>
+}
+
+export function registerRestaurantAdminRoutes(
+  app: Hono<HonoEnv>,
+  deps: RestaurantAdminDeps = {},
+): void {
+  const getUploadUrl = deps.generateUploadUrl ?? generatePresignedPutUrl
+
+  // ── GET /admin/restaurant ───────────────────────────────────────────────────
+
+  app.get('/admin/restaurant', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+
+    const admin = createAdminClient(c.env)
+    const { data, error } = await admin
+      .from('restaurants')
+      .select('*')
+      .eq('id', restaurantId)
+      .single()
+
+    if (error || !data) {
+      return c.json({ error: 'not_found' }, 404)
+    }
+
+    return c.json(data)
+  })
+
+  // ── PATCH /admin/restaurant ─────────────────────────────────────────────────
+
+  app.patch('/admin/restaurant', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+
+    const parsed = patchRestaurantSchema.safeParse(await parseBody(c.req.raw))
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
+    }
+
+    // Extra safety: strip any protected fields that slipped past Zod
+    const update = Object.fromEntries(
+      Object.entries(parsed.data).filter(([k]) => !PROTECTED_FIELDS.has(k)),
+    )
+
+    if (Object.keys(update).length === 0) {
+      return c.json({ error: 'no_updatable_fields' }, 422)
+    }
+
+    const admin = createAdminClient(c.env)
+    const { data, error } = await admin
+      .from('restaurants')
+      .update(update)
+      .eq('id', restaurantId)
+      .select()
+      .single()
+
+    if (error || !data) {
+      return c.json({ error: 'update_failed' }, 500)
+    }
+
+    // Invalidate settings and theme KV caches
+    const cache = new KvCache(c.env.SETTINGS_CACHE)
+    await Promise.all([
+      cache.delete(buildKey('settings', restaurantId)),
+      cache.delete(buildKey('theme', restaurantId)),
+    ])
+
+    return c.json(data)
+  })
+
+  // ── POST /admin/restaurant/logo ─────────────────────────────────────────────
+
+  app.post('/admin/restaurant/logo', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+
+    const r2Key = `${restaurantId}/logo/${randomId()}.webp`
+    const uploadUrl = await getUploadUrl(c.env, r2Key, 15 * 60)
+
+    return c.json({ upload_url: uploadUrl, r2_key: r2Key }, 201)
+  })
+
+  // ── PATCH /admin/restaurant/profile ────────────────────────────────────────
+
+  app.patch('/admin/restaurant/profile', async (c) => {
+    const jwt = c.get('jwt')
+    const userId = jwt.sub
+
+    const raw = await parseBody(c.req.raw) as Record<string, unknown> | null
+
+    // Reject attempts to update email
+    if (raw && 'email' in raw) {
+      return c.json({ error: 'email_immutable' }, 422)
+    }
+
+    const parsed = patchProfileSchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
+    }
+
+    if (Object.keys(parsed.data).length === 0) {
+      return c.json({ error: 'no_updatable_fields' }, 422)
+    }
+
+    const admin = createAdminClient(c.env)
+    const { data, error } = await admin
+      .from('users')
+      .update(parsed.data)
+      .eq('id', userId)
+      .select('id, name, phone, email, role')
+      .single()
+
+    if (error || !data) {
+      return c.json({ error: 'update_failed' }, 500)
+    }
+
+    return c.json(data)
+  })
+
+  // ── PATCH /admin/restaurant/password ───────────────────────────────────────
+
+  app.patch('/admin/restaurant/password', async (c) => {
+    const parsed = patchPasswordSchema.safeParse(await parseBody(c.req.raw))
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
+    }
+
+    // Must use the user's own session (anon client with their auth token)
+    const authHeader = c.req.header('Authorization') ?? ''
+    const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
+
+    const anon = createAnonClient(c.env)
+    await anon.auth.setSession({ access_token: accessToken, refresh_token: '' })
+    const { error } = await anon.auth.updateUser({ password: parsed.data.password })
+
+    if (error) {
+      return c.json({ error: 'password_update_failed' }, 400)
+    }
+
+    return c.body(null, 204)
+  })
+}

@@ -5,6 +5,7 @@ import { corsMiddleware } from './middleware/cors'
 import { buildOpenApiDocument } from './openapi/document'
 import { registerHealthRoutes } from './routes/health'
 import { registerAuthRoutes } from './routes/auth'
+import { registerAdminRoutes } from './routes/admin'
 import { registerSuperadminRoutes } from './routes/superadmin'
 
 const app = new Hono<HonoEnv>()
@@ -23,6 +24,7 @@ app.get('/docs', (c) => c.html(getSwaggerUI('/openapi.json')))
 
 registerHealthRoutes(app)
 registerAuthRoutes(app)
+registerAdminRoutes(app)
 registerSuperadminRoutes(app)
 
 export default app

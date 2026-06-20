@@ -21,6 +21,14 @@ export interface Env {
 
   // --- R2 ---
   MEDIA_BUCKET: R2Bucket
+  /** Cloudflare account ID — used to build the R2 S3-compatible endpoint. */
+  R2_ACCOUNT_ID: string
+  /** R2 API token access key ID (for presigned URL signing). */
+  R2_ACCESS_KEY_ID: string
+  /** R2 API token secret access key (for presigned URL signing). */
+  R2_SECRET_ACCESS_KEY: string
+  /** R2 bucket name — must match MEDIA_BUCKET. */
+  R2_BUCKET_NAME: string
 
   // --- Rate limiting (one binding per route group; see wrangler.toml) ---
   RATE_LIMITER_PUBLIC: RateLimit
