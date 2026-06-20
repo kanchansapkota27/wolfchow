@@ -22,7 +22,7 @@ registerAdminRoutes(app)
 
 // ── Fake env ──────────────────────────────────────────────────────────────────
 
-const mockKv      = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
+const mockKv       = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
 const mockDeviceKv = { get: vi.fn(), put: vi.fn(), delete: vi.fn(), list: vi.fn() }
 
 const env = {
@@ -62,6 +62,26 @@ async function ownerToken() {
   )
 }
 
+async function kitchenToken() {
+  const now = Math.floor(Date.now() / 1000)
+  return signJwt(
+    {
+      sub: '550e8400-e29b-41d4-a716-446655440099',
+      role: 'kitchen',
+      restaurant_id: RESTAURANT_ID,
+      permissions: ['orders:accept_reject'],
+      device_id: DEVICE_UUID,
+      imp: false,
+      imp_by: null,
+      amr: [],
+      aud: 'authenticated',
+      iat: now,
+      exp: now + 3600,
+    },
+    JWT_SECRET,
+  )
+}
+
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 }
@@ -83,7 +103,8 @@ beforeEach(() => {
   vi.resetAllMocks()
   mockKv.get.mockResolvedValue(null)  // no plan → no cap
   mockDeviceKv.put.mockResolvedValue(undefined)
-  mockDeviceKv.list.mockResolvedValue({ keys: [] })
+  mockDeviceKv.get.mockResolvedValue(null)
+  mockDeviceKv.delete.mockResolvedValue(undefined)
   mockInviteByEmail.mockResolvedValue({ error: null })
 })
 
@@ -107,6 +128,22 @@ describe('STORY-021 · Staff management', () => {
     const body = await res.json() as typeof fakeStaff
     expect(body.name).toBe('Alice')
     expect(mockInviteByEmail).toHaveBeenCalledWith('alice@test.com')
+  })
+
+  it('kitchen role cannot invite staff: 403', async () => {
+    const token = await kitchenToken()
+    const res = await app.request(
+      '/admin/staff/invite',
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ name: 'Eve', email: 'eve@test.com', permissions: [] }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(403)
+    expect(mockInviteByEmail).not.toHaveBeenCalled()
   })
 
   it('invite at staff cap: 402 plan_limit_reached', async () => {
@@ -160,7 +197,7 @@ describe('STORY-021 · Staff management', () => {
     expect(updateArg.active).toBe(false)
   })
 
-  it('create device: token returned, KV written', async () => {
+  it('create device: token returned, primary + index KV entries written', async () => {
     const fakeDevice = { id: STAFF_ID, name: 'Kitchen TV', device_id: DEVICE_UUID, permissions: ['orders:accept_reject', 'orders:status', 'inventory:write'], active: true }
     mockFrom.mockReturnValueOnce(chain({ data: fakeDevice }))
 
@@ -178,22 +215,29 @@ describe('STORY-021 · Staff management', () => {
     expect(res.status).toBe(201)
     const body = await res.json() as { device_token: string; staff: typeof fakeDevice }
     expect(body.device_token).toMatch(/^dt_[0-9a-f]{64}$/)
+
+    // Primary key: device:{token}
     expect(mockDeviceKv.put).toHaveBeenCalledWith(
       expect.stringMatching(/^device:dt_[0-9a-f]{64}$/),
       expect.any(String),
       { expirationTtl: 7_776_000 },
     )
+    // Secondary index: device_index:{restaurantId}:{deviceId}
+    expect(mockDeviceKv.put).toHaveBeenCalledWith(
+      expect.stringMatching(/^device_index:/),
+      expect.any(String),
+      { expirationTtl: 7_776_000 },
+    )
   })
 
-  it('revoke device: KV key deleted, 204', async () => {
-    const tokenKey = 'device:dt_' + 'a'.repeat(64)
+  it('revoke device: O(1) index lookup, both KV keys deleted, 204', async () => {
+    const rawToken = 'dt_' + 'a'.repeat(64)
     mockFrom
       .mockReturnValueOnce(chain({ data: { id: STAFF_ID, device_id: DEVICE_UUID } }))  // fetch user
       .mockReturnValueOnce(chain({ data: null }))                                        // deactivate update
 
-    mockDeviceKv.list.mockResolvedValue({ keys: [{ name: tokenKey }] })
-    mockDeviceKv.get.mockResolvedValue({ device_id: DEVICE_UUID, restaurant_id: RESTAURANT_ID })
-    mockDeviceKv.delete.mockResolvedValue(undefined)
+    // Secondary index returns the raw token string
+    mockDeviceKv.get.mockResolvedValue(rawToken)
 
     const token = await ownerToken()
     const res = await app.request(
@@ -203,6 +247,9 @@ describe('STORY-021 · Staff management', () => {
     )
 
     expect(res.status).toBe(204)
-    expect(mockDeviceKv.delete).toHaveBeenCalledWith(tokenKey)
+    // Primary key deleted
+    expect(mockDeviceKv.delete).toHaveBeenCalledWith(`device:${rawToken}`)
+    // Index key deleted
+    expect(mockDeviceKv.delete).toHaveBeenCalledWith(`device_index:${RESTAURANT_ID}:${DEVICE_UUID}`)
   })
 })
