@@ -119,7 +119,14 @@ function PlanCard({
         <Stat label="Modifiers" value={plan.modifier_cap} />
         <Stat label="SMTP/mo" value={plan.smtp_monthly_limit ?? 'Unlimited'} />
         <Stat label="History" value={plan.transaction_history_days ?? 'Unlimited'} />
-        <Stat label="Commission" value={plan.commission_type === 'fixed' ? 'Fixed $' : '% of total'} />
+        <Stat
+          label="Commission"
+          value={
+            plan.commission_type === 'fixed'
+              ? `$${Number(plan.commission_rate).toFixed(2)}/order`
+              : `${(Number(plan.commission_rate) * 100).toFixed(2)}%`
+          }
+        />
       </dl>
 
       <div className="mt-3 flex flex-wrap gap-1">

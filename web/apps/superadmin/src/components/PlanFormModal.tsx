@@ -123,8 +123,8 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
         </fieldset>
 
         <fieldset>
-          <legend className="mb-2 text-sm font-medium text-gray-300">Commission type</legend>
-          <div className="flex gap-4">
+          <legend className="mb-2 text-sm font-medium text-gray-300">Commission</legend>
+          <div className="flex gap-4 mb-3">
             {COMMISSION_TYPES.map((ct) => (
               <label key={ct.value} className="flex items-center gap-2 text-sm">
                 <input
@@ -141,6 +141,39 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
               </label>
             ))}
           </div>
+          <div className="relative w-48">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">
+              {form.commission_type === 'percentage' ? '%' : '$'}
+            </span>
+            <input
+              type="number"
+              min={0}
+              step={form.commission_type === 'percentage' ? 0.1 : 0.01}
+              value={
+                form.commission_type === 'percentage'
+                  ? (form.commission_rate * 100).toFixed(2)
+                  : form.commission_rate.toFixed(2)
+              }
+              onChange={(e) => {
+                const raw = parseFloat(e.target.value) || 0
+                patch({
+                  commission_rate:
+                    form.commission_type === 'percentage' ? raw / 100 : raw,
+                })
+              }}
+              aria-label={
+                form.commission_type === 'percentage'
+                  ? 'Commission rate (%)'
+                  : 'Commission amount ($)'
+              }
+              className="w-full rounded border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {form.commission_type === 'percentage'
+              ? 'Applied as a percentage of the order total'
+              : 'Flat amount charged per order regardless of value'}
+          </p>
         </fieldset>
 
         <label className="flex items-center gap-2 text-sm">
