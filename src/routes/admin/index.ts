@@ -7,6 +7,7 @@ import { registerCategoryRoutes, type CategoryRouteDeps } from './categories'
 import { registerItemRoutes, type ItemRouteDeps } from './items'
 import { registerModifierRoutes, type ModifierRouteDeps } from './modifiers'
 import { registerHoursRoutes } from './hours'
+import { registerClosureRoutes } from './closures'
 
 export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps {}
 
@@ -31,4 +32,5 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerItemRoutes(app, deps)
   registerModifierRoutes(app, deps)
   registerHoursRoutes(app)
+  registerClosureRoutes(app)
 }
