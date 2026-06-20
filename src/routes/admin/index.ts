@@ -5,8 +5,9 @@ import { requireRestaurant, requireRole } from '../../middleware/guards'
 import { registerRestaurantAdminRoutes, type RestaurantAdminDeps } from './restaurant'
 import { registerCategoryRoutes, type CategoryRouteDeps } from './categories'
 import { registerItemRoutes, type ItemRouteDeps } from './items'
+import { registerModifierRoutes, type ModifierRouteDeps } from './modifiers'
 
-export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps {}
+export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps {}
 
 /**
  * Restaurant admin route group. Every `/admin/*` route sits behind:
@@ -27,4 +28,5 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerRestaurantAdminRoutes(app, deps)
   registerCategoryRoutes(app, deps)
   registerItemRoutes(app, deps)
+  registerModifierRoutes(app, deps)
 }
