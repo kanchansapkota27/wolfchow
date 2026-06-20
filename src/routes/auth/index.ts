@@ -1,8 +1,31 @@
 import type { Context, Hono } from 'hono'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { HonoEnv } from '../../types'
 import { createAdminClient, createAnonClient } from '../../services/supabase'
 import { decodeJwtClaims, signJwt, verifyJwt } from '../../services/tokens'
-import { deviceSchema, loginSchema, logoutSchema, refreshSchema, type DeviceRecord } from './schemas'
+import { buildKey, KvCache, KV_TTLS } from '../../services/kv'
+import { deviceSchema, loginSchema, logoutSchema, refreshSchema, signupSchema, type DeviceRecord } from './schemas'
+
+function slugify(name: string): string {
+  const s = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50)
+  return s || 'restaurant'
+}
+
+async function resolveSlug(admin: SupabaseClient, base: string): Promise<string> {
+  let slug = base
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data } = await admin.from('restaurants').select('id').eq('slug', slug).maybeSingle()
+    if (!data) return slug
+    slug = `${base}-${Math.random().toString(36).slice(2, 6)}`
+  }
+  return slug
+}
 
 interface InviteValidationRow {
   used: boolean
@@ -198,6 +221,140 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
       },
     })
   })
+
+  // ── /auth/signup ─────────────────────────────────────────────────────────
+
+  app.post('/auth/signup', async (c) => {
+    const parsed = signupSchema.safeParse(await readJson(c))
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
+    }
+
+    const body = parsed.data
+    const currency = body.currency.toUpperCase()
+
+    // Validate timezone — Intl.DateTimeFormat throws RangeError for unknown zones
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: body.timezone })
+    } catch {
+      return c.json({ error: 'invalid_timezone', timezone: body.timezone }, 422)
+    }
+
+    const admin = createAdminClient(c.env)
+
+    // Load and validate invite (join plans so we have plan data for KV)
+    const { data: inviteRow } = await admin
+      .from('invites')
+      .select('id, used, expires_at, plan_id, plans(id, name, staff_cap, item_cap, category_cap, modifier_cap, smtp_monthly_limit, transaction_history_days, feature_flags, payment_methods_allowed, commission_type, commission_value)')
+      .eq('token', body.invite_token)
+      .maybeSingle()
+
+    if (!inviteRow) return c.json({ error: 'invalid_invite' }, 400)
+    if (inviteRow.used) return c.json({ error: 'invite_used' }, 409)
+    if (new Date(inviteRow.expires_at).getTime() <= Date.now()) {
+      return c.json({ error: 'invite_expired' }, 410)
+    }
+
+    const plan = Array.isArray(inviteRow.plans) ? inviteRow.plans[0] : inviteRow.plans
+
+    // Resolve slug
+    const baseSlug = body.slug ?? slugify(body.business_name)
+    const slug = await resolveSlug(admin, baseSlug)
+
+    // Create Supabase Auth user
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email: body.admin_email,
+      password: body.password,
+      email_confirm: true,
+    })
+    if (authError || !authData.user) {
+      if (authError?.message?.includes('already been registered')) {
+        return c.json({ error: 'email_taken' }, 409)
+      }
+      return c.json({ error: 'signup_failed' }, 500)
+    }
+
+    const userId = authData.user.id
+
+    try {
+      // Insert restaurant
+      const { data: restaurant, error: restError } = await admin
+        .from('restaurants')
+        .insert({
+          slug,
+          business_name: body.business_name,
+          display_name: body.display_name ?? body.business_name,
+          timezone: body.timezone,
+          currency,
+          address: body.address,
+          plan_id: inviteRow.plan_id ?? null,
+        })
+        .select('id')
+        .single()
+
+      if (restError || !restaurant) {
+        throw new Error('restaurant_insert_failed')
+      }
+
+      const restaurantId = restaurant.id as string
+
+      // Insert users row (links auth user → restaurant)
+      const { error: userError } = await admin.from('users').insert({
+        id: userId,
+        restaurant_id: restaurantId,
+        role: 'restaurant_owner',
+        name: body.admin_name,
+        phone: body.admin_phone ?? null,
+        email: body.admin_email,
+      })
+      if (userError) throw new Error('user_insert_failed')
+
+      // Mark invite used
+      await admin
+        .from('invites')
+        .update({ used: true, used_at: new Date().toISOString(), used_by_restaurant_id: restaurantId })
+        .eq('id', inviteRow.id)
+
+      // Write KV entries
+      const cache = new KvCache(c.env.SETTINGS_CACHE)
+      await Promise.all([
+        // slug:{slug} → restaurant_id (permanent, no TTL)
+        cache.set(buildKey('slug', slug), restaurantId, KV_TTLS['slug'] ?? 0),
+        // plan:{restaurant_id} → plan flags (1h TTL)
+        plan
+          ? cache.set(buildKey('plan', restaurantId), plan, KV_TTLS['plan'])
+          : Promise.resolve(),
+      ])
+
+      // Sign in the new user to get session tokens
+      const anon = createAnonClient(c.env)
+      const { data: session, error: sessionError } = await anon.auth.signInWithPassword({
+        email: body.admin_email,
+        password: body.password,
+      })
+      if (sessionError || !session.session) {
+        // Account is created; sign-in failure is non-fatal — client can call /auth/login
+        return c.json({ error: 'signin_after_signup_failed' }, 500)
+      }
+
+      return c.json(
+        {
+          access_token: session.session.access_token,
+          refresh_token: session.session.refresh_token,
+          expires_in: session.session.expires_in,
+          user: { id: userId, email: body.admin_email, role: 'restaurant_owner' },
+          restaurant: { id: restaurantId, slug, display_name: body.display_name ?? body.business_name },
+        },
+        201,
+      )
+    } catch {
+      // Clean up orphaned auth user on any provisioning failure
+      void admin.auth.admin.deleteUser(userId)
+      return c.json({ error: 'signup_failed' }, 500)
+    }
+  })
+
+  // ── /auth/invite/:token ───────────────────────────────────────────────────
 
   // Public, no auth: the signup page validates an invite token before showing
   // the form. Order of checks: not found → 404, used/revoked → 409, expired →
