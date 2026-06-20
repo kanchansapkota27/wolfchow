@@ -488,7 +488,10 @@ export interface BillingMonthRow {
 
 // ── SMTP ─────────────────────────────────────────────────────────────────────
 
-export type AuditOperation = 'INSERT' | 'UPDATE' | 'DELETE' | 'IMPERSONATION_START' | 'IMPERSONATION_END'
+export type AuditOperation =
+  | 'INSERT' | 'UPDATE' | 'DELETE'
+  | 'LOGIN' | 'LOGOUT' | 'DEVICE_LOGIN'
+  | 'IMPERSONATION_START' | 'IMPERSONATION_END'
 
 /** One row from `GET /superadmin/audit`. */
 export interface AuditEntry {
