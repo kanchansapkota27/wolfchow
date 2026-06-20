@@ -101,7 +101,14 @@ function PlanCard({
   return (
     <div className="flex flex-col rounded-lg border border-gray-800 bg-gray-900 p-5">
       <div className="flex items-start justify-between">
-        <h2 className="text-lg font-semibold">{plan.name}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">{plan.name}</h2>
+          {plan.is_public && (
+            <span className="rounded bg-indigo-900 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300">
+              PUBLIC
+            </span>
+          )}
+        </div>
         <span className="text-xs text-gray-400">{plan.restaurant_count ?? 0} restaurants</span>
       </div>
 
@@ -112,6 +119,14 @@ function PlanCard({
         <Stat label="Modifiers" value={plan.modifier_cap} />
         <Stat label="SMTP/mo" value={plan.smtp_monthly_limit ?? 'Unlimited'} />
         <Stat label="History" value={plan.transaction_history_days ?? 'Unlimited'} />
+        <Stat
+          label="Commission"
+          value={
+            plan.commission_type === 'fixed'
+              ? `$${(plan.commission_value / 100).toFixed(2)}/mo`
+              : `${(plan.commission_value / 100).toFixed(2)}% of sales`
+          }
+        />
       </dl>
 
       <div className="mt-3 flex flex-wrap gap-1">

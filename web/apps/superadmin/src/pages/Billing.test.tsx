@@ -15,7 +15,8 @@ function row(over: Partial<BillingSummaryRow> = {}): BillingSummaryRow {
     display_name: 'The Burger Place',
     slug: 'burger-place',
     plan_id: 'plan-1',
-    commission_rate: 0.05,
+    effective_commission_type: 'percentage',
+    effective_commission_value: 500,
     billing_note: null,
     total_orders: 200,
     total_order_value: 10000,
@@ -51,7 +52,7 @@ function renderBilling(client: ApiClient) {
 }
 
 describe('STORY-054 · Billing UI — summary table', () => {
-  it('renders summary row with commission rate and 30d figures', async () => {
+  it('renders summary row with effective commission and 30d figures', async () => {
     const getBilling = vi
       .fn<SuperadminApi['getBilling']>()
       .mockResolvedValue({ summary: [row()], cached: false })
@@ -177,7 +178,7 @@ describe('STORY-054 · Billing UI — monthly drilldown', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Details' }))
 
     const dialog = await screen.findByRole('dialog', { name: /The Burger Place/i })
-    expect(within(dialog).getByText('5.00%')).toBeInTheDocument()
+    expect(within(dialog).getByText(/5\.00%/)).toBeInTheDocument()
     // Table month labels
     expect(within(dialog).getByText('Jan 2026')).toBeInTheDocument()
     // Order counts in table

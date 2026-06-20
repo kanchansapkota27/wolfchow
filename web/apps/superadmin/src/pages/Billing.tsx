@@ -28,14 +28,18 @@ function csvCell(value: string | number): string {
 
 function exportCsv(rows: BillingSummaryRow[]) {
   const header = [
-    'Restaurant', 'Slug', 'Commission %', 'Billing Note',
+    'Restaurant', 'Slug', 'Commission', 'Billing Note',
     'Orders (all)', 'GMV (all)', 'Orders (30d)', 'GMV (30d)', 'Est. Commission (30d)',
   ].join(',')
   const lines = rows.map((r) =>
     [
       csvCell(r.display_name),
       csvCell(r.slug),
-      csvCell((r.commission_rate * 100).toFixed(2)),
+      csvCell(
+        r.effective_commission_type === 'fixed'
+          ? `$${(r.effective_commission_value / 100).toFixed(2)}/mo`
+          : `${(r.effective_commission_value / 100).toFixed(2)}%`,
+      ),
       csvCell(r.billing_note ?? ''),
       csvCell(r.total_orders),
       csvCell(Number(r.total_order_value).toFixed(2)),
@@ -143,14 +147,16 @@ function BillingNoteCell({ restaurantId, initialNote, onSaved }: BillingNoteCell
 interface MonthlyDetailModalProps {
   restaurantId: string | null
   restaurantName: string
-  commissionRate: number
+  commissionType: string
+  commissionValue: number
   onClose: () => void
 }
 
 function MonthlyDetailModal({
   restaurantId,
   restaurantName,
-  commissionRate,
+  commissionType,
+  commissionValue,
   onClose,
 }: MonthlyDetailModalProps) {
   const api = useApi()
@@ -184,7 +190,12 @@ function MonthlyDetailModal({
         {monthlyQ.status === 'success' && chartData.length > 0 && (
           <>
             <p className="mb-4 text-sm text-gray-400">
-              Commission rate: <strong className="text-gray-200">{(commissionRate * 100).toFixed(2)}%</strong>
+              Commission:{' '}
+              <strong className="text-gray-200">
+                {commissionType === 'fixed'
+                  ? `$${(commissionValue / 100).toFixed(2)}/mo flat`
+                  : `${(commissionValue / 100).toFixed(2)}% of monthly sales`}
+              </strong>
             </p>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
@@ -307,7 +318,7 @@ export function Billing() {
             <thead className="bg-gray-900 text-gray-400">
               <tr>
                 <th className="px-4 py-2">Restaurant</th>
-                <th className="px-4 py-2">Commission %</th>
+                <th className="px-4 py-2">Commission</th>
                 <th className="px-4 py-2 min-w-[160px]">Billing Note</th>
                 <th className="px-4 py-2 text-right">Orders 30d</th>
                 <th className="px-4 py-2 text-right">GMV 30d</th>
@@ -330,7 +341,9 @@ export function Billing() {
                       <div className="text-xs text-gray-500">{r.slug}</div>
                     </td>
                     <td className="px-4 py-2 text-gray-300">
-                      {(r.commission_rate * 100).toFixed(2)}%
+                      {r.effective_commission_type === 'fixed'
+                        ? `$${(r.effective_commission_value / 100).toFixed(2)}/mo`
+                        : `${(r.effective_commission_value / 100).toFixed(2)}%`}
                     </td>
                     <td className="px-4 py-2">
                       <BillingNoteCell
@@ -362,7 +375,8 @@ export function Billing() {
       <MonthlyDetailModal
         restaurantId={drilldown?.id ?? null}
         restaurantName={drilldown?.display_name ?? ''}
-        commissionRate={drilldown?.commission_rate ?? 0}
+        commissionType={drilldown?.effective_commission_type ?? 'percentage'}
+        commissionValue={drilldown?.effective_commission_value ?? 0}
         onClose={() => setDrilldown(null)}
       />
     </div>

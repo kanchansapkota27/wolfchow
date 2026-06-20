@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PaymentMethod, Plan, PlanInput } from '@wolfchow/types'
 import { Button, Input, Modal } from '@wolfchow/ui'
-import { FEATURE_FLAGS, PAYMENT_METHODS, emptyPlanInput, planToInput } from '../lib/planMeta'
+import { COMMISSION_TYPES, FEATURE_FLAGS, PAYMENT_METHODS, emptyPlanInput, planToInput } from '../lib/planMeta'
 
 interface PlanFormModalProps {
   open: boolean
@@ -121,6 +121,65 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
             ))}
           </div>
         </fieldset>
+
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium text-gray-300">Commission</legend>
+          <div className="flex gap-4 mb-3">
+            {COMMISSION_TYPES.map((ct) => (
+              <label key={ct.value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="commission_type"
+                  value={ct.value}
+                  checked={form.commission_type === ct.value}
+                  onChange={() => patch({ commission_type: ct.value })}
+                />
+                <span>
+                  {ct.label}{' '}
+                  <span className="text-gray-500">({ct.hint})</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="relative w-48">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">
+              {form.commission_type === 'percentage' ? '%' : '$'}
+            </span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={(form.commission_value / 100).toFixed(2)}
+              onChange={(e) => {
+                const display = parseFloat(e.target.value) || 0
+                patch({ commission_value: Math.round(display * 100) })
+              }}
+              aria-label={
+                form.commission_type === 'percentage'
+                  ? 'Commission rate (%)'
+                  : 'Commission amount ($/month)'
+              }
+              className="w-full rounded border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {form.commission_type === 'percentage'
+              ? 'Applied as a % of monthly total sales'
+              : 'Flat monthly fee in dollars (regardless of sales volume)'}
+          </p>
+        </fieldset>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.is_public}
+            onChange={(e) => patch({ is_public: e.target.checked })}
+          />
+          <span>
+            Public plan{' '}
+            <span className="text-gray-500">(can appear on a public pricing page)</span>
+          </span>
+        </label>
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium text-gray-300">Payment methods</legend>

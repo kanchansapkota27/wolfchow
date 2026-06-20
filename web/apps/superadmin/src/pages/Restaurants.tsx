@@ -118,7 +118,13 @@ export function Restaurants() {
                       </Badge>
                     </td>
                     <td className="px-4 py-2">{r.order_count_30d}</td>
-                    <td className="px-4 py-2">{+(r.commission_rate * 100).toFixed(2)}%</td>
+                    <td className="px-4 py-2 text-gray-400">
+                      {r.override_commission_value !== null
+                        ? r.override_commission_type === 'fixed'
+                          ? `$${(r.override_commission_value / 100).toFixed(2)}/mo ↑`
+                          : `${(r.override_commission_value / 100).toFixed(2)}% ↑`
+                        : 'Plan default'}
+                    </td>
                     <td className="px-4 py-2 text-gray-400">{r.billing_note ?? '—'}</td>
                     <td className="px-4 py-2 text-gray-400">{formatDate(r.created_at, 'UTC')}</td>
                   </tr>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Plan } from '@wolfchow/types'
+import type { CommissionType, Plan } from '@wolfchow/types'
 import { Button, Input, Modal, useToast } from '@wolfchow/ui'
 import { useApi } from '../lib/api'
 
@@ -19,7 +19,9 @@ interface FormState {
   country: string
   state: string
   plan_id: string
-  commission_pct: string
+  // Override commission — only sent when useOverride = true
+  override_type: CommissionType
+  override_value: string
 }
 
 function empty(): FormState {
@@ -32,7 +34,8 @@ function empty(): FormState {
     country: '',
     state: '',
     plan_id: '',
-    commission_pct: '0',
+    override_type: 'percentage',
+    override_value: '0',
   }
 }
 
@@ -51,6 +54,7 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
   const { notify } = useToast()
   const [form, setForm] = useState<FormState>(empty)
   const [slugEdited, setSlugEdited] = useState(false)
+  const [useOverride, setUseOverride] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -58,6 +62,7 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
     if (open) {
       setForm({ ...empty(), plan_id: plans[0]?.id ?? '' })
       setSlugEdited(false)
+      setUseOverride(false)
       setError(null)
     }
   }, [open, plans])
@@ -67,24 +72,31 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
       const value = e.target.value
       setForm((f) => {
         const next = { ...f, [key]: value }
-        // Auto-generate slug from business_name unless user has edited it
-        if (key === 'business_name' && !slugEdited) {
-          next.slug = toSlug(value)
-        }
+        if (key === 'business_name' && !slugEdited) next.slug = toSlug(value)
         return next
       })
     }
   }
+
+  const selectedPlan = plans.find((p) => p.id === form.plan_id)
 
   async function submit() {
     if (!form.business_name || !form.slug || !form.timezone || !form.currency) {
       setError('Business name, slug, timezone, and currency are required.')
       return
     }
-    const commission = Number(form.commission_pct)
-    if (Number.isNaN(commission) || commission < 0 || commission > 100) {
-      setError('Commission must be between 0 and 100.')
-      return
+
+    let override_commission_type: CommissionType | undefined
+    let override_commission_value: number | undefined
+
+    if (useOverride) {
+      const display = parseFloat(form.override_value) || 0
+      if (display < 0) {
+        setError('Override commission must be 0 or greater.')
+        return
+      }
+      override_commission_type = form.override_type
+      override_commission_value = Math.round(display * 100)
     }
 
     setBusy(true)
@@ -99,7 +111,8 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
         country: form.country.trim() || undefined,
         state: form.state.trim() || undefined,
         plan_id: form.plan_id || undefined,
-        commission_rate: commission / 100,
+        override_commission_type,
+        override_commission_value,
       })
       notify('success', `Restaurant "${form.business_name}" created.`)
       onCreated()
@@ -177,30 +190,79 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-300">Plan (optional)</span>
-            <select
-              value={form.plan_id}
-              onChange={field('plan_id')}
-              className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
-            >
-              <option value="">— No plan —</option>
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-gray-300">Plan (optional)</span>
+          <select
+            value={form.plan_id}
+            onChange={field('plan_id')}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+          >
+            <option value="">— No plan —</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {' · '}
+                {p.commission_type === 'fixed'
+                  ? `$${(p.commission_value / 100).toFixed(2)}/mo`
+                  : `${(p.commission_value / 100).toFixed(2)}%`}
+              </option>
+            ))}
+          </select>
+          {selectedPlan && (
+            <span className="text-xs text-gray-500">
+              Default commission:{' '}
+              {selectedPlan.commission_type === 'fixed'
+                ? `$${(selectedPlan.commission_value / 100).toFixed(2)}/mo flat`
+                : `${(selectedPlan.commission_value / 100).toFixed(2)}% of monthly sales`}
+            </span>
+          )}
+        </label>
+
+        {/* Commission override */}
+        <div className="rounded-lg border border-gray-800 p-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={useOverride}
+              onChange={(e) => setUseOverride(e.target.checked)}
+            />
+            <span className="text-gray-300">Override commission for this restaurant</span>
           </label>
-          <Input
-            label="Commission rate %"
-            type="number"
-            min={0}
-            max={100}
-            value={form.commission_pct}
-            onChange={field('commission_pct')}
-          />
+
+          {useOverride && (
+            <div className="mt-3 space-y-3">
+              <p className="text-xs text-gray-500">
+                Overrides the plan default. Applies to monthly billing.
+              </p>
+              <div className="flex gap-6">
+                {(['percentage', 'fixed'] as const).map((type) => (
+                  <label key={type} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="override_type"
+                      checked={form.override_type === type}
+                      onChange={() => setForm((f) => ({ ...f, override_type: type }))}
+                    />
+                    {type === 'percentage' ? '% of monthly sales' : '$ flat monthly fee'}
+                  </label>
+                ))}
+              </div>
+              <div className="relative w-40">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">
+                  {form.override_type === 'percentage' ? '%' : '$'}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.override_value}
+                  onChange={(e) => setForm((f) => ({ ...f, override_value: e.target.value }))}
+                  aria-label={form.override_type === 'percentage' ? 'Override rate (%)' : 'Override fee ($/month)'}
+                  className="w-full rounded border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {error && (

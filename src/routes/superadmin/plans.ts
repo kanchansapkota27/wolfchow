@@ -6,7 +6,7 @@ import { createPlanSchema, updatePlanSchema } from './schemas'
 
 /** Columns returned for a plan (all of them — superadmin sees full detail). */
 const PLAN_COLUMNS =
-  'id, name, staff_cap, item_cap, category_cap, modifier_cap, smtp_monthly_limit, transaction_history_days, feature_flags, payment_methods_allowed, created_at'
+  'id, name, staff_cap, item_cap, category_cap, modifier_cap, smtp_monthly_limit, transaction_history_days, feature_flags, payment_methods_allowed, commission_type, commission_value, is_public, created_at'
 
 async function readJson(c: Context<HonoEnv>): Promise<unknown> {
   try {
