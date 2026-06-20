@@ -123,8 +123,8 @@ function PlanCard({
           label="Commission"
           value={
             plan.commission_type === 'fixed'
-              ? `$${Number(plan.commission_rate).toFixed(2)}/order`
-              : `${(Number(plan.commission_rate) * 100).toFixed(2)}%`
+              ? `$${(plan.commission_value / 100).toFixed(2)}/mo`
+              : `${(plan.commission_value / 100).toFixed(2)}% of sales`
           }
         />
       </dl>

@@ -148,31 +148,24 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
             <input
               type="number"
               min={0}
-              step={form.commission_type === 'percentage' ? 0.1 : 0.01}
-              value={
-                form.commission_type === 'percentage'
-                  ? (form.commission_rate * 100).toFixed(2)
-                  : form.commission_rate.toFixed(2)
-              }
+              step={0.01}
+              value={(form.commission_value / 100).toFixed(2)}
               onChange={(e) => {
-                const raw = parseFloat(e.target.value) || 0
-                patch({
-                  commission_rate:
-                    form.commission_type === 'percentage' ? raw / 100 : raw,
-                })
+                const display = parseFloat(e.target.value) || 0
+                patch({ commission_value: Math.round(display * 100) })
               }}
               aria-label={
                 form.commission_type === 'percentage'
                   ? 'Commission rate (%)'
-                  : 'Commission amount ($)'
+                  : 'Commission amount ($/month)'
               }
               className="w-full rounded border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
             />
           </div>
           <p className="mt-1 text-xs text-gray-500">
             {form.commission_type === 'percentage'
-              ? 'Applied as a percentage of the order total'
-              : 'Flat amount charged per order regardless of value'}
+              ? 'Applied as a % of monthly total sales'
+              : 'Flat monthly fee in dollars (regardless of sales volume)'}
           </p>
         </fieldset>
 

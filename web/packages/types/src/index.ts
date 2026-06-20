@@ -71,10 +71,15 @@ export interface Plan {
   transaction_history_days: number | null
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
-  /** How commission_rate is applied: fraction of order total or flat per-order amount. */
+  /** How commission is applied: percentage of order total or flat per-order amount. */
   commission_type: CommissionType
-  /** Default commission rate. Fraction (0–1) for percentage; flat amount for fixed. */
-  commission_rate: number
+  /**
+   * Commission value stored as an integer.
+   * percentage → basis points (500 = 5.00%)
+   * fixed      → cents (250 = $2.50)
+   * Divide by 100 to get the human-readable display value.
+   */
+  commission_value: number
   /** Whether this plan may appear on a public pricing page. */
   is_public: boolean
   created_at: string
@@ -94,7 +99,7 @@ export interface PlanInput {
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
   commission_type: CommissionType
-  commission_rate: number
+  commission_value: number
   is_public: boolean
 }
 

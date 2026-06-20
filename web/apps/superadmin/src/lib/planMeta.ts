@@ -43,7 +43,7 @@ export function emptyPlanInput(): PlanInput {
     feature_flags: emptyFlags(),
     payment_methods_allowed: ['card'],
     commission_type: 'percentage',
-    commission_rate: 0,
+    commission_value: 0,
     is_public: false,
   }
 }
@@ -61,7 +61,7 @@ export function planToInput(plan: Plan): PlanInput {
     feature_flags: { ...emptyFlags(), ...plan.feature_flags },
     payment_methods_allowed: [...plan.payment_methods_allowed],
     commission_type: plan.commission_type ?? 'percentage',
-    commission_rate: plan.commission_rate ?? 0,
+    commission_value: plan.commission_value ?? 0,
     is_public: plan.is_public ?? false,
   }
 }
