@@ -12,8 +12,9 @@ import { registerSchedulingRoutes } from './scheduling'
 import { registerPauseRoutes, type PauseRouteDeps } from './pause'
 import { registerStaffRoutes } from './staff'
 import { registerPaymentRoutes, type PaymentRouteDeps } from './payments'
+import { registerSmtpRoutes, type SmtpRouteDeps } from './smtp'
 
-export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps {}
+export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps, SmtpRouteDeps {}
 
 /**
  * Restaurant admin route group. Every `/admin/*` route sits behind:
@@ -41,4 +42,5 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerPauseRoutes(app, deps)
   registerStaffRoutes(app)
   registerPaymentRoutes(app, deps)
+  registerSmtpRoutes(app, deps)
 }
