@@ -154,13 +154,24 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
                     ))}
                   </select>
                 </Row>
-                <Row label="Commission">
-                  <InlineEdit
-                    ariaLabel="Commission rate percent"
-                    type="number"
-                    value={String(+(r.commission_rate * 100).toFixed(2))}
-                    onSave={(v) => patch({ commission_rate: (Number(v) || 0) / 100 })}
-                  />
+                <Row label="Commission override">
+                  {r.override_commission_value !== null ? (
+                    <span className="text-xs text-amber-400">
+                      {r.override_commission_type === 'fixed'
+                        ? `$${(r.override_commission_value / 100).toFixed(2)}/mo`
+                        : `${(r.override_commission_value / 100).toFixed(2)}% of sales`}
+                      {' '}
+                      <button
+                        type="button"
+                        className="text-gray-500 hover:text-red-400"
+                        onClick={() => void patch({ override_commission_type: null, override_commission_value: null })}
+                      >
+                        (remove)
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">Inherited from plan</span>
+                  )}
                 </Row>
                 <Row label="Billing note">
                   <InlineEdit

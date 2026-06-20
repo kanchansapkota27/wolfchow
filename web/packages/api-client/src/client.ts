@@ -1,5 +1,7 @@
 import type {
   AuthSession,
+  BillingMonthRow,
+  BillingSummaryRow,
   CreateInviteInput,
   CreateInviteResult,
   CreateRestaurantInput,
@@ -239,9 +241,10 @@ export function createApiClient(config: ApiClientConfig) {
       }),
     deleteSmtpOverride: (restaurantId: string) =>
       apiFetch<void>(`/superadmin/smtp/restaurants/${restaurantId}`, { method: 'DELETE' }),
-    getBilling: () => apiFetch<{ summary: unknown[] }>('/superadmin/billing'),
+    getBilling: () =>
+      apiFetch<{ summary: BillingSummaryRow[]; cached: boolean }>('/superadmin/billing'),
     getRestaurantBilling: (id: string) =>
-      apiFetch<{ months: unknown[] }>(`/superadmin/billing/${id}`),
+      apiFetch<{ months: BillingMonthRow[] }>(`/superadmin/billing/${id}`),
     listAudit: (query?: RequestOptions['query']) =>
       apiFetch<{ entries: unknown[]; page: number; total: number }>('/superadmin/audit', { query }),
   }

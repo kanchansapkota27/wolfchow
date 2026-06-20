@@ -56,6 +56,8 @@ export interface FeatureFlags {
   webhook_export?: boolean
 }
 
+export type CommissionType = 'percentage' | 'fixed'
+
 export interface Plan {
   id: string
   name: string
@@ -69,6 +71,17 @@ export interface Plan {
   transaction_history_days: number | null
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
+  /** How commission is applied: percentage of order total or flat per-order amount. */
+  commission_type: CommissionType
+  /**
+   * Commission value stored as an integer.
+   * percentage → basis points (500 = 5.00%)
+   * fixed      → cents (250 = $2.50)
+   * Divide by 100 to get the human-readable display value.
+   */
+  commission_value: number
+  /** Whether this plan may appear on a public pricing page. */
+  is_public: boolean
   created_at: string
   /** Number of restaurants on this plan (present on the superadmin list). */
   restaurant_count?: number
@@ -85,6 +98,9 @@ export interface PlanInput {
   transaction_history_days: number | null
   feature_flags: FeatureFlags
   payment_methods_allowed: PaymentMethod[]
+  commission_type: CommissionType
+  commission_value: number
+  is_public: boolean
 }
 
 export interface BrandColors {
@@ -109,7 +125,8 @@ export interface Restaurant {
   social_links: Record<string, string>
   delivery_links: Record<string, string>
   plan_id: string | null
-  commission_rate: number
+  override_commission_type: CommissionType | null
+  override_commission_value: number | null
   billing_note: string | null
   active: boolean
   base_prep_minutes: number
@@ -140,7 +157,8 @@ export interface RestaurantListItem {
   plan_id: string | null
   plan_name: string | null
   active: boolean
-  commission_rate: number
+  override_commission_type: CommissionType | null
+  override_commission_value: number | null
   billing_note: string | null
   created_at: string
   order_count_30d: number
@@ -149,7 +167,8 @@ export interface RestaurantListItem {
 /** Fields a superadmin may change on a restaurant (`PATCH`). */
 export interface RestaurantUpdate {
   plan_id?: string
-  commission_rate?: number
+  override_commission_type?: CommissionType | null
+  override_commission_value?: number | null
   billing_note?: string | null
   active?: boolean
 }
@@ -181,7 +200,9 @@ export interface CreateRestaurantInput {
   country?: string
   state?: string
   plan_id?: string
-  commission_rate?: number
+  /** Optional override — omit to inherit the plan's commission. */
+  override_commission_type?: CommissionType
+  override_commission_value?: number
 }
 
 /** Body for creating an invite. `commission_rate` is a fraction (0.02 = 2%). */
@@ -437,6 +458,30 @@ export interface SpecialClosure {
   recurring: boolean
   reason: string | null
   created_at: string
+}
+
+// ── Billing ───────────────────────────────────────────────────────────────────
+
+export interface BillingSummaryRow {
+  id: string
+  display_name: string
+  slug: string
+  plan_id: string | null
+  effective_commission_type: CommissionType
+  effective_commission_value: number
+  billing_note: string | null
+  total_orders: number
+  total_order_value: number
+  total_orders_30d: number
+  total_order_value_30d: number
+  estimated_commission_30d: number
+}
+
+export interface BillingMonthRow {
+  month: string
+  order_count: number
+  order_value: number
+  estimated_commission: number
 }
 
 // ── SMTP ─────────────────────────────────────────────────────────────────────
