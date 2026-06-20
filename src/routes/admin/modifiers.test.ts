@@ -111,7 +111,9 @@ beforeEach(() => {
 
 describe('STORY-016 · Modifier groups & options', () => {
   it('create modifier group: 201, fields correct', async () => {
-    mockFrom.mockReturnValueOnce(chain({ data: fakeGroup }))    // insert (no cap in plan → count skipped)
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { id: ITEM_ID } })) // ownership check: item belongs to restaurant
+      .mockReturnValueOnce(chain({ data: fakeGroup }))        // insert (no cap in plan → count skipped)
 
     const token = await ownerToken()
     const res = await app.request(
@@ -152,7 +154,9 @@ describe('STORY-016 · Modifier groups & options', () => {
 
   it('modifier at modifier_cap: 402 plan_limit_reached', async () => {
     mockKv.get.mockResolvedValue({ feature_flags: { item_modifiers: true }, modifier_cap: 2 })
-    mockFrom.mockReturnValueOnce(chain({ count: 2 }))  // at cap
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { id: ITEM_ID } })) // ownership check
+      .mockReturnValueOnce(chain({ count: 2 }))               // at cap
 
     const token = await ownerToken()
     const res = await app.request(
