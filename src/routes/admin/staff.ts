@@ -3,6 +3,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
+import { requireRole } from '../../middleware/guards'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -59,9 +60,25 @@ function generateDeviceToken(): string {
   return 'dt_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+/** Primary KV key for tablet auth lookup: by token. */
+function deviceTokenKey(token: string): string {
+  return `device:${token}`
+}
+
+/** Secondary KV index for O(1) revoke: by (restaurantId, deviceId) → token. */
+function deviceIndexKey(restaurantId: string, deviceId: string): string {
+  return `device_index:${restaurantId}:${deviceId}`
+}
+
 // ── Routes ─────────────────────────────────────────────────────────────────────
 
 export function registerStaffRoutes(app: Hono<HonoEnv>): void {
+  // All write routes are owner-only — kitchen tablets must not manage staff.
+  app.use('/admin/staff/invite', requireRole('restaurant_owner'))
+  app.use('/admin/staff/device', requireRole('restaurant_owner'))
+  app.use('/admin/staff/:id', requireRole('restaurant_owner'))
+  app.use('/admin/staff/device/:id', requireRole('restaurant_owner'))
+
   // ── GET /admin/staff ───────────────────────────────────────────────────────
 
   app.get('/admin/staff', async (c) => {
@@ -116,7 +133,7 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
     // Send Supabase auth invite
     const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(parsed.data.email)
     if (inviteError) {
-      return c.json({ error: 'invite_failed', message: inviteError.message }, 500)
+      return c.json({ error: 'invite_failed' }, 500)
     }
 
     // Insert staff profile row
@@ -203,11 +220,30 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
       return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
     }
 
+    const admin = createAdminClient(c.env)
+    const cache = new KvCache(c.env.SETTINGS_CACHE)
+
+    // Check staff_cap from plan KV (devices count against the same cap)
+    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    const staffCap = typeof plan?.staff_cap === 'number' ? plan.staff_cap : null
+
+    if (staffCap !== null) {
+      const { count } = await admin
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('restaurant_id', restaurantId)
+        .eq('role', 'kitchen')
+        .eq('active', true)
+        .then((r) => ({ count: r.count ?? 0 }))
+
+      if (count >= staffCap) {
+        return c.json({ error: 'plan_limit_reached', limit: staffCap, current: count }, 402)
+      }
+    }
+
     const defaultPermissions = ['orders:accept_reject', 'orders:status', 'inventory:write']
     const deviceId = crypto.randomUUID()
     const deviceToken = generateDeviceToken()
-
-    const admin = createAdminClient(c.env)
 
     const { data, error } = await admin
       .from('users')
@@ -224,12 +260,13 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
 
     if (error || !data) return c.json({ error: 'create_failed' }, 500)
 
-    // Write token to DEVICE_TOKENS KV — key shown only here
-    await c.env.DEVICE_TOKENS.put(
-      `device:${deviceToken}`,
-      JSON.stringify({ restaurant_id: restaurantId, device_id: deviceId, name: parsed.data.name, permissions: defaultPermissions }),
-      { expirationTtl: DEVICE_TOKEN_TTL },
-    )
+    const tokenPayload = JSON.stringify({ restaurant_id: restaurantId, device_id: deviceId, name: parsed.data.name, permissions: defaultPermissions })
+    await Promise.all([
+      // Primary key: fast tablet auth lookup by token
+      c.env.DEVICE_TOKENS.put(deviceTokenKey(deviceToken), tokenPayload, { expirationTtl: DEVICE_TOKEN_TTL }),
+      // Secondary index: O(1) revoke by (restaurantId, deviceId)
+      c.env.DEVICE_TOKENS.put(deviceIndexKey(restaurantId, deviceId), deviceToken, { expirationTtl: DEVICE_TOKEN_TTL }),
+    ])
 
     return c.json({ device_token: deviceToken, staff: data }, 201)
   })
@@ -254,17 +291,14 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
 
     if (!user) return c.json({ error: 'not_found' }, 404)
 
-    // Scan KV for the token matching this device_id and delete it
-    // Since we store by token (not device_id), we need to list and find the match.
-    // The spec says DELETE /admin/staff/device/:id where :id is the device_id.
-    // We do a KV list to find and delete the matching token entry.
-    const listed = await c.env.DEVICE_TOKENS.list({ prefix: 'device:' })
-    for (const key of listed.keys) {
-      const val = await c.env.DEVICE_TOKENS.get(key.name, 'json') as { device_id?: string } | null
-      if (val?.device_id === deviceId) {
-        await c.env.DEVICE_TOKENS.delete(key.name)
-        break
-      }
+    // O(1) revoke via secondary index: restaurantId-scoped, no cross-tenant scan
+    const indexKey = deviceIndexKey(restaurantId, deviceId)
+    const token = await c.env.DEVICE_TOKENS.get(indexKey)
+    if (token) {
+      await Promise.all([
+        c.env.DEVICE_TOKENS.delete(deviceTokenKey(token)),
+        c.env.DEVICE_TOKENS.delete(indexKey),
+      ])
     }
 
     // Soft-deactivate the users row
