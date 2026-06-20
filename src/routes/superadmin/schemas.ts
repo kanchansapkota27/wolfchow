@@ -70,7 +70,9 @@ export const createRestaurantDirectSchema = z.object({
   country: z.string().max(100).optional(),
   state: z.string().max(100).optional(),
   plan_id: z.string().uuid().optional(),
-  commission_rate: z.number().min(0).max(1).optional(),
+  /** Optional override — omit to inherit the plan's commission. */
+  override_commission_type: z.enum(['percentage', 'fixed']).optional(),
+  override_commission_value: z.number().int().min(0).optional(),
 })
 
 export type CreateRestaurantDirectInput = z.infer<typeof createRestaurantDirectSchema>
@@ -84,7 +86,8 @@ export type CreateInviteInput = z.infer<typeof createInviteSchema>
 export const updateRestaurantSchema = z
   .object({
     plan_id: z.string().uuid(),
-    commission_rate: z.number().min(0).max(1),
+    override_commission_type: z.enum(['percentage', 'fixed']).nullable(),
+    override_commission_value: z.number().int().min(0).nullable(),
     billing_note: z.string().max(500).nullable(),
     active: z.boolean(),
   })

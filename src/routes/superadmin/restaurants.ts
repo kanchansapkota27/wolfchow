@@ -10,7 +10,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 
 /** Columns for the list view (joins plan name). */
 const LIST_COLUMNS =
-  'id, slug, display_name, plan_id, active, commission_rate, billing_note, created_at, plans(name)'
+  'id, slug, display_name, plan_id, active, override_commission_type, override_commission_value, billing_note, created_at, plans(name)'
 
 interface RestaurantListRow {
   id: string
@@ -18,7 +18,8 @@ interface RestaurantListRow {
   display_name: string
   plan_id: string | null
   active: boolean
-  commission_rate: number
+  override_commission_type: string | null
+  override_commission_value: number | null
   billing_note: string | null
   created_at: string
   plans: { name: string } | { name: string }[] | null
@@ -85,7 +86,8 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
         currency: parsed.data.currency,
         address,
         plan_id: parsed.data.plan_id ?? null,
-        commission_rate: parsed.data.commission_rate ?? 0,
+        override_commission_type: parsed.data.override_commission_type ?? null,
+        override_commission_value: parsed.data.override_commission_value ?? null,
       })
       .select('id, slug, display_name, business_name, created_at')
       .single()
@@ -137,7 +139,8 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
       plan_id: r.plan_id,
       plan_name: planName(r),
       active: r.active,
-      commission_rate: r.commission_rate,
+      override_commission_type: r.override_commission_type,
+      override_commission_value: r.override_commission_value,
       billing_note: r.billing_note,
       created_at: r.created_at,
       order_count_30d: counts[i] ?? 0,
@@ -170,7 +173,7 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
       .from('restaurants')
       .update(parsed.data)
       .eq('id', id)
-      .select('id, plan_id, commission_rate, billing_note, active')
+      .select('id, plan_id, override_commission_type, override_commission_value, billing_note, active')
       .maybeSingle()
     if (error) return c.json({ error: 'update_failed' }, 500)
     if (!data) return c.json({ error: 'restaurant_not_found' }, 404)
