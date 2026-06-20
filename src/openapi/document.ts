@@ -1,12 +1,15 @@
 /**
- * Hand-authored OpenAPI 3.1 document for the currently-merged routes (auth +
- * superadmin). Served at `/openapi.json` with Swagger UI at `/docs`.
+ * Hand-authored OpenAPI 3.1 document for all currently-merged routes.
+ * Served at `/openapi.json` with Swagger UI at `/docs`.
  *
  * Why hand-authored: every route is a plain Hono handler, so Chanfana's
- * class-based auto-generation produces an empty spec. Converting ~29 tested
- * handlers to `OpenAPIRoute` classes is the job of the full STORY-044 (Slice 5);
- * until then this module documents the live contract without touching handler
- * logic. Keep it in sync when these routes change.
+ * class-based auto-generation produces an empty spec. Converting handlers to
+ * `OpenAPIRoute` classes is the job of STORY-044 (Slice 5); until then this
+ * module documents the live contract. Keep it in sync when routes change.
+ *
+ * Covered: auth (login/refresh/logout/device/invite/signup) +
+ *          superadmin (plans/invites/restaurants/smtp/billing/audit) +
+ *          admin (restaurant profile, menu categories, menu items, variants)
  */
 
 type OperationObject = Record<string, unknown>
@@ -54,6 +57,57 @@ const queryParam = (name: string, description: string, schema: unknown = { type:
 })
 
 const schemas: Record<string, unknown> = {
+  MenuCategory: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      restaurant_id: { type: 'string', format: 'uuid' },
+      name: { type: 'string' },
+      sort_order: { type: 'integer' },
+      active: { type: 'boolean' },
+      availability_state: { type: 'string', enum: ['available', 'unavailable', 'scheduled'] },
+      item_count: { type: 'integer', description: 'Number of active items in this category' },
+      created_at: { type: 'string', format: 'date-time' },
+    },
+  },
+  MenuItem: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      restaurant_id: { type: 'string', format: 'uuid' },
+      category_id: { type: 'string', format: 'uuid' },
+      name: { type: 'string' },
+      description: { type: 'string', nullable: true },
+      price: { type: 'integer', description: 'Price in cents (e.g. 1200 = $12.00)' },
+      availability_state: { type: 'string', enum: ['available', 'out_of_stock', 'hidden', 'scheduled'] },
+      restore_at: { type: 'string', format: 'date-time', nullable: true },
+      active: { type: 'boolean' },
+      has_variants: { type: 'boolean' },
+      tags: { type: 'array', items: { type: 'string', enum: ['vegan', 'vegetarian', 'spicy', 'gluten_free', 'contains_nuts', 'halal', 'dairy_free', 'contains_alcohol'] } },
+      image_key: { type: 'string', nullable: true, description: 'R2 object key for the item image' },
+      sort_order: { type: 'integer' },
+      created_at: { type: 'string', format: 'date-time' },
+    },
+  },
+  ItemVariant: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      item_id: { type: 'string', format: 'uuid' },
+      name: { type: 'string' },
+      price: { type: 'integer', description: 'Price in cents' },
+      is_default: { type: 'boolean' },
+      available: { type: 'boolean' },
+      sort_order: { type: 'integer' },
+    },
+  },
+  PresignedUrl: {
+    type: 'object',
+    properties: {
+      upload_url: { type: 'string', format: 'uri', description: 'Pre-signed PUT URL valid for 15 minutes' },
+      r2_key: { type: 'string', description: 'Object key; store this and write back via PATCH after upload' },
+    },
+  },
   Error: {
     type: 'object',
     required: ['error'],
@@ -234,6 +288,46 @@ function authPaths(): Record<string, PathItem> {
           '404': errRes('Invite not found'),
           '409': errRes('Invite already used'),
           '410': errRes('Invite expired or revoked'),
+        },
+      },
+    },
+    '/auth/signup': {
+      post: {
+        tags,
+        summary: 'Complete restaurant signup from an invite token',
+        description:
+          'Creates the Supabase auth user, the `restaurants` row, and the `profiles` row in a single transaction. The invite token is consumed and marked used. Returns a full session.',
+        requestBody: body({
+          type: 'object',
+          required: ['invite_token', 'admin_name', 'admin_email', 'password', 'business_name', 'timezone', 'currency', 'address'],
+          properties: {
+            invite_token: { type: 'string', example: 'inv_…' },
+            admin_name: { type: 'string' },
+            admin_phone: { type: 'string' },
+            admin_email: { type: 'string', format: 'email' },
+            password: { type: 'string', minLength: 8 },
+            business_name: { type: 'string' },
+            display_name: { type: 'string' },
+            timezone: { type: 'string', example: 'America/Chicago' },
+            currency: { type: 'string', minLength: 3, maxLength: 3, example: 'USD' },
+            address: {
+              type: 'object',
+              required: ['line1', 'city', 'country'],
+              properties: {
+                line1: { type: 'string' },
+                city: { type: 'string' },
+                country: { type: 'string' },
+              },
+            },
+            slug: { type: 'string', description: 'Optional URL slug (3–50 lowercase alphanumeric + hyphens). Auto-generated from business_name if omitted.' },
+          },
+        }),
+        responses: {
+          '201': res('Signup complete — session returned', ref('AuthSession')),
+          '404': errRes('Invite not found'),
+          '409': errRes('Invite already used or slug taken'),
+          '410': errRes('Invite expired or revoked'),
+          '422': res('Validation error (timezone, email format, etc.)', ref('Error')),
         },
       },
     },
@@ -450,19 +544,338 @@ function superadminPaths(): Record<string, PathItem> {
   }
 }
 
+function adminPaths(): Record<string, PathItem> {
+  const tags = ['admin']
+  const secured = (op: OperationObject): OperationObject => ({ ...op, tags, security: bearer })
+
+  const reorderBody = body({
+    type: 'array',
+    items: {
+      type: 'object',
+      required: ['id', 'sort_order'],
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        sort_order: { type: 'integer', minimum: 0 },
+      },
+    },
+  })
+
+  return {
+    // ── Restaurant profile (STORY-013) ──────────────────────────────────────────
+
+    '/admin/restaurant': {
+      get: secured({
+        summary: "Get the caller's restaurant row",
+        responses: { '200': res('Restaurant', ref('Restaurant')) },
+      }),
+      patch: secured({
+        summary: 'Update mutable restaurant fields (display_name, address, logo_key, etc.)',
+        description:
+          'Protected fields (timezone, currency, slug, plan_id, commission_rate, active) are silently stripped. ' +
+          'Writes invalidate the settings and theme KV caches.',
+        requestBody: body({
+          type: 'object',
+          properties: {
+            display_name: { type: 'string' },
+            address: { type: 'object' },
+            logo_key: { type: 'string', nullable: true },
+          },
+        }),
+        responses: {
+          '200': res('Updated restaurant', ref('Restaurant')),
+          '422': errRes('No updatable fields supplied'),
+        },
+      }),
+    },
+    '/admin/restaurant/logo': {
+      post: secured({
+        summary: 'Request a presigned PUT URL for uploading a new logo to R2',
+        description: 'Returns a pre-signed URL (15 min) and the R2 key. After upload, write the key back via PATCH /admin/restaurant.',
+        responses: {
+          '201': res('Presigned URL', ref('PresignedUrl')),
+        },
+      }),
+    },
+    '/admin/restaurant/profile': {
+      patch: secured({
+        summary: "Update the owner's auth profile (name, phone)",
+        requestBody: body({
+          type: 'object',
+          properties: {
+            admin_name: { type: 'string' },
+            admin_phone: { type: 'string', nullable: true },
+          },
+        }),
+        responses: { '204': res('Updated') },
+      }),
+    },
+    '/admin/restaurant/password': {
+      patch: secured({
+        summary: "Change the owner's password",
+        requestBody: body({
+          type: 'object',
+          required: ['password'],
+          properties: { password: { type: 'string', minLength: 8 } },
+        }),
+        responses: { '204': res('Password updated') },
+      }),
+    },
+
+    // ── Menu categories (STORY-014) ──────────────────────────────────────────────
+
+    '/admin/menu/categories': {
+      get: secured({
+        summary: 'List all categories for the restaurant (ordered by sort_order)',
+        responses: {
+          '200': res('Categories', {
+            type: 'object',
+            properties: { categories: { type: 'array', items: ref('MenuCategory') } },
+          }),
+        },
+      }),
+      post: secured({
+        summary: 'Create a category',
+        requestBody: body({
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', maxLength: 100 },
+            sort_order: { type: 'integer', minimum: 0, default: 0 },
+            availability_state: { type: 'string', enum: ['available', 'unavailable', 'scheduled'], default: 'available' },
+          },
+        }),
+        responses: {
+          '201': res('Created category', ref('MenuCategory')),
+          '402': res('Plan category cap reached', ref('Error')),
+          '422': errRes('Validation error'),
+        },
+      }),
+    },
+    '/admin/menu/categories/reorder': {
+      post: secured({
+        summary: 'Batch-update sort_order for multiple categories',
+        requestBody: reorderBody,
+        responses: { '204': res('Reordered'), '422': errRes('Validation error') },
+      }),
+    },
+    '/admin/menu/categories/{id}': {
+      patch: secured({
+        summary: 'Update a category',
+        parameters: [uuidParam('id', 'Category id')],
+        requestBody: body({
+          type: 'object',
+          properties: {
+            name: { type: 'string', maxLength: 100 },
+            sort_order: { type: 'integer', minimum: 0 },
+            active: { type: 'boolean' },
+            availability_state: { type: 'string', enum: ['available', 'unavailable', 'scheduled'] },
+          },
+        }),
+        responses: {
+          '200': res('Updated category', ref('MenuCategory')),
+          '404': errRes('Not found'),
+          '422': errRes('No updatable fields / validation error'),
+        },
+      }),
+      delete: secured({
+        summary: 'Soft-delete a category (sets active=false)',
+        description: 'Returns 409 if the category still has active items.',
+        parameters: [uuidParam('id', 'Category id')],
+        responses: {
+          '204': res('Deleted'),
+          '404': errRes('Not found'),
+          '409': res('Category has active items', {
+            type: 'object',
+            properties: { error: { type: 'string' }, item_count: { type: 'integer' } },
+          }),
+        },
+      }),
+    },
+
+    // ── Menu items (STORY-015) ────────────────────────────────────────────────────
+
+    '/admin/menu/items': {
+      get: secured({
+        summary: 'List all items for the restaurant',
+        parameters: [queryParam('category_id', 'Filter by category UUID')],
+        responses: {
+          '200': res('Items', {
+            type: 'object',
+            properties: { items: { type: 'array', items: ref('MenuItem') } },
+          }),
+        },
+      }),
+      post: secured({
+        summary: 'Create an item',
+        requestBody: body({
+          type: 'object',
+          required: ['name', 'price', 'category_id'],
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            price: { type: 'number', exclusiveMinimum: 0, description: 'Display price (e.g. 12.50); stored as cents internally' },
+            category_id: { type: 'string', format: 'uuid' },
+            tags: { type: 'array', items: { type: 'string' } },
+            sort_order: { type: 'integer', minimum: 0, default: 0 },
+          },
+        }),
+        responses: {
+          '201': res('Created item', ref('MenuItem')),
+          '402': res('Plan item cap reached', ref('Error')),
+          '422': errRes('Validation error (price ≤ 0, invalid tag, etc.)'),
+        },
+      }),
+    },
+    '/admin/menu/items/{id}': {
+      patch: secured({
+        summary: 'Update an item',
+        parameters: [uuidParam('id', 'Item id')],
+        requestBody: body({
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string', nullable: true },
+            price: { type: 'number', exclusiveMinimum: 0 },
+            category_id: { type: 'string', format: 'uuid' },
+            tags: { type: 'array', items: { type: 'string' } },
+            sort_order: { type: 'integer', minimum: 0 },
+            active: { type: 'boolean' },
+          },
+        }),
+        responses: {
+          '200': res('Updated item', ref('MenuItem')),
+          '404': errRes('Not found'),
+          '422': errRes('Validation error'),
+        },
+      }),
+      delete: secured({
+        summary: 'Soft-delete an item (sets active=false)',
+        parameters: [uuidParam('id', 'Item id')],
+        responses: { '204': res('Deleted'), '404': errRes('Not found') },
+      }),
+    },
+    '/admin/menu/items/{id}/image': {
+      post: secured({
+        summary: 'Request a presigned PUT URL for an item image',
+        description: 'Requires `menu_photos` feature flag on the restaurant plan. Returns a 15-minute PUT URL and R2 key. After upload, PATCH the item with the key.',
+        parameters: [uuidParam('id', 'Item id')],
+        responses: {
+          '201': res('Presigned URL', ref('PresignedUrl')),
+          '402': res('Feature locked — plan does not include menu_photos', ref('Error')),
+        },
+      }),
+    },
+    '/admin/menu/items/{id}/availability': {
+      patch: secured({
+        summary: 'Set item availability state',
+        parameters: [uuidParam('id', 'Item id')],
+        requestBody: body({
+          type: 'object',
+          required: ['state'],
+          properties: {
+            state: { type: 'string', enum: ['available', 'out_of_stock', 'hidden', 'scheduled'] },
+            restore_at: { type: 'string', format: 'date-time', nullable: true, description: 'ISO timestamp for auto-restore (used with out_of_stock or scheduled)' },
+          },
+        }),
+        responses: {
+          '200': res('Updated item', ref('MenuItem')),
+          '404': errRes('Not found'),
+        },
+      }),
+    },
+
+    // ── Item variants (STORY-015) ─────────────────────────────────────────────────
+
+    '/admin/menu/items/{item_id}/variants': {
+      get: secured({
+        summary: 'List variants for an item',
+        parameters: [uuidParam('item_id', 'Item id')],
+        responses: {
+          '200': res('Variants', {
+            type: 'object',
+            properties: { variants: { type: 'array', items: ref('ItemVariant') } },
+          }),
+        },
+      }),
+      post: secured({
+        summary: 'Add a variant to an item',
+        description: 'Adding the first variant sets `has_variants = true` on the parent item. If `is_default = true`, sibling defaults are unset first.',
+        parameters: [uuidParam('item_id', 'Item id')],
+        requestBody: body({
+          type: 'object',
+          required: ['name', 'price'],
+          properties: {
+            name: { type: 'string' },
+            price: { type: 'number', exclusiveMinimum: 0 },
+            is_default: { type: 'boolean', default: false },
+            sort_order: { type: 'integer', minimum: 0, default: 0 },
+          },
+        }),
+        responses: {
+          '201': res('Created variant', ref('ItemVariant')),
+          '422': errRes('Validation error'),
+        },
+      }),
+    },
+    '/admin/menu/items/{item_id}/variants/reorder': {
+      post: secured({
+        summary: 'Batch-update sort_order for multiple variants',
+        parameters: [uuidParam('item_id', 'Item id')],
+        requestBody: reorderBody,
+        responses: { '204': res('Reordered'), '422': errRes('Validation error') },
+      }),
+    },
+    '/admin/menu/variants/{id}': {
+      patch: secured({
+        summary: 'Update a variant',
+        parameters: [uuidParam('id', 'Variant id')],
+        requestBody: body({
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            price: { type: 'number', exclusiveMinimum: 0 },
+            is_default: { type: 'boolean' },
+            available: { type: 'boolean' },
+            sort_order: { type: 'integer', minimum: 0 },
+          },
+        }),
+        responses: {
+          '200': res('Updated variant', ref('ItemVariant')),
+          '404': errRes('Not found'),
+        },
+      }),
+      delete: secured({
+        summary: 'Delete a variant',
+        description: 'Returns 409 if this is the last variant on the item. If the deleted variant was the default and siblings remain, the next by sort_order is promoted to default.',
+        parameters: [uuidParam('id', 'Variant id')],
+        responses: {
+          '204': res('Deleted'),
+          '404': errRes('Not found'),
+          '409': res('Last variant on item — delete the item instead', ref('Error')),
+        },
+      }),
+    },
+  }
+}
+
 /** Build the OpenAPI 3.1 document for the currently-documented routes. */
 export function buildOpenApiDocument(): OpenApiDocument {
   return {
     openapi: '3.1.0',
     info: {
       title: 'RestroAPI',
-      version: '0.1.0',
+      version: '0.2.0',
       description:
-        'Multi-tenant restaurant ordering SaaS API. Documents the auth and superadmin routes; admin/tablet/public routes are added as those slices land (STORY-044).',
+        'Multi-tenant restaurant ordering SaaS API. ' +
+        'Currently covers: auth (login/refresh/logout/device/invite/signup), ' +
+        'superadmin (plans, invites, restaurants, SMTP, billing, audit), and ' +
+        'admin (restaurant profile, menu categories, menu items, variants). ' +
+        'Tablet and public widget routes land with Slice 3/4 (STORY-044).',
     },
     tags: [
-      { name: 'auth', description: 'Login, refresh, logout, device, invite validation' },
+      { name: 'auth', description: 'Login, refresh, logout, device auth, invite validation, signup' },
       { name: 'superadmin', description: 'Platform control plane (Bearer JWT + MFA required)' },
+      { name: 'admin', description: 'Restaurant owner operations — profile, menu categories, items, variants (Bearer JWT, restaurant_owner role)' },
     ],
     components: {
       securitySchemes: {
@@ -470,6 +883,6 @@ export function buildOpenApiDocument(): OpenApiDocument {
       },
       schemas,
     },
-    paths: { ...authPaths(), ...superadminPaths() },
+    paths: { ...authPaths(), ...superadminPaths(), ...adminPaths() },
   }
 }
