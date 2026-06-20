@@ -52,6 +52,16 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
       return c.json({ error: 'account_inactive' }, 401)
     }
 
+    // Fire-and-forget: audit failure must never fail the login response
+    const admin = createAdminClient(c.env)
+    void admin.from('audit_log').insert({
+      restaurant_id: typeof claims?.restaurant_id === 'string' ? claims.restaurant_id : null,
+      table_name: 'auth',
+      operation: 'LOGIN',
+      user_id: data.user.id,
+      new_data: { email: data.user.email, role },
+    })
+
     return c.json({
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
@@ -107,6 +117,11 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
       return c.json({ error: 'invalid_request', code: 'validation' }, 400)
     }
 
+    // Extract caller identity from the access token for the audit entry.
+    const logoutClaims = header?.startsWith('Bearer ')
+      ? await verifyJwt(header.slice('Bearer '.length).trim(), c.env.SUPABASE_JWT_SECRET)
+      : null
+
     // Logout is idempotent: best-effort revoke, always 204.
     const supabase = createAnonClient(c.env)
     const { data } = await supabase.auth.refreshSession({
@@ -115,6 +130,18 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
     if (data.session) {
       await supabase.auth.signOut()
     }
+
+    if (logoutClaims?.sub) {
+      const admin = createAdminClient(c.env)
+      void admin.from('audit_log').insert({
+        restaurant_id: typeof logoutClaims.restaurant_id === 'string' ? logoutClaims.restaurant_id : null,
+        table_name: 'auth',
+        operation: 'LOGOUT',
+        user_id: typeof logoutClaims.sub === 'string' ? logoutClaims.sub : null,
+        new_data: { role: logoutClaims.role ?? null },
+      })
+    }
+
     return c.body(null, 204)
   })
 
@@ -150,6 +177,15 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
       },
       c.env.SUPABASE_JWT_SECRET,
     )
+
+    const admin = createAdminClient(c.env)
+    void admin.from('audit_log').insert({
+      restaurant_id: record.restaurant_id,
+      table_name: 'auth',
+      operation: 'DEVICE_LOGIN',
+      user_id: null,
+      new_data: { device_id: record.device_id, name: record.name },
+    })
 
     return c.json({
       access_token: accessToken,

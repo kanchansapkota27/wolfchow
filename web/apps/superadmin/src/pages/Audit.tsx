@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { AuditEntry } from '@wolfchow/types'
+import { Fragment, useMemo, useState } from 'react'
+import type { AuditEntry, RestaurantListItem } from '@wolfchow/types'
 import { Badge, Button } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
 import { useApi } from '../lib/api'
@@ -7,19 +7,24 @@ import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
 
 const TABLE_OPTIONS = [
-  'restaurants', 'plans', 'invites', 'users', 'menu_categories',
-  'menu_items', 'modifier_groups', 'modifier_options', 'orders',
-  'smtp_configs', 'device_tokens',
+  'auth',
+  'restaurants', 'plans', 'invites', 'users',
+  'menu_categories', 'menu_items', 'modifier_groups', 'modifier_options',
+  'orders', 'smtp_configs', 'device_tokens',
 ]
 
-const OPERATION_OPTIONS = ['INSERT', 'UPDATE', 'DELETE', 'IMPERSONATION_START', 'IMPERSONATION_END']
+const OPERATION_OPTIONS = [
+  'INSERT', 'UPDATE', 'DELETE',
+  'LOGIN', 'LOGOUT', 'DEVICE_LOGIN',
+  'IMPERSONATION_START', 'IMPERSONATION_END',
+]
 
-type OperationVariant = 'green' | 'yellow' | 'red' | 'indigo' | 'gray'
+type BadgeVariant = 'green' | 'yellow' | 'red' | 'indigo' | 'gray'
 
-function operationVariant(op: string): OperationVariant {
-  if (op === 'INSERT') return 'green'
+function operationVariant(op: string): BadgeVariant {
+  if (op === 'INSERT' || op === 'LOGIN' || op === 'DEVICE_LOGIN') return 'green'
   if (op === 'UPDATE') return 'yellow'
-  if (op === 'DELETE') return 'red'
+  if (op === 'DELETE' || op === 'LOGOUT') return 'red'
   if (op.startsWith('IMPERSONATION')) return 'indigo'
   return 'gray'
 }
@@ -27,31 +32,34 @@ function operationVariant(op: string): OperationVariant {
 function operationLabel(op: string): string {
   if (op === 'IMPERSONATION_START') return 'Impersonation ▶'
   if (op === 'IMPERSONATION_END') return 'Impersonation ■'
-  return op
+  if (op === 'DEVICE_LOGIN') return 'Device Login'
+  return op.charAt(0) + op.slice(1).toLowerCase()
 }
 
 // ── JSON diff panel ────────────────────────────────────────────────────────────
 
-function DiffPanel({ old_data, new_data }: { old_data: Record<string, unknown> | null; new_data: Record<string, unknown> | null }) {
-  const allKeys = [...new Set([
-    ...Object.keys(old_data ?? {}),
-    ...Object.keys(new_data ?? {}),
-  ])].filter((k) => {
-    const ov = JSON.stringify((old_data ?? {})[k])
-    const nv = JSON.stringify((new_data ?? {})[k])
-    return ov !== nv
-  })
+function DiffPanel({
+  old_data,
+  new_data,
+}: {
+  old_data: Record<string, unknown> | null
+  new_data: Record<string, unknown> | null
+}) {
+  const changedKeys = useMemo(() => {
+    const keys = [...new Set([...Object.keys(old_data ?? {}), ...Object.keys(new_data ?? {})])]
+    return keys.filter((k) => JSON.stringify((old_data ?? {})[k]) !== JSON.stringify((new_data ?? {})[k]))
+  }, [old_data, new_data])
 
-  if (allKeys.length === 0 && !new_data) {
+  if (changedKeys.length === 0 && !new_data) {
     return <p className="py-2 text-xs text-gray-500">No data recorded.</p>
   }
 
-  if (allKeys.length === 0) {
+  if (changedKeys.length === 0) {
     return (
-      <div className="space-y-1 text-xs">
-        <p className="text-gray-500">No field changes detected.</p>
+      <div className="text-xs">
+        <p className="mb-2 text-gray-500">No field changes detected.</p>
         {new_data && (
-          <pre className="mt-2 overflow-x-auto rounded bg-gray-950 p-2 text-gray-400">
+          <pre className="overflow-x-auto rounded bg-gray-950 p-2 text-gray-400">
             {JSON.stringify(new_data, null, 2)}
           </pre>
         )}
@@ -69,18 +77,22 @@ function DiffPanel({ old_data, new_data }: { old_data: Record<string, unknown> |
         </tr>
       </thead>
       <tbody>
-        {allKeys.map((key) => (
+        {changedKeys.map((key) => (
           <tr key={key} className="border-t border-gray-800">
             <td className="py-1 pr-4 font-mono text-gray-400">{key}</td>
             <td className="py-1 pr-4 font-mono text-red-300">
-              {old_data && key in old_data
-                ? <span className="rounded bg-red-950/60 px-1">{JSON.stringify((old_data)[key])}</span>
-                : <span className="text-gray-600">—</span>}
+              {old_data && key in old_data ? (
+                <span className="rounded bg-red-950/60 px-1">{JSON.stringify((old_data)[key])}</span>
+              ) : (
+                <span className="text-gray-600">—</span>
+              )}
             </td>
             <td className="py-1 font-mono text-green-300">
-              {new_data && key in new_data
-                ? <span className="rounded bg-green-950/60 px-1">{JSON.stringify((new_data)[key])}</span>
-                : <span className="text-gray-600">—</span>}
+              {new_data && key in new_data ? (
+                <span className="rounded bg-green-950/60 px-1">{JSON.stringify((new_data)[key])}</span>
+              ) : (
+                <span className="text-gray-600">—</span>
+              )}
             </td>
           </tr>
         ))}
@@ -93,6 +105,18 @@ function DiffPanel({ old_data, new_data }: { old_data: Record<string, unknown> |
 
 export function Audit() {
   const api = useApi()
+
+  // Load all restaurants once for the dropdown + name lookup map
+  const restaurantsQ = useAsync(
+    () => api.superadmin.listRestaurants({ page_size: 500 }),
+    [api],
+  )
+  const restaurants: RestaurantListItem[] = restaurantsQ.data?.restaurants ?? []
+  const restaurantMap = useMemo(
+    () => new Map(restaurants.map((r) => [r.id, r])),
+    [restaurants],
+  )
+
   const [restaurantFilter, setRestaurantFilter] = useState('')
   const [tableFilter, setTableFilter] = useState('')
   const [operationFilter, setOperationFilter] = useState('')
@@ -119,11 +143,6 @@ export function Audit() {
   const pageSize = auditQ.data?.page_size ?? 50
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  function applyFilter() {
-    setPage(1)
-    auditQ.reload()
-  }
-
   function toggleRow(id: string) {
     setExpanded((cur) => (cur === id ? null : id))
   }
@@ -134,15 +153,22 @@ export function Audit() {
 
       {/* Filters */}
       <div className="grid grid-cols-2 gap-3 rounded-lg border border-gray-800 bg-gray-900 p-4 sm:grid-cols-3 lg:grid-cols-5">
+        {/* Restaurant dropdown */}
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-400">Restaurant ID</label>
-          <input
-            aria-label="Filter by restaurant ID"
+          <label className="text-xs text-gray-400">Restaurant</label>
+          <select
+            aria-label="Filter by restaurant"
             className="rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
             value={restaurantFilter}
             onChange={(e) => setRestaurantFilter(e.target.value)}
-            placeholder="UUID or empty"
-          />
+          >
+            <option value="">All restaurants</option>
+            {restaurants.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.display_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex flex-col gap-1">
@@ -198,7 +224,6 @@ export function Audit() {
         </div>
 
         <div className="col-span-full flex items-center gap-3">
-          <Button onClick={applyFilter} variant="secondary">Apply filters</Button>
           <Button
             variant="ghost"
             onClick={() => {
@@ -210,7 +235,7 @@ export function Audit() {
               setPage(1)
             }}
           >
-            Clear
+            Clear filters
           </Button>
           {auditQ.status === 'success' && (
             <span className="ml-auto text-xs text-gray-500">
@@ -245,44 +270,55 @@ export function Audit() {
                     </td>
                   </tr>
                 ) : (
-                  entries.map((e) => (
-                    <>
-                      <tr
-                        key={e.id}
-                        className="cursor-pointer border-t border-gray-800 hover:bg-gray-800/40"
-                        onClick={() => toggleRow(e.id)}
-                        aria-expanded={expanded === e.id}
-                      >
-                        <td className="px-4 py-2 text-gray-400 whitespace-nowrap">
-                          {formatDate(e.created_at, 'UTC')}
-                        </td>
-                        <td className="px-4 py-2 text-gray-300">
-                          <code className="text-xs">{e.restaurant_id ?? '—'}</code>
-                        </td>
-                        <td className="px-4 py-2 text-gray-300">
-                          {e.table_name ?? <span className="text-gray-600">—</span>}
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge variant={operationVariant(e.operation)}>
-                            {operationLabel(e.operation)}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2 text-gray-400">
-                          {e.user_name ?? <span className="text-gray-600">—</span>}
-                        </td>
-                        <td className="px-4 py-2 text-right text-gray-500">
-                          {expanded === e.id ? '▲' : '▼'}
-                        </td>
-                      </tr>
-                      {expanded === e.id && (
-                        <tr key={`${e.id}-diff`} className="border-t border-gray-800 bg-gray-900/60">
-                          <td colSpan={6} className="px-6 py-3">
-                            <DiffPanel old_data={e.old_data} new_data={e.new_data} />
+                  entries.map((e) => {
+                    const rest = e.restaurant_id ? restaurantMap.get(e.restaurant_id) : null
+                    return (
+                      <Fragment key={e.id}>
+                        <tr
+                          className="cursor-pointer border-t border-gray-800 hover:bg-gray-800/40"
+                          onClick={() => toggleRow(e.id)}
+                          aria-expanded={expanded === e.id}
+                        >
+                          <td className="px-4 py-2 text-gray-400 whitespace-nowrap">
+                            {formatDate(e.created_at, 'UTC')}
+                          </td>
+                          <td className="px-4 py-2">
+                            {rest ? (
+                              <div>
+                                <span className="text-gray-100">{rest.display_name}</span>
+                                <div className="text-xs text-gray-500">{e.restaurant_id}</div>
+                              </div>
+                            ) : e.restaurant_id ? (
+                              <code className="text-xs text-gray-400">{e.restaurant_id}</code>
+                            ) : (
+                              <span className="text-gray-600">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-gray-300">
+                            {e.table_name ?? <span className="text-gray-600">—</span>}
+                          </td>
+                          <td className="px-4 py-2">
+                            <Badge variant={operationVariant(e.operation)}>
+                              {operationLabel(e.operation)}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2 text-gray-400">
+                            {e.user_name ?? <span className="text-gray-600">—</span>}
+                          </td>
+                          <td className="px-4 py-2 text-right text-gray-500">
+                            {expanded === e.id ? '▲' : '▼'}
                           </td>
                         </tr>
-                      )}
-                    </>
-                  ))
+                        {expanded === e.id && (
+                          <tr className="border-t border-gray-800 bg-gray-900/60">
+                            <td colSpan={6} className="px-6 py-3">
+                              <DiffPanel old_data={e.old_data} new_data={e.new_data} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -290,9 +326,7 @@ export function Audit() {
 
           {/* Pagination */}
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Page {page} of {totalPages}
-            </p>
+            <p className="text-sm text-gray-500">Page {page} of {totalPages}</p>
             <div className="flex gap-2">
               <Button
                 variant="ghost"
