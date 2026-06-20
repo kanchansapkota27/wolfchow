@@ -19,11 +19,11 @@ const OPERATION_OPTIONS = [
   'IMPERSONATION_START', 'IMPERSONATION_END',
 ]
 
-type BadgeVariant = 'green' | 'yellow' | 'red' | 'indigo' | 'gray'
+type BadgeVariant = 'green' | 'amber' | 'red' | 'indigo' | 'gray'
 
 function operationVariant(op: string): BadgeVariant {
   if (op === 'INSERT' || op === 'LOGIN' || op === 'DEVICE_LOGIN') return 'green'
-  if (op === 'UPDATE') return 'yellow'
+  if (op === 'UPDATE') return 'amber'
   if (op === 'DELETE' || op === 'LOGOUT') return 'red'
   if (op.startsWith('IMPERSONATION')) return 'indigo'
   return 'gray'
