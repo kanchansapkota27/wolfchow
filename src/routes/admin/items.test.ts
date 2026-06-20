@@ -299,10 +299,11 @@ describe('STORY-015 · Menu items', () => {
     const fakeVariant = { id: VARIANT_ID, item_id: ITEM_ID, name: 'Regular', price: 1000, is_default: true, available: true, sort_order: 0 }
 
     mockFrom
-      .mockReturnValueOnce(chain({ count: 0 }))          // count existing variants → 0 (first)
-      .mockReturnValueOnce(chain({ data: null }))        // unset sibling defaults (is_default=true triggers this)
-      .mockReturnValueOnce(chain({ data: fakeVariant })) // insert variant
-      .mockReturnValueOnce(chain({ data: null }))        // set has_variants = true on item
+      .mockReturnValueOnce(chain({ data: { id: ITEM_ID } })) // ownership check: item belongs to restaurant
+      .mockReturnValueOnce(chain({ count: 0 }))              // count existing variants → 0 (first)
+      .mockReturnValueOnce(chain({ data: null }))            // unset sibling defaults (is_default=true triggers this)
+      .mockReturnValueOnce(chain({ data: fakeVariant }))     // insert variant
+      .mockReturnValueOnce(chain({ data: null }))            // set has_variants = true on item
 
     const token = await ownerToken()
     const res = await app.request(
@@ -327,9 +328,10 @@ describe('STORY-015 · Menu items', () => {
     const fakeVariant = { id: VARIANT_ID_2, item_id: ITEM_ID, name: 'Large', price: 1500, is_default: true, available: true, sort_order: 1 }
 
     mockFrom
-      .mockReturnValueOnce(chain({ count: 1 }))           // count existing → 1 (not first)
-      .mockReturnValueOnce(chain({ data: null }))         // unset existing defaults
-      .mockReturnValueOnce(chain({ data: fakeVariant })) // insert new variant
+      .mockReturnValueOnce(chain({ data: { id: ITEM_ID } })) // ownership check
+      .mockReturnValueOnce(chain({ count: 1 }))              // count existing → 1 (not first)
+      .mockReturnValueOnce(chain({ data: null }))            // unset existing defaults
+      .mockReturnValueOnce(chain({ data: fakeVariant }))     // insert new variant
 
     const token = await ownerToken()
     const res = await app.request(
@@ -343,9 +345,11 @@ describe('STORY-015 · Menu items', () => {
     )
 
     expect(res.status).toBe(201)
-    // The "unset defaults" update call
-    const unsetCall = mockFrom.mock.results[1]?.value.update.mock.calls[0]?.[0]
-    expect(unsetCall).toEqual({ is_default: false })
+    // Verify "unset defaults" update was called with is_default: false
+    const updateCalls = mockFrom.mock.results
+      .map((r) => r.value?.update?.mock?.calls?.[0]?.[0])
+      .filter(Boolean) as Record<string, unknown>[]
+    expect(updateCalls.some((c) => c.is_default === false)).toBe(true)
   })
 
   it('delete last variant: 409 last_variant', async () => {

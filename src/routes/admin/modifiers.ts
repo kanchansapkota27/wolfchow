@@ -98,6 +98,16 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
     const itemId = c.req.param('item_id')
     const admin = createAdminClient(c.env)
 
+    // Verify item belongs to this restaurant before inserting
+    const { data: item } = await admin
+      .from('menu_items')
+      .select('id')
+      .eq('id', itemId)
+      .eq('restaurant_id', restaurantId)
+      .single()
+
+    if (!item) return c.json({ error: 'not_found' }, 404)
+
     if (modifierCap !== null) {
       const { count } = await admin
         .from('modifier_groups')

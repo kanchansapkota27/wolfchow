@@ -314,6 +314,16 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
 
     const admin = createAdminClient(c.env)
 
+    // Verify item belongs to this restaurant
+    const { data: parentItem } = await admin
+      .from('menu_items')
+      .select('id')
+      .eq('id', itemId)
+      .eq('restaurant_id', restaurantId)
+      .single()
+
+    if (!parentItem) return c.json({ error: 'not_found' }, 404)
+
     // Count existing variants to determine sort_order + first-variant flag
     const { count: existingCount } = await admin
       .from('item_variants')
