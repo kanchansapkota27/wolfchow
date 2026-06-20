@@ -21,12 +21,15 @@ const CAPS: Array<{ key: keyof PlanInput; label: string }> = [
 /** Create/edit form for a plan. Pre-fills from `initial` when editing. */
 export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModalProps) {
   const [form, setForm] = useState<PlanInput>(emptyPlanInput())
+  const [commissionRaw, setCommissionRaw] = useState('0.00')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (open) {
-      setForm(initial ? planToInput(initial) : emptyPlanInput())
+      const base = initial ? planToInput(initial) : emptyPlanInput()
+      setForm(base)
+      setCommissionRaw((base.commission_value / 100).toFixed(2))
       setError(null)
     }
   }, [open, initial])
@@ -146,12 +149,20 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
               {form.commission_type === 'percentage' ? '%' : '$'}
             </span>
             <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={(form.commission_value / 100).toFixed(2)}
+              type="text"
+              inputMode="decimal"
+              value={commissionRaw}
               onChange={(e) => {
-                const display = parseFloat(e.target.value) || 0
+                const raw = e.target.value
+                setCommissionRaw(raw)
+                const display = parseFloat(raw)
+                if (!isNaN(display) && display >= 0) {
+                  patch({ commission_value: Math.round(display * 100) })
+                }
+              }}
+              onBlur={() => {
+                const display = parseFloat(commissionRaw) || 0
+                setCommissionRaw(display.toFixed(2))
                 patch({ commission_value: Math.round(display * 100) })
               }}
               aria-label={

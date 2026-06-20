@@ -252,11 +252,16 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
                   {form.override_type === 'percentage' ? '%' : '$'}
                 </span>
                 <input
-                  type="number"
-                  min={0}
-                  step={0.01}
+                  type="text"
+                  inputMode="decimal"
                   value={form.override_value}
                   onChange={(e) => setForm((f) => ({ ...f, override_value: e.target.value }))}
+                  onBlur={() =>
+                    setForm((f) => ({
+                      ...f,
+                      override_value: (parseFloat(f.override_value) || 0).toFixed(2),
+                    }))
+                  }
                   aria-label={form.override_type === 'percentage' ? 'Override rate (%)' : 'Override fee ($/month)'}
                   className="w-full rounded border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
                 />
