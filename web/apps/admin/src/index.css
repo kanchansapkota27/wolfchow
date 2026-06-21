@@ -1,0 +1,34 @@
+@import '@wolfchow/ui/styles.css';
+@import '@wolfchow/auth/styles.css';
+
+@import 'tailwindcss';
+@source "./";
+
+/* Light theme for admin app */
+:root {
+  --wc-bg: #f9fafb;
+  --wc-surface: #ffffff;
+  --wc-surface-2: #f3f4f6;
+  --wc-text: #111827;
+  --wc-muted: #6b7280;
+  --wc-border: #e5e7eb;
+  --wc-input-bg: #ffffff;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--wc-bg);
+  color: var(--wc-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
