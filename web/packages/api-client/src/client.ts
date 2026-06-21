@@ -515,6 +515,21 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<PauseState>('/tablet/orders/pause', { method: 'POST', body: data }),
     tabletUnpauseOrders: () =>
       apiFetch<PauseState>('/tablet/orders/unpause', { method: 'POST' }),
+    getInventory: () =>
+      apiFetch<{
+        categories: Array<{ id: string; name: string; availability_state: string; position: number }>
+        items: Array<{ id: string; name: string; category_id: string; availability_state: string; restore_at: string | null }>
+      }>('/tablet/inventory'),
+    patchInventoryItem: (id: string, data: { availability_state: string; restore_at?: string | null }) =>
+      apiFetch<{ id: string; name: string; availability_state: string; restore_at: string | null }>(
+        `/tablet/inventory/items/${id}`,
+        { method: 'PATCH', body: data },
+      ),
+    patchInventoryCategory: (id: string, data: { availability_state: string; restore_at?: string | null }) =>
+      apiFetch<{ id: string; name: string; availability_state: string; restore_at: string | null }>(
+        `/tablet/inventory/categories/${id}`,
+        { method: 'PATCH', body: data },
+      ),
   }
 
   const admin = {
