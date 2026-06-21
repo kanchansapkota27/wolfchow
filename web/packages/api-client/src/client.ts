@@ -61,6 +61,42 @@ export interface CreateClosureInput {
   recurring?: boolean
   reason?: string
 }
+
+export type StaffPermission = 'orders:accept_reject' | 'orders:status' | 'inventory:write' | 'orders:pause'
+
+export interface StaffMember {
+  id: string
+  restaurant_id: string
+  name: string
+  email: string
+  phone: string | null
+  role: string
+  permissions: StaffPermission[]
+  active: boolean
+  created_at: string
+}
+
+export interface DeviceLogin {
+  id: string
+  name: string
+  device_id: string
+  permissions: string[]
+  active: boolean
+}
+
+export interface InviteStaffInput {
+  name: string
+  email: string
+  phone?: string
+  permissions: StaffPermission[]
+}
+
+export interface PatchStaffInput {
+  name?: string
+  phone?: string
+  permissions?: StaffPermission[]
+}
+
 import { storeSession, type SessionStore } from './session'
 
 export interface ApiClientConfig {
@@ -368,6 +404,19 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ closure: SpecialClosure }>('/admin/closures', { method: 'POST', body: data }).then((r) => r.closure),
     deleteClosure: (id: string) =>
       apiFetch<void>(`/admin/closures/${id}`, { method: 'DELETE' }),
+    // ── Staff ────────────────────────────────────────────────────────────────
+    listStaff: () =>
+      apiFetch<{ staff: StaffMember[] }>('/admin/staff').then((r) => r.staff),
+    inviteStaff: (data: InviteStaffInput) =>
+      apiFetch<{ ok: boolean }>('/admin/staff/invite', { method: 'POST', body: data }),
+    updateStaff: (id: string, data: PatchStaffInput) =>
+      apiFetch<{ member: StaffMember }>(`/admin/staff/${id}`, { method: 'PATCH', body: data }).then((r) => r.member),
+    deactivateStaff: (id: string) =>
+      apiFetch<void>(`/admin/staff/${id}`, { method: 'DELETE' }),
+    createDevice: (name: string) =>
+      apiFetch<{ device_token: string; staff: DeviceLogin }>('/admin/staff/device', { method: 'POST', body: { name } }),
+    revokeDevice: (id: string) =>
+      apiFetch<void>(`/admin/staff/device/${id}`, { method: 'DELETE' }),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }
