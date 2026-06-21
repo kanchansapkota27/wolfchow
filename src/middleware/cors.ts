@@ -3,7 +3,7 @@ import type { MiddlewareHandler } from 'hono'
 import type { Env, HonoEnv } from '../types'
 
 /** Local app dev ports (Vite) used when `CORS_ALLOWED_ORIGINS` is unset. */
-const DEFAULT_DEV_ORIGINS = [5173, 5174, 5175, 5176, 5177].flatMap((port) => [
+const DEFAULT_DEV_ORIGINS = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180].flatMap((port) => [
   `http://localhost:${port}`,
   `http://127.0.0.1:${port}`,
 ])
