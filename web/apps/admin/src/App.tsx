@@ -13,7 +13,7 @@ import { Promotions } from './pages/Promotions'
 import { Notices } from './pages/Notices'
 import { Transactions } from './pages/Transactions'
 import { Integrations } from './pages/Integrations'
-import { Placeholder } from './pages/Placeholder'
+import { Orders } from './pages/Orders'
 
 function ProtectedLayout() {
   return (
@@ -33,7 +33,7 @@ export function App() {
       <Route path="/signup" element={<Signup />} />
       <Route element={<ProtectedLayout />}>
         <Route index element={<Dashboard />} />
-        <Route path="orders" element={<Placeholder title="Orders" story="STORY-057" />} />
+        <Route path="orders" element={<Orders />} />
         <Route path="menu" element={<Menu />} />
         <Route path="hours" element={<Hours />} />
         <Route path="staff" element={<Staff />} />
