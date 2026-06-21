@@ -97,6 +97,36 @@ export interface PatchStaffInput {
   permissions?: StaffPermission[]
 }
 
+export interface StripeStatus {
+  publishable_key: string | null
+  has_secret: boolean
+  updated_at: string | null
+}
+
+export interface PaymentMethods {
+  payment_methods: string[]
+  pickup_delivery_note: string | null
+}
+
+export interface TipsConfig {
+  tips_enabled: boolean
+  tip_presets: number[]
+  allow_custom_tip: boolean
+  show_no_tip: boolean
+}
+
+export interface TaxConfig {
+  tax_enabled: boolean
+  tax_rate: number
+  tax_inclusive: boolean
+}
+
+export interface AutomationConfig {
+  auto_accept: boolean
+  auto_reject_enabled: boolean
+  auto_reject_minutes: number
+}
+
 import { storeSession, type SessionStore } from './session'
 
 export interface ApiClientConfig {
@@ -417,6 +447,33 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ device_token: string; staff: DeviceLogin }>('/admin/staff/device', { method: 'POST', body: { name } }),
     revokeDevice: (id: string) =>
       apiFetch<void>(`/admin/staff/device/${id}`, { method: 'DELETE' }),
+    // ── Payments ─────────────────────────────────────────────────────────────
+    getStripeStatus: () =>
+      apiFetch<StripeStatus>('/admin/payments/stripe'),
+    saveStripeKeys: (data: { secret_key: string; publishable_key: string }) =>
+      apiFetch<StripeStatus>('/admin/payments/stripe', { method: 'POST', body: data }),
+    deleteStripeKeys: () =>
+      apiFetch<void>('/admin/payments/stripe', { method: 'DELETE' }),
+    getPaymentMethods: () =>
+      apiFetch<PaymentMethods>('/admin/payments/methods'),
+    patchPaymentMethods: (payment_methods: string[]) =>
+      apiFetch<PaymentMethods>('/admin/payments/methods', { method: 'PATCH', body: { payment_methods } }),
+    patchPickupNote: (pickup_delivery_note: string | null) =>
+      apiFetch<{ ok: boolean }>('/admin/payments/note', { method: 'PATCH', body: { pickup_delivery_note } }),
+    // ── Tips & Tax ───────────────────────────────────────────────────────────
+    getTips: () =>
+      apiFetch<TipsConfig>('/admin/tips'),
+    patchTips: (data: Partial<TipsConfig>) =>
+      apiFetch<TipsConfig>('/admin/tips', { method: 'PATCH', body: data }),
+    getTax: () =>
+      apiFetch<TaxConfig>('/admin/tax'),
+    patchTax: (data: Partial<TaxConfig>) =>
+      apiFetch<TaxConfig>('/admin/tax', { method: 'PATCH', body: data }),
+    // ── Ordering Automation ──────────────────────────────────────────────────
+    getAutomation: () =>
+      apiFetch<AutomationConfig>('/admin/orders/automation'),
+    patchAutomation: (data: Partial<AutomationConfig>) =>
+      apiFetch<AutomationConfig>('/admin/orders/automation', { method: 'PATCH', body: data }),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }
