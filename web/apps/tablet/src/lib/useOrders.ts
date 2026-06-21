@@ -113,5 +113,11 @@ export function useOrders() {
     removeOrder(orderId)
   }, [api, removeOrder])
 
-  return { newOrders, activeOrders, loading, accept, reject }
+  const updateStatus = useCallback(async (orderId: string, status: string) => {
+    const updated = await api.orders.updateOrderStatus(orderId, status)
+    setOrders((prev) => prev.map((o) => o.id === orderId ? updated : o))
+    return updated
+  }, [api])
+
+  return { newOrders, activeOrders, loading, accept, reject, updateStatus }
 }
