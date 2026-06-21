@@ -4,108 +4,152 @@
 @import 'tailwindcss';
 @source "./";
 
+/* ── Brand: remap Tailwind indigo → ember ──────────────────────────────────
+   Every bg-indigo-*, text-indigo-*, ring-indigo-* class in every page
+   now uses the ember orange palette — no page-level code changes needed. */
+@theme {
+  --color-indigo-50:  #fef4f0;
+  --color-indigo-100: #fde5d8;
+  --color-indigo-200: #fbc9af;
+  --color-indigo-300: #f7a078;
+  --color-indigo-400: #f06d3e;
+  --color-indigo-500: #e8530a;
+  --color-indigo-600: #cc4509;
+  --color-indigo-700: #a63607;
+  --color-indigo-800: #812a06;
+  --color-indigo-900: #591d04;
+  --color-indigo-950: #310f02;
+}
+
+/* ── Component library tokens ──────────────────────────────────────────── */
 :root {
   --wc-bg: #f7f6f2;
   --wc-surface: #ffffff;
-  --wc-surface-2: #f1efe9;
+  --wc-surface-2: #f0ede7;
   --wc-text: #0f0e0c;
   --wc-muted: #8a857e;
-  --wc-border: #e4e0d8;
+  --wc-border: #e2ddd6;
   --wc-input-bg: #ffffff;
   --wc-primary: #e8530a;
-  --wc-primary-hover: #cc4809;
+  --wc-primary-hover: #cc4509;
   --wc-on-primary: #ffffff;
   --wc-ring: rgba(232, 83, 10, 0.22);
+  --wc-radius: 0.5rem;
 
-  /* sidebar tokens */
-  --sidebar-bg: #0c0c0a;
-  --sidebar-border: rgba(255,255,255,0.07);
-  --sidebar-text: rgba(255,255,255,0.45);
-  --sidebar-text-hover: rgba(255,255,255,0.78);
-  --sidebar-text-active: #ffffff;
-  --sidebar-active-accent: #e8530a;
-  --sidebar-active-bg: rgba(255,255,255,0.055);
+  /* sidebar */
+  --sb-bg:          #0c0c0a;
+  --sb-border:      rgba(255, 255, 255, 0.065);
+  --sb-text:        rgba(255, 255, 255, 0.40);
+  --sb-text-hover:  rgba(255, 255, 255, 0.76);
+  --sb-text-active: #ffffff;
+  --sb-accent:      #e8530a;
+  --sb-active-bg:   rgba(255, 255, 255, 0.055);
+  --sb-width:       220px;
 }
 
-html,
-body,
-#root {
+/* ── Base ──────────────────────────────────────────────────────────────── */
+html, body, #root {
   height: 100%;
   margin: 0;
+}
+
+html {
+  font-size: 15px; /* shifts the whole rem scale up from 16px default */
 }
 
 body {
   background: var(--wc-bg);
   color: var(--wc-text);
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Helvetica Neue',
-    sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+.admin-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden; /* only .admin-main scrolls */
+}
+
+/* ── Sidebar ───────────────────────────────────────────────────────────── */
 .admin-sidebar {
-  width: 232px;
+  width: var(--sb-width);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
+  background: var(--sb-bg);
+  border-right: 1px solid var(--sb-border);
+  height: 100%;
+  overflow-y: auto;
 }
 
 .admin-sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 20px 20px 18px;
+  gap: 10px;
+  padding: 18px 14px 14px;
+  flex-shrink: 0;
 }
 
 .admin-sidebar__brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: var(--sidebar-active-accent);
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--sb-accent);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.admin-sidebar__brand-mark svg {
-  display: block;
-}
-
 .admin-sidebar__brand-name {
   font-size: 0.9375rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   color: #ffffff;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .admin-sidebar__brand-sub {
-  font-size: 0.6875rem;
-  font-weight: 400;
-  color: var(--sidebar-text);
-  letter-spacing: 0.02em;
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--sb-text);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  line-height: 1;
+  line-height: 1.1;
   margin-top: 2px;
 }
 
+.admin-sidebar__close {
+  display: none; /* shown on mobile via media query */
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.12s, background 0.12s;
+}
+
+.admin-sidebar__close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Nav */
 .admin-nav {
   flex: 1;
-  padding: 4px 10px 12px;
+  padding: 4px 8px 8px;
   overflow-y: auto;
 }
 
 .admin-nav__group {
   padding-bottom: 4px;
   margin-bottom: 4px;
-  border-bottom: 1px solid var(--sidebar-border);
+  border-bottom: 1px solid var(--sb-border);
 }
 
 .admin-nav__group:last-child {
@@ -116,53 +160,66 @@ body {
 .admin-nav__item {
   display: flex;
   align-items: center;
+  gap: 9px;
   width: 100%;
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--sidebar-text);
+  color: var(--sb-text);
   text-decoration: none;
   line-height: 1.4;
   transition: color 0.12s, background 0.12s;
-  position: relative;
-  /* compensate for active border */
   border-left: 2px solid transparent;
+  letter-spacing: -0.005em;
 }
 
 .admin-nav__item:hover {
-  color: var(--sidebar-text-hover);
-  background: rgba(255,255,255,0.04);
+  color: var(--sb-text-hover);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .admin-nav__item--active {
-  color: var(--sidebar-text-active);
-  background: var(--sidebar-active-bg);
-  border-left-color: var(--sidebar-active-accent);
-  padding-left: 8px; /* 10px - 2px border = same visual position */
+  color: var(--sb-text-active);
+  background: var(--sb-active-bg);
+  border-left-color: var(--sb-accent);
+  padding-left: 8px; /* 10px − 2px border */
 }
 
+.admin-nav__icon {
+  flex-shrink: 0;
+  opacity: 0.65;
+  transition: opacity 0.12s;
+}
+
+.admin-nav__item:hover .admin-nav__icon,
+.admin-nav__item--active .admin-nav__icon {
+  opacity: 1;
+}
+
+/* User footer */
 .admin-sidebar__footer {
-  padding: 14px 10px 16px;
-  border-top: 1px solid var(--sidebar-border);
+  padding: 10px 8px 14px;
+  border-top: 1px solid var(--sb-border);
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .admin-sidebar__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.7);
-  font-size: 0.6875rem;
-  font-weight: 600;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.625rem;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 
 .admin-sidebar__user {
@@ -172,37 +229,141 @@ body {
 
 .admin-sidebar__email {
   font-size: 0.75rem;
-  color: var(--sidebar-text);
+  color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
 .admin-sidebar__signout {
   font-size: 0.6875rem;
-  color: rgba(255,255,255,0.28);
+  color: rgba(255, 255, 255, 0.24);
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   text-align: left;
-  line-height: 1.3;
+  line-height: 1.4;
   transition: color 0.12s;
 }
 
 .admin-sidebar__signout:hover {
-  color: rgba(255,255,255,0.6);
+  color: rgba(255, 255, 255, 0.6);
 }
 
-/* ── Main area ───────────────────────────────────────────────────────────── */
+/* ── Content panel ─────────────────────────────────────────────────────── */
+.admin-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Main scrolling area ───────────────────────────────────────────────── */
 .admin-main {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
   background: var(--wc-bg);
 }
 
 .admin-main__inner {
-  padding: 36px 40px;
-  max-width: 1100px;
+  padding: 36px 40px 56px;
+  max-width: 980px;
+}
+
+/* ── Mobile top bar ────────────────────────────────────────────────────── */
+.admin-topbar {
+  display: none; /* desktop: hidden */
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  background: var(--sb-bg);
+  border-bottom: 1px solid var(--sb-border);
+  flex-shrink: 0;
+}
+
+.admin-topbar__brand {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.admin-topbar__hamburger {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.admin-topbar__hamburger:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/* ── Mobile overlay ────────────────────────────────────────────────────── */
+.admin-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  z-index: 40;
+  backdrop-filter: blur(1px);
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Mobile: sidebar becomes a fixed drawer */
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    z-index: 50;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    /* add subtle shadow when open */
+    box-shadow: none;
+  }
+
+  .admin-sidebar--open {
+    transform: translateX(0);
+    box-shadow: 20px 0 60px rgba(0, 0, 0, 0.45);
+  }
+
+  .admin-sidebar__close {
+    display: flex;
+  }
+
+  .admin-overlay--visible {
+    display: block;
+  }
+
+  .admin-topbar {
+    display: flex;
+  }
+
+  .admin-main__inner {
+    padding: 20px 16px 40px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  :root {
+    --sb-width: 200px;
+  }
+
+  .admin-main__inner {
+    padding: 28px 28px 48px;
+  }
 }
