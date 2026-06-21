@@ -183,6 +183,30 @@ export interface Promotion {
   created_at: string
 }
 
+export type NoticeType = 'informational' | 'warning' | 'emergency' | 'promotional'
+export type NoticeLocation = 'storefront' | 'checkout' | 'tracking' | 'tablet' | 'admin'
+
+export interface Notice {
+  id: string
+  restaurant_id: string
+  type: NoticeType
+  message: string
+  display_locations: NoticeLocation[]
+  priority: number
+  starts_at: string | null
+  expires_at: string | null
+  created_at: string
+}
+
+export interface CreateNoticeInput {
+  type: NoticeType
+  message: string
+  display_locations: NoticeLocation[]
+  priority?: number
+  starts_at?: string
+  expires_at?: string
+}
+
 export interface CreatePromotionInput {
   title: string
   description?: string
@@ -571,6 +595,15 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ active: boolean }>(`/admin/promotions/${id}/toggle`, { method: 'PATCH' }),
     deletePromotion: (id: string) =>
       apiFetch<void>(`/admin/promotions/${id}`, { method: 'DELETE' }),
+    // ── Notices ──────────────────────────────────────────────────────────────
+    listNotices: () =>
+      apiFetch<{ notices: Notice[] }>('/admin/notices').then((r) => r.notices),
+    createNotice: (data: CreateNoticeInput) =>
+      apiFetch<Notice>('/admin/notices', { method: 'POST', body: data }),
+    updateNotice: (id: string, data: Partial<CreateNoticeInput>) =>
+      apiFetch<Notice>(`/admin/notices/${id}`, { method: 'PATCH', body: data }),
+    deleteNotice: (id: string) =>
+      apiFetch<void>(`/admin/notices/${id}`, { method: 'DELETE' }),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }
