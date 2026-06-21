@@ -159,10 +159,14 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
       .single()
 
     if (error) {
-      if (error.code === '23503') return c.json({ error: 'restaurant_not_found' }, 404)
+      if (error.code === '23503') {
+        const isCategoryFk = error.message?.includes('category_id')
+        return isCategoryFk
+          ? c.json({ error: 'category_not_found' }, 422)
+          : c.json({ error: 'restaurant_not_found' }, 404)
+      }
       return c.json({ error: 'create_failed' }, 500)
     }
-    if (!data) return c.json({ error: 'create_failed' }, 500)
 
     await invalidateAndBroadcast(c.env, restaurantId, deps.broadcaster)
 

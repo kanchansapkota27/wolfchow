@@ -27,14 +27,12 @@ INSERT INTO auth.users (
   now(),
   jsonb_build_object(
     'provider', 'email',
-    'providers', ARRAY['email'],
-    'role', 'restaurant_owner',
-    'restaurant_id', '00000000-0000-0000-0000-000000000002'
+    'providers', ARRAY['email']
   ),
   '{}',
   now(),
   now()
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (email) DO NOTHING;
 
 -- ── Seed restaurant ───────────────────────────────────────────────────────────
 INSERT INTO restaurants (
@@ -55,7 +53,7 @@ SELECT
   'USD',
   id
 FROM plans WHERE name = 'Growth'
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (slug) DO NOTHING;
 
 -- ── Seed public.users profile for the owner ───────────────────────────────────
 INSERT INTO public.users (
