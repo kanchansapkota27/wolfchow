@@ -18,10 +18,10 @@ const DIETARY_TAGS = [
 ]
 
 const AVAILABILITY_OPTIONS = [
-  { value: 'in_stock', label: 'In Stock', color: 'bg-green-100 text-green-800' },
+  { value: 'available',   label: 'Available',    color: 'bg-green-100 text-green-800' },
   { value: 'out_of_stock', label: 'Out of Stock', color: 'bg-red-100 text-red-800' },
-  { value: 'limited', label: 'Limited', color: 'bg-amber-100 text-amber-800' },
-  { value: 'hidden', label: 'Hidden', color: 'bg-gray-100 text-gray-600' },
+  { value: 'scheduled',   label: 'Scheduled',    color: 'bg-amber-100 text-amber-800' },
+  { value: 'unavailable', label: 'Hidden',        color: 'bg-gray-100 text-gray-600' },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ function ItemModal({ item, categories, selectedCategoryId, onClose, onSave }: It
   const [price, setPrice] = useState(item ? String(item.price / 100) : '')
   const [categoryId, setCategoryId] = useState(item?.category_id ?? selectedCategoryId)
   const [tags, setTags] = useState<string[]>(item?.tags ?? [])
-  const [availability, setAvailability] = useState(item?.availability_state ?? 'in_stock')
+  const [availability, setAvailability] = useState(item?.availability_state ?? 'available')
   const [restoreAt, setRestoreAt] = useState(item?.restore_at ?? '')
   const [hasVariants, setHasVariants] = useState(item?.has_variants ?? false)
   const [variants, setVariants] = useState<Partial<ItemVariant>[]>(item?.variants ?? [])
