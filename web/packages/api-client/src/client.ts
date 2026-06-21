@@ -127,6 +127,39 @@ export interface AutomationConfig {
   auto_reject_minutes: number
 }
 
+export type SmtpSource = 'own' | 'override' | 'global' | null
+
+export interface AdminSmtpStatus {
+  smtp_source: SmtpSource
+  host?: string | null
+  port?: number | null
+  username?: string | null
+  from_email?: string | null
+  from_name?: string | null
+  monthly_limit: number | null
+  monthly_used: number
+}
+
+export interface SaveSmtpInput {
+  host: string
+  port: number
+  username: string
+  password: string
+  from_email: string
+  from_name: string
+}
+
+export type TriggerStatus =
+  | 'pending_payment' | 'scheduled' | 'auth_success' | 'accepted'
+  | 'preparing' | 'ready' | 'completed' | 'rejected' | 'missed' | 'refunded'
+
+export interface NotificationConfig {
+  trigger_status: TriggerStatus
+  send_customer: boolean
+  internal_recipients: string[]
+  template_override: string | null
+}
+
 import { storeSession, type SessionStore } from './session'
 
 export interface ApiClientConfig {
@@ -474,6 +507,22 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<AutomationConfig>('/admin/orders/automation'),
     patchAutomation: (data: Partial<AutomationConfig>) =>
       apiFetch<AutomationConfig>('/admin/orders/automation', { method: 'PATCH', body: data }),
+    // ── Admin SMTP ───────────────────────────────────────────────────────────
+    getAdminSmtp: () =>
+      apiFetch<AdminSmtpStatus>('/admin/smtp'),
+    saveAdminSmtp: (data: SaveSmtpInput) =>
+      apiFetch<AdminSmtpStatus>('/admin/smtp', { method: 'POST', body: data }),
+    deleteAdminSmtp: () =>
+      apiFetch<void>('/admin/smtp', { method: 'DELETE' }),
+    testAdminSmtp: () =>
+      apiFetch<{ sent_to: string }>('/admin/smtp/test', { method: 'POST' }),
+    // ── Notifications ────────────────────────────────────────────────────────
+    getNotifications: () =>
+      apiFetch<{ notifications: NotificationConfig[] }>('/admin/notifications').then((r) => r.notifications),
+    putNotifications: (configs: NotificationConfig[]) =>
+      apiFetch<{ notifications: NotificationConfig[] }>('/admin/notifications', { method: 'PUT', body: configs }).then((r) => r.notifications),
+    previewNotification: (status: TriggerStatus) =>
+      apiFetch<{ sent_to: string; status: TriggerStatus }>(`/admin/notifications/preview/${status}`, { method: 'POST' }),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }
