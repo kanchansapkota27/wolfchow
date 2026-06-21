@@ -148,7 +148,7 @@ function PaymentMethodsSection({ methods, hasStripe, planAllowed, onToggle, onNo
     <div className="space-y-4">
       {!hasStripe && (
         <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3" role="note" aria-label="Stripe not configured">
-          Payment methods are disabled until Stripe keys are configured.
+          Card payments require Stripe keys to be configured. Pickup and delivery methods can be enabled without Stripe.
         </div>
       )}
       <div className="space-y-2">
@@ -164,7 +164,7 @@ function PaymentMethodsSection({ methods, hasStripe, planAllowed, onToggle, onNo
               <input
                 type="checkbox"
                 checked={enabled}
-                disabled={!hasStripe || locked}
+                disabled={(method === 'card' && !hasStripe) || locked}
                 onChange={(e) => void onToggle(method, e.target.checked)}
                 className="w-4 h-4 rounded text-indigo-600"
                 aria-label={`${METHOD_LABELS[method] ?? method} payment method`}

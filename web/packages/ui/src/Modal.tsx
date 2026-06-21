@@ -2,10 +2,12 @@ import type { ReactNode } from 'react'
 import { useEffect, useId, useRef } from 'react'
 
 export interface ModalProps {
-  open: boolean
+  /** When false (or omitted while using conditional rendering) the modal is hidden. Defaults to true. */
+  open?: boolean
   onClose: () => void
   title?: string
   children: ReactNode
+  footer?: ReactNode
   className?: string
 }
 
@@ -17,7 +19,7 @@ const FOCUSABLE =
  * closes on Escape, closes on overlay click, and restores focus to the
  * previously-focused element on unmount.
  */
-export function Modal({ open, onClose, title, children, className }: ModalProps) {
+export function Modal({ open = true, onClose, title, children, footer, className }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
@@ -85,6 +87,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
           </h2>
         )}
         {children}
+        {footer && <div className="wc-modal__footer">{footer}</div>}
       </div>
     </div>
   )
