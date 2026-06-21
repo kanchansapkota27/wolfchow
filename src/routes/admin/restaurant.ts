@@ -56,7 +56,7 @@ export function registerRestaurantAdminRoutes(
       return c.json({ error: 'not_found' }, 404)
     }
 
-    return c.json(data)
+    return c.json({ restaurant: data })
   })
 
   // ── PATCH /admin/restaurant ─────────────────────────────────────────────────
@@ -98,7 +98,7 @@ export function registerRestaurantAdminRoutes(
       cache.delete(buildKey('theme', restaurantId)),
     ])
 
-    return c.json(data)
+    return c.json({ restaurant: data })
   })
 
   // ── POST /admin/restaurant/logo ─────────────────────────────────────────────
