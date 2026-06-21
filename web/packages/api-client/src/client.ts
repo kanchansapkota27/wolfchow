@@ -183,6 +183,33 @@ export interface Promotion {
   created_at: string
 }
 
+export type RefundReason = 'duplicate' | 'fraudulent' | 'requested_by_customer'
+
+export interface TransactionRow {
+  id: string
+  status: string
+  total_cents: number
+  payment_intent_id: string | null
+  created_at: string
+  customer_name: string
+  customer_email: string
+  refund_id: string | null
+  refunded_at: string | null
+}
+
+export interface TransactionListResponse {
+  transactions: TransactionRow[]
+  total: number
+  page: number
+  page_size: number
+  history_days: number
+}
+
+export interface RefundInput {
+  amount_cents?: number
+  reason?: RefundReason
+}
+
 export type NoticeType = 'informational' | 'warning' | 'emergency' | 'promotional'
 export type NoticeLocation = 'storefront' | 'checkout' | 'tracking' | 'tablet' | 'admin'
 
@@ -595,6 +622,13 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ active: boolean }>(`/admin/promotions/${id}/toggle`, { method: 'PATCH' }),
     deletePromotion: (id: string) =>
       apiFetch<void>(`/admin/promotions/${id}`, { method: 'DELETE' }),
+    // ── Transactions ─────────────────────────────────────────────────────────
+    listTransactions: (page = 1) =>
+      apiFetch<TransactionListResponse>(`/admin/transactions?page=${page}`),
+    getTransaction: (id: string) =>
+      apiFetch<Record<string, unknown>>(`/admin/transactions/${id}`),
+    refundTransaction: (id: string, data: RefundInput) =>
+      apiFetch<TransactionRow>(`/admin/transactions/${id}/refund`, { method: 'POST', body: data }),
     // ── Notices ──────────────────────────────────────────────────────────────
     listNotices: () =>
       apiFetch<{ notices: Notice[] }>('/admin/notices').then((r) => r.notices),
