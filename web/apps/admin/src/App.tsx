@@ -3,6 +3,7 @@ import { LoginPage, RequireRole } from '@wolfchow/auth'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Signup } from './pages/Signup'
+import { Settings } from './pages/Settings'
 import { Placeholder } from './pages/Placeholder'
 
 function ProtectedLayout() {
@@ -33,7 +34,7 @@ export function App() {
         <Route path="notices" element={<Placeholder title="Notices" story="STORY-064" />} />
         <Route path="transactions" element={<Placeholder title="Transactions" story="STORY-065" />} />
         <Route path="integrations" element={<Placeholder title="Integrations" story="STORY-066" />} />
-        <Route path="settings" element={<Placeholder title="Settings" story="STORY-067" />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   )

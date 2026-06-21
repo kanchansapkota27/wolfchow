@@ -262,7 +262,20 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<Order>(`/tablet/orders/${orderId}/reject`, { method: 'POST', body: { reason } }),
   }
 
-  return { apiFetch, auth, superadmin, menu, orders }
+  const admin = {
+    getRestaurant: () =>
+      apiFetch<{ restaurant: Restaurant }>('/admin/restaurant').then((r) => r.restaurant),
+    patchRestaurant: (data: Partial<Pick<Restaurant, 'display_name' | 'business_name' | 'address' | 'cuisine_type' | 'services_offered'>>) =>
+      apiFetch<{ restaurant: Partial<Restaurant> }>('/admin/restaurant', { method: 'PATCH', body: data }).then((r) => r.restaurant),
+    patchProfile: (data: { name?: string; phone?: string }) =>
+      apiFetch<{ ok: boolean }>('/admin/restaurant/profile', { method: 'PATCH', body: data }),
+    changePassword: (data: { current_password: string; new_password: string }) =>
+      apiFetch<{ ok: boolean }>('/admin/restaurant/password', { method: 'PATCH', body: data }),
+    getLogoUploadUrl: () =>
+      apiFetch<{ upload_url: string; r2_key: string }>('/admin/restaurant/logo', { method: 'POST' }),
+  }
+
+  return { apiFetch, auth, superadmin, admin, menu, orders }
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>
