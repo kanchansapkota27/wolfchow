@@ -1,17 +1,21 @@
-import { Button } from '@wolfchow/ui'
-import { formatCurrency } from '@wolfchow/utils'
+import { Route, Routes } from 'react-router'
+import { LoginPage } from '@wolfchow/auth'
+import { Layout } from './components/Layout'
+import { OrderQueue } from './pages/OrderQueue'
+import { ActiveOrders } from './pages/ActiveOrders'
+import { Inventory } from './pages/Inventory'
+import { PauseControl } from './pages/PauseControl'
 
-/**
- * Placeholder shell for the tablet app, scaffolded in STORY-047. It imports the
- * shared UI and utils packages to verify the monorepo wiring; real screens
- * arrive in later frontend stories.
- */
 export function App() {
   return (
-    <main style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
-      <h1>Wolfchow — Kitchen tablet PWA (Slice 3)</h1>
-      <p>Scaffolded in STORY-047. Example shared helper: {formatCurrency(1234.5, 'TRY')}</p>
-      <Button variant="primary">Get started</Button>
-    </main>
+    <Routes>
+      <Route path="/login" element={<LoginPage methods={['staff', 'device']} />} />
+      <Route element={<Layout />}>
+        <Route index element={<OrderQueue />} />
+        <Route path="active" element={<ActiveOrders />} />
+        <Route path="inventory" element={<Inventory />} />
+        <Route path="pause" element={<PauseControl />} />
+      </Route>
+    </Routes>
   )
 }
