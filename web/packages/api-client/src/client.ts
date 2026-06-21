@@ -25,6 +25,42 @@ import type {
   SmtpOverrideItem,
 } from '@wolfchow/types'
 import { ApiError } from './errors'
+
+export interface HoursRow {
+  day_of_week: number
+  open_time: string
+  close_time: string
+  active: boolean
+  last_order_offset_minutes: number
+  crosses_midnight?: boolean
+}
+
+export interface SchedulingConfig {
+  base_prep_minutes: number
+  scheduling_interval: 15 | 30
+  future_days_allowed: number
+}
+
+export interface SpecialClosure {
+  id: string
+  restaurant_id: string
+  closure_type: 'full' | 'partial' | 'holiday' | 'emergency' | 'maintenance' | 'special'
+  date: string
+  partial_open: string | null
+  partial_close: string | null
+  recurring: boolean
+  reason: string | null
+  created_at: string
+}
+
+export interface CreateClosureInput {
+  closure_type: SpecialClosure['closure_type']
+  date: string
+  partial_open?: string
+  partial_close?: string
+  recurring?: boolean
+  reason?: string
+}
 import { storeSession, type SessionStore } from './session'
 
 export interface ApiClientConfig {
@@ -315,6 +351,23 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<void>(`/admin/menu/items/${itemId}/modifiers/${groupId}`, { method: 'DELETE' }),
     createModifierOption: (itemId: string, groupId: string, data: Record<string, unknown>) =>
       apiFetch<{ option: ModifierOption }>(`/admin/menu/items/${itemId}/modifiers/${groupId}/options`, { method: 'POST', body: data }).then((r) => r.option),
+    // ── Hours & Scheduling ───────────────────────────────────────────────────
+    getHours: () =>
+      apiFetch<{ hours: HoursRow[] }>('/admin/hours').then((r) => r.hours),
+    putHours: (hours: HoursRow[]) =>
+      apiFetch<{ hours: HoursRow[] }>('/admin/hours', { method: 'PUT', body: hours }).then((r) => r.hours),
+    getScheduling: () =>
+      apiFetch<SchedulingConfig>('/admin/scheduling'),
+    patchScheduling: (data: Partial<SchedulingConfig>) =>
+      apiFetch<SchedulingConfig>('/admin/scheduling', { method: 'PATCH', body: data }),
+    getSchedulingPreview: () =>
+      apiFetch<{ slots: string[] }>('/admin/scheduling/preview').then((r) => r.slots),
+    listClosures: (includePast?: boolean) =>
+      apiFetch<{ closures: SpecialClosure[] }>('/admin/closures', { query: { include_past: includePast ? 'true' : undefined } }).then((r) => r.closures),
+    createClosure: (data: CreateClosureInput) =>
+      apiFetch<{ closure: SpecialClosure }>('/admin/closures', { method: 'POST', body: data }).then((r) => r.closure),
+    deleteClosure: (id: string) =>
+      apiFetch<void>(`/admin/closures/${id}`, { method: 'DELETE' }),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }

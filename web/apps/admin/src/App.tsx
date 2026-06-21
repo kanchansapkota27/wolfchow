@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Signup } from './pages/Signup'
 import { Settings } from './pages/Settings'
+import { Hours } from './pages/Hours'
 import { Menu } from './pages/Menu'
 import { Placeholder } from './pages/Placeholder'
 
@@ -27,7 +28,7 @@ export function App() {
         <Route index element={<Dashboard />} />
         <Route path="orders" element={<Placeholder title="Orders" story="STORY-057" />} />
         <Route path="menu" element={<Menu />} />
-        <Route path="hours" element={<Placeholder title="Hours & Scheduling" story="STORY-059" />} />
+        <Route path="hours" element={<Hours />} />
         <Route path="staff" element={<Placeholder title="Staff" story="STORY-060" />} />
         <Route path="payments" element={<Placeholder title="Payments" story="STORY-061" />} />
         <Route path="notifications" element={<Placeholder title="Notifications" story="STORY-062" />} />
