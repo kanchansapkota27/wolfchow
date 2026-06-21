@@ -6,8 +6,9 @@ import { registerSessionRoutes } from './session'
 import { registerOrderRoutes, type OrderRouteDeps } from './orders'
 import { registerStatusRoutes, type StatusRouteDeps } from './status'
 import { registerInventoryRoutes, type InventoryRouteDeps } from './inventory'
+import { registerPauseRoutes, type PauseRouteDeps } from './pause'
 
-export interface TabletDeps extends OrderRouteDeps, StatusRouteDeps, InventoryRouteDeps {}
+export interface TabletDeps extends OrderRouteDeps, StatusRouteDeps, InventoryRouteDeps, PauseRouteDeps {}
 
 /**
  * Kitchen tablet route group. Every /tablet/* route sits behind:
@@ -22,4 +23,5 @@ export function registerTabletRoutes(app: Hono<HonoEnv>, deps: TabletDeps = {}):
   registerOrderRoutes(app, deps)
   registerStatusRoutes(app, deps)
   registerInventoryRoutes(app, deps)
+  registerPauseRoutes(app, deps)
 }
