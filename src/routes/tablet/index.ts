@@ -4,8 +4,9 @@ import { jwtMiddleware } from '../../middleware/jwt'
 import { requireRestaurant, requireRole } from '../../middleware/guards'
 import { registerSessionRoutes } from './session'
 import { registerOrderRoutes, type OrderRouteDeps } from './orders'
+import { registerStatusRoutes, type StatusRouteDeps } from './status'
 
-export interface TabletDeps extends OrderRouteDeps {}
+export interface TabletDeps extends OrderRouteDeps, StatusRouteDeps {}
 
 /**
  * Kitchen tablet route group. Every /tablet/* route sits behind:
@@ -18,4 +19,5 @@ export function registerTabletRoutes(app: Hono<HonoEnv>, deps: TabletDeps = {}):
 
   registerSessionRoutes(app)
   registerOrderRoutes(app, deps)
+  registerStatusRoutes(app, deps)
 }
