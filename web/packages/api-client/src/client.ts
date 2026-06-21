@@ -160,6 +160,43 @@ export interface NotificationConfig {
   template_override: string | null
 }
 
+export type DiscountType = 'percentage' | 'fixed' | 'free_item' | 'bogo'
+export type ActiveDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
+
+export interface Promotion {
+  id: string
+  restaurant_id: string
+  title: string
+  description: string | null
+  promo_code: string | null
+  discount_type: DiscountType
+  discount_value: number
+  free_item_id: string | null
+  minimum_order_amount: number | null
+  usage_limit: number | null
+  usage_count: number
+  auto_apply: boolean
+  start_time: string | null
+  end_time: string | null
+  active_days: ActiveDay[] | null
+  active: boolean
+  created_at: string
+}
+
+export interface CreatePromotionInput {
+  title: string
+  description?: string
+  promo_code?: string
+  discount_type: DiscountType
+  discount_value: number
+  minimum_order_amount?: number
+  usage_limit?: number
+  auto_apply?: boolean
+  start_time?: string
+  end_time?: string
+  active_days?: ActiveDay[]
+}
+
 import { storeSession, type SessionStore } from './session'
 
 export interface ApiClientConfig {
@@ -523,6 +560,17 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ notifications: NotificationConfig[] }>('/admin/notifications', { method: 'PUT', body: configs }).then((r) => r.notifications),
     previewNotification: (status: TriggerStatus) =>
       apiFetch<{ sent_to: string; status: TriggerStatus }>(`/admin/notifications/preview/${status}`, { method: 'POST' }),
+    // ── Promotions ───────────────────────────────────────────────────────────
+    listPromotions: () =>
+      apiFetch<{ promotions: Promotion[] }>('/admin/promotions').then((r) => r.promotions),
+    createPromotion: (data: CreatePromotionInput) =>
+      apiFetch<{ promotion: Promotion }>('/admin/promotions', { method: 'POST', body: data }).then((r) => r.promotion),
+    updatePromotion: (id: string, data: Partial<CreatePromotionInput>) =>
+      apiFetch<{ promotion: Promotion }>(`/admin/promotions/${id}`, { method: 'PATCH', body: data }).then((r) => r.promotion),
+    togglePromotion: (id: string) =>
+      apiFetch<{ active: boolean }>(`/admin/promotions/${id}/toggle`, { method: 'PATCH' }),
+    deletePromotion: (id: string) =>
+      apiFetch<void>(`/admin/promotions/${id}`, { method: 'DELETE' }),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }
