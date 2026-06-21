@@ -7,6 +7,7 @@ import { registerHealthRoutes } from './routes/health'
 import { registerAuthRoutes } from './routes/auth'
 import { registerAdminRoutes } from './routes/admin'
 import { registerSuperadminRoutes } from './routes/superadmin'
+import { registerTabletRoutes } from './routes/tablet'
 
 const app = new Hono<HonoEnv>()
 
@@ -26,6 +27,7 @@ registerHealthRoutes(app)
 registerAuthRoutes(app)
 registerAdminRoutes(app)
 registerSuperadminRoutes(app)
+registerTabletRoutes(app)
 
 export default app
 export { app }
