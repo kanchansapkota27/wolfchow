@@ -14,8 +14,13 @@ import { registerStaffRoutes } from './staff'
 import { registerPaymentRoutes, type PaymentRouteDeps } from './payments'
 import { registerSmtpRoutes, type SmtpRouteDeps } from './smtp'
 import { registerNotificationRoutes, type NotificationRouteDeps } from './notifications'
+import { registerTipsRoutes } from './tips'
+import { registerAutomationRoutes } from './automation'
+import { registerPromotionsRoutes } from './promotions'
+import { registerNoticesRoutes, type NoticesRouteDeps } from './notices'
+import { registerTransactionRoutes, type TransactionRouteDeps } from './transactions'
 
-export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps, SmtpRouteDeps, NotificationRouteDeps {}
+export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps, SmtpRouteDeps, NotificationRouteDeps, NoticesRouteDeps, TransactionRouteDeps {}
 
 /**
  * Restaurant admin route group. Every `/admin/*` route sits behind:
@@ -45,4 +50,9 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerPaymentRoutes(app, deps)
   registerSmtpRoutes(app, deps)
   registerNotificationRoutes(app, deps)
+  registerTipsRoutes(app)
+  registerAutomationRoutes(app)
+  registerPromotionsRoutes(app)
+  registerNoticesRoutes(app, deps)
+  registerTransactionRoutes(app, deps)
 }
