@@ -211,8 +211,18 @@
 }
 .wc-modal__title {
   margin: 0 0 1rem;
-  font-size: 1.125rem;
+  font-size: 1.0625rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.wc-modal__footer {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--wc-border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 /* ── Toast ───────────────────────────────────────────────────────────────── */
