@@ -11,6 +11,7 @@ import { Payments } from './pages/Payments'
 import { Staff } from './pages/Staff'
 import { Promotions } from './pages/Promotions'
 import { Notices } from './pages/Notices'
+import { Transactions } from './pages/Transactions'
 import { Placeholder } from './pages/Placeholder'
 
 function ProtectedLayout() {
@@ -39,7 +40,7 @@ export function App() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="promotions" element={<Promotions />} />
         <Route path="notices" element={<Notices />} />
-        <Route path="transactions" element={<Placeholder title="Transactions" story="STORY-065" />} />
+        <Route path="transactions" element={<Transactions />} />
         <Route path="integrations" element={<Placeholder title="Integrations" story="STORY-066" />} />
         <Route path="settings" element={<Settings />} />
       </Route>
