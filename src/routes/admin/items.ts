@@ -101,7 +101,7 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
     const admin = createAdminClient(c.env)
     let q = admin
       .from('menu_items')
-      .select('*, modifier_groups(count)')
+      .select('*, modifier_groups(id)')
       .eq('restaurant_id', restaurantId)
       .eq('active', true)
       .order('sort_order', { ascending: true })
@@ -113,10 +113,7 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
 
     const items = (data ?? []).map((item: Record<string, unknown>) => {
       const groups = item['modifier_groups']
-      const modifier_group_count =
-        Array.isArray(groups) && groups[0] && typeof (groups[0] as Record<string, unknown>).count === 'number'
-          ? (groups[0] as Record<string, unknown>).count
-          : 0
+      const modifier_group_count = Array.isArray(groups) ? groups.length : 0
       const { modifier_groups: _, ...rest } = item
       return { ...rest, modifier_group_count }
     })
