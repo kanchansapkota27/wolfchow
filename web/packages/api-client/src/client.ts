@@ -515,6 +515,11 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<PauseState>('/tablet/orders/pause', { method: 'POST', body: data }),
     tabletUnpauseOrders: () =>
       apiFetch<PauseState>('/tablet/orders/unpause', { method: 'POST' }),
+    tabletSession: () =>
+      apiFetch<{
+        identity: { sub: string; role: string; restaurant_id: string; device_id: string | null; permissions: string[] }
+        pause_state: PauseState | null
+      }>('/tablet/session'),
     getInventory: () =>
       apiFetch<{
         categories: Array<{ id: string; name: string; availability_state: string; position: number }>
