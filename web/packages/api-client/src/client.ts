@@ -183,6 +183,23 @@ export interface Promotion {
   created_at: string
 }
 
+export type PauseMode = 'timed' | 'manual' | 'rest_of_day'
+
+export interface PauseState {
+  orders_paused: boolean
+  pause_mode: PauseMode | null
+  pause_until: string | null
+  pause_reason: string | null
+  pause_scheduled_orders: boolean
+}
+
+export interface PauseInput {
+  mode: PauseMode
+  duration_minutes?: number
+  reason?: string
+  pause_scheduled_orders?: boolean
+}
+
 export type RefundReason = 'duplicate' | 'fraudulent' | 'requested_by_customer'
 
 export interface TransactionRow {
@@ -484,6 +501,8 @@ export function createApiClient(config: ApiClientConfig) {
     getMenu: (slug: string) => apiFetch<{ categories: unknown[] }>(`/public/${slug}/menu`, { skipAuth: true }),
   }
   const orders = {
+    listActive: () =>
+      apiFetch<{ orders: Order[] }>('/tablet/orders').then((r) => r.orders),
     acceptOrder: (orderId: string) =>
       apiFetch<Order>(`/tablet/orders/${orderId}/accept`, { method: 'POST' }),
     rejectOrder: (orderId: string, reason?: string) =>
@@ -503,6 +522,15 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ ok: boolean }>('/admin/restaurant/password', { method: 'PATCH', body: data }),
     getLogoUploadUrl: () =>
       apiFetch<{ upload_url: string; r2_key: string }>('/admin/restaurant/logo', { method: 'POST' }),
+    // ── Orders pause ─────────────────────────────────────────────────────────────
+    getPauseState: () =>
+      apiFetch<PauseState>('/admin/orders/pause'),
+    pauseOrders: (data: PauseInput) =>
+      apiFetch<PauseState>('/admin/orders/pause', { method: 'POST', body: data }),
+    unpauseOrders: () =>
+      apiFetch<PauseState>('/admin/orders/unpause', { method: 'POST' }),
+    getAutomationConfig: () =>
+      apiFetch<AutomationConfig>('/admin/orders/automation'),
     // ── Menu ────────────────────────────────────────────────────────────────────
     listCategories: () =>
       apiFetch<{ categories: MenuCategory[] }>('/admin/menu/categories').then((r) => r.categories),
