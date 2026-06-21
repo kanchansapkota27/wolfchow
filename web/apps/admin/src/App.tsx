@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Signup } from './pages/Signup'
 import { Settings } from './pages/Settings'
+import { Menu } from './pages/Menu'
 import { Placeholder } from './pages/Placeholder'
 
 function ProtectedLayout() {
@@ -25,7 +26,7 @@ export function App() {
       <Route element={<ProtectedLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="orders" element={<Placeholder title="Orders" story="STORY-057" />} />
-        <Route path="menu" element={<Placeholder title="Menu" story="STORY-058" />} />
+        <Route path="menu" element={<Menu />} />
         <Route path="hours" element={<Placeholder title="Hours & Scheduling" story="STORY-059" />} />
         <Route path="staff" element={<Placeholder title="Staff" story="STORY-060" />} />
         <Route path="payments" element={<Placeholder title="Payments" story="STORY-061" />} />
