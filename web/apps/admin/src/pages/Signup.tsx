@@ -212,22 +212,22 @@ export function Signup() {
         skipAuth: true,
         body: {
           invite_token: inviteToken,
-          name: step1.name,
-          phone: step1.phone || undefined,
-          email: step1.email,
+          admin_name: step1.name,
+          admin_phone: step1.phone || undefined,
+          admin_email: step1.email,
           password: step1.password,
           display_name: step2.displayName || undefined,
           business_name: step2.businessName,
           timezone: step2.timezone,
           address: {
-            line1: step2.addressLine1 || undefined,
-            city: step2.city || undefined,
-            country: step2.country || undefined,
+            line1: step2.addressLine1 || 'N/A',
+            city: step2.city || 'N/A',
+            country: step2.country || 'N/A',
           },
           currency: step2.currency,
         },
       })
-      void navigate('/dashboard')
+      void navigate('/')
     } catch (err) {
       setError(err instanceof ApiError ? String(err.message) : 'Signup failed. Please try again.')
     } finally {
