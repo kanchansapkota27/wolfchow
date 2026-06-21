@@ -6,6 +6,7 @@ import { Signup } from './pages/Signup'
 import { Settings } from './pages/Settings'
 import { Hours } from './pages/Hours'
 import { Menu } from './pages/Menu'
+import { Payments } from './pages/Payments'
 import { Staff } from './pages/Staff'
 import { Placeholder } from './pages/Placeholder'
 
@@ -31,7 +32,7 @@ export function App() {
         <Route path="menu" element={<Menu />} />
         <Route path="hours" element={<Hours />} />
         <Route path="staff" element={<Staff />} />
-        <Route path="payments" element={<Placeholder title="Payments" story="STORY-061" />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="notifications" element={<Placeholder title="Notifications" story="STORY-062" />} />
         <Route path="promotions" element={<Placeholder title="Promotions" story="STORY-063" />} />
         <Route path="notices" element={<Placeholder title="Notices" story="STORY-064" />} />
