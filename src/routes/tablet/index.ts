@@ -5,8 +5,9 @@ import { requireRestaurant, requireRole } from '../../middleware/guards'
 import { registerSessionRoutes } from './session'
 import { registerOrderRoutes, type OrderRouteDeps } from './orders'
 import { registerStatusRoutes, type StatusRouteDeps } from './status'
+import { registerInventoryRoutes, type InventoryRouteDeps } from './inventory'
 
-export interface TabletDeps extends OrderRouteDeps, StatusRouteDeps {}
+export interface TabletDeps extends OrderRouteDeps, StatusRouteDeps, InventoryRouteDeps {}
 
 /**
  * Kitchen tablet route group. Every /tablet/* route sits behind:
@@ -20,4 +21,5 @@ export function registerTabletRoutes(app: Hono<HonoEnv>, deps: TabletDeps = {}):
   registerSessionRoutes(app)
   registerOrderRoutes(app, deps)
   registerStatusRoutes(app, deps)
+  registerInventoryRoutes(app, deps)
 }
