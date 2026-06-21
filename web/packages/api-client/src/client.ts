@@ -8,6 +8,11 @@ import type {
   CreateRestaurantInput,
   Invite,
   InviteSummary,
+  ItemVariant,
+  MenuCategory,
+  MenuItem,
+  ModifierGroup,
+  ModifierOption,
   Order,
   Plan,
   PlanInput,
@@ -273,6 +278,43 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ ok: boolean }>('/admin/restaurant/password', { method: 'PATCH', body: data }),
     getLogoUploadUrl: () =>
       apiFetch<{ upload_url: string; r2_key: string }>('/admin/restaurant/logo', { method: 'POST' }),
+    // ── Menu ────────────────────────────────────────────────────────────────────
+    listCategories: () =>
+      apiFetch<{ categories: MenuCategory[] }>('/admin/menu/categories').then((r) => r.categories),
+    createCategory: (data: { name: string; active?: boolean }) =>
+      apiFetch<{ category: MenuCategory }>('/admin/menu/categories', { method: 'POST', body: data }).then((r) => r.category),
+    updateCategory: (id: string, data: { name?: string; active?: boolean }) =>
+      apiFetch<{ category: MenuCategory }>(`/admin/menu/categories/${id}`, { method: 'PATCH', body: data }).then((r) => r.category),
+    deleteCategory: (id: string) =>
+      apiFetch<void>(`/admin/menu/categories/${id}`, { method: 'DELETE' }),
+    reorderCategories: (order: Array<{ id: string; sort_order: number }>) =>
+      apiFetch<{ ok: boolean }>('/admin/menu/categories/reorder', { method: 'POST', body: { order } }),
+    listItems: (categoryId: string) =>
+      apiFetch<{ items: MenuItem[] }>(`/admin/menu/items?category_id=${categoryId}`).then((r) => r.items),
+    createItem: (data: Record<string, unknown>) =>
+      apiFetch<{ item: MenuItem }>('/admin/menu/items', { method: 'POST', body: data }).then((r) => r.item),
+    updateItem: (id: string, data: Record<string, unknown>) =>
+      apiFetch<{ item: MenuItem }>(`/admin/menu/items/${id}`, { method: 'PATCH', body: data }).then((r) => r.item),
+    deleteItem: (id: string) =>
+      apiFetch<void>(`/admin/menu/items/${id}`, { method: 'DELETE' }),
+    getItemImageUrl: (id: string) =>
+      apiFetch<{ upload_url: string; r2_key: string }>(`/admin/menu/items/${id}/image`, { method: 'POST' }),
+    createVariant: (itemId: string, data: Record<string, unknown>) =>
+      apiFetch<{ variant: ItemVariant }>(`/admin/menu/items/${itemId}/variants`, { method: 'POST', body: data }).then((r) => r.variant),
+    updateVariant: (itemId: string, variantId: string, data: Record<string, unknown>) =>
+      apiFetch<{ variant: ItemVariant }>(`/admin/menu/items/${itemId}/variants/${variantId}`, { method: 'PATCH', body: data }).then((r) => r.variant),
+    deleteVariant: (itemId: string, variantId: string) =>
+      apiFetch<void>(`/admin/menu/items/${itemId}/variants/${variantId}`, { method: 'DELETE' }),
+    listModifierGroups: (itemId: string) =>
+      apiFetch<{ groups: ModifierGroup[] }>(`/admin/menu/items/${itemId}/modifiers`).then((r) => r.groups),
+    createModifierGroup: (itemId: string, data: Record<string, unknown>) =>
+      apiFetch<{ group: ModifierGroup }>(`/admin/menu/items/${itemId}/modifiers`, { method: 'POST', body: data }).then((r) => r.group),
+    updateModifierGroup: (itemId: string, groupId: string, data: Record<string, unknown>) =>
+      apiFetch<{ group: ModifierGroup }>(`/admin/menu/items/${itemId}/modifiers/${groupId}`, { method: 'PATCH', body: data }).then((r) => r.group),
+    deleteModifierGroup: (itemId: string, groupId: string) =>
+      apiFetch<void>(`/admin/menu/items/${itemId}/modifiers/${groupId}`, { method: 'DELETE' }),
+    createModifierOption: (itemId: string, groupId: string, data: Record<string, unknown>) =>
+      apiFetch<{ option: ModifierOption }>(`/admin/menu/items/${itemId}/modifiers/${groupId}/options`, { method: 'POST', body: data }).then((r) => r.option),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }
