@@ -4,15 +4,27 @@
 @import 'tailwindcss';
 @source "./";
 
-/* Light theme for admin app */
 :root {
-  --wc-bg: #f9fafb;
+  --wc-bg: #f7f6f2;
   --wc-surface: #ffffff;
-  --wc-surface-2: #f3f4f6;
-  --wc-text: #111827;
-  --wc-muted: #6b7280;
-  --wc-border: #e5e7eb;
+  --wc-surface-2: #f1efe9;
+  --wc-text: #0f0e0c;
+  --wc-muted: #8a857e;
+  --wc-border: #e4e0d8;
   --wc-input-bg: #ffffff;
+  --wc-primary: #e8530a;
+  --wc-primary-hover: #cc4809;
+  --wc-on-primary: #ffffff;
+  --wc-ring: rgba(232, 83, 10, 0.22);
+
+  /* sidebar tokens */
+  --sidebar-bg: #0c0c0a;
+  --sidebar-border: rgba(255,255,255,0.07);
+  --sidebar-text: rgba(255,255,255,0.45);
+  --sidebar-text-hover: rgba(255,255,255,0.78);
+  --sidebar-text-active: #ffffff;
+  --sidebar-active-accent: #e8530a;
+  --sidebar-active-bg: rgba(255,255,255,0.055);
 }
 
 html,
@@ -26,9 +38,171 @@ body {
   background: var(--wc-bg);
   color: var(--wc-text);
   font-family:
+    ui-sans-serif,
     system-ui,
     -apple-system,
-    'Segoe UI',
-    Roboto,
+    'Helvetica Neue',
     sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.admin-sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+}
+
+.admin-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 20px 18px;
+}
+
+.admin-sidebar__brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--sidebar-active-accent);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-sidebar__brand-mark svg {
+  display: block;
+}
+
+.admin-sidebar__brand-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.admin-sidebar__brand-sub {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--sidebar-text);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.admin-nav {
+  flex: 1;
+  padding: 4px 10px 12px;
+  overflow-y: auto;
+}
+
+.admin-nav__group {
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.admin-nav__group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.admin-nav__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--sidebar-text);
+  text-decoration: none;
+  line-height: 1.4;
+  transition: color 0.12s, background 0.12s;
+  position: relative;
+  /* compensate for active border */
+  border-left: 2px solid transparent;
+}
+
+.admin-nav__item:hover {
+  color: var(--sidebar-text-hover);
+  background: rgba(255,255,255,0.04);
+}
+
+.admin-nav__item--active {
+  color: var(--sidebar-text-active);
+  background: var(--sidebar-active-bg);
+  border-left-color: var(--sidebar-active-accent);
+  padding-left: 8px; /* 10px - 2px border = same visual position */
+}
+
+.admin-sidebar__footer {
+  padding: 14px 10px 16px;
+  border-top: 1px solid var(--sidebar-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-sidebar__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.7);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.admin-sidebar__user {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-sidebar__email {
+  font-size: 0.75rem;
+  color: var(--sidebar-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.admin-sidebar__signout {
+  font-size: 0.6875rem;
+  color: rgba(255,255,255,0.28);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.3;
+  transition: color 0.12s;
+}
+
+.admin-sidebar__signout:hover {
+  color: rgba(255,255,255,0.6);
+}
+
+/* ── Main area ───────────────────────────────────────────────────────────── */
+.admin-main {
+  flex: 1;
+  overflow: auto;
+  background: var(--wc-bg);
+}
+
+.admin-main__inner {
+  padding: 36px 40px;
+  max-width: 1100px;
 }
