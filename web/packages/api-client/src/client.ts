@@ -503,10 +503,18 @@ export function createApiClient(config: ApiClientConfig) {
   const orders = {
     listActive: () =>
       apiFetch<{ orders: Order[] }>('/tablet/orders').then((r) => r.orders),
+    getOrder: (orderId: string) =>
+      apiFetch<Order>(`/tablet/orders/${orderId}`),
     acceptOrder: (orderId: string) =>
       apiFetch<Order>(`/tablet/orders/${orderId}/accept`, { method: 'POST' }),
     rejectOrder: (orderId: string, reason?: string) =>
       apiFetch<Order>(`/tablet/orders/${orderId}/reject`, { method: 'POST', body: { reason } }),
+    updateOrderStatus: (orderId: string, status: string) =>
+      apiFetch<Order>(`/tablet/orders/${orderId}/status`, { method: 'POST', body: { status } }),
+    tabletPauseOrders: (data: { mode: 'timed' | 'manual'; duration_minutes?: number; reason?: string; pause_scheduled_orders?: boolean }) =>
+      apiFetch<PauseState>('/tablet/orders/pause', { method: 'POST', body: data }),
+    tabletUnpauseOrders: () =>
+      apiFetch<PauseState>('/tablet/orders/unpause', { method: 'POST' }),
   }
 
   const admin = {
