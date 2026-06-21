@@ -1,17 +1,40 @@
-import { Button } from '@wolfchow/ui'
-import { formatCurrency } from '@wolfchow/utils'
+import { Route, Routes } from 'react-router'
+import { LoginPage, RequireRole } from '@wolfchow/auth'
+import { Layout } from './components/Layout'
+import { Dashboard } from './pages/Dashboard'
+import { Signup } from './pages/Signup'
+import { Placeholder } from './pages/Placeholder'
 
-/**
- * Placeholder shell for the admin app, scaffolded in STORY-047. It imports the
- * shared UI and utils packages to verify the monorepo wiring; real screens
- * arrive in later frontend stories.
- */
+function ProtectedLayout() {
+  return (
+    <RequireRole
+      roles={['restaurant_owner', 'kitchen']}
+      fallback={<div className="p-8 text-gray-500">Loading…</div>}
+    >
+      <Layout />
+    </RequireRole>
+  )
+}
+
 export function App() {
   return (
-    <main style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
-      <h1>Wolfchow — Restaurant admin dashboard (Slice 2)</h1>
-      <p>Scaffolded in STORY-047. Example shared helper: {formatCurrency(1234.5, 'TRY')}</p>
-      <Button variant="primary">Get started</Button>
-    </main>
+    <Routes>
+      <Route path="/login" element={<LoginPage methods={['staff']} />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route element={<ProtectedLayout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="orders" element={<Placeholder title="Orders" story="STORY-057" />} />
+        <Route path="menu" element={<Placeholder title="Menu" story="STORY-058" />} />
+        <Route path="hours" element={<Placeholder title="Hours & Scheduling" story="STORY-059" />} />
+        <Route path="staff" element={<Placeholder title="Staff" story="STORY-060" />} />
+        <Route path="payments" element={<Placeholder title="Payments" story="STORY-061" />} />
+        <Route path="notifications" element={<Placeholder title="Notifications" story="STORY-062" />} />
+        <Route path="promotions" element={<Placeholder title="Promotions" story="STORY-063" />} />
+        <Route path="notices" element={<Placeholder title="Notices" story="STORY-064" />} />
+        <Route path="transactions" element={<Placeholder title="Transactions" story="STORY-065" />} />
+        <Route path="integrations" element={<Placeholder title="Integrations" story="STORY-066" />} />
+        <Route path="settings" element={<Placeholder title="Settings" story="STORY-067" />} />
+      </Route>
+    </Routes>
   )
 }
