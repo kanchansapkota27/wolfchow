@@ -3,7 +3,7 @@ import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { KvCache } from '../../services/kv'
 import { RealtimeService, type Broadcaster } from '../../services/realtime'
-import { createRestaurantDirectSchema, updateRestaurantSchema } from './schemas'
+import { createRestaurantDirectSchema, updateRestaurantSchema, createRestaurantUserSchema } from './schemas'
 
 const PAGE_SIZE = 20
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
@@ -97,6 +97,90 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
       return c.json({ error: 'insert_failed' }, 500)
     }
     return c.json({ restaurant: data }, 201)
+  })
+
+  app.post('/superadmin/restaurants/:id/users', async (c) => {
+    const id = c.req.param('id')
+    const caller = c.get('jwt')
+
+    const parsed = createRestaurantUserSchema.safeParse(await readJson(c))
+    if (!parsed.success) {
+      return c.json({ error: 'validation', issues: parsed.error.issues }, 422)
+    }
+
+    const admin = createAdminClient(c.env)
+
+    const { data: restaurant } = await admin
+      .from('restaurants')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle()
+    if (!restaurant) return c.json({ error: 'restaurant_not_found' }, 404)
+
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      email_confirm: true,
+      user_metadata: { force_password_change: true },
+    })
+    if (authError || !authData.user) {
+      if (authError?.message?.includes('already')) {
+        return c.json({ error: 'email_taken' }, 409)
+      }
+      return c.json({ error: 'create_failed' }, 500)
+    }
+
+    const userId = authData.user.id
+
+    const { data: userRow, error: userError } = await admin
+      .from('users')
+      .insert({
+        id: userId,
+        restaurant_id: id,
+        role: 'restaurant_owner',
+        name: parsed.data.name,
+        phone: parsed.data.phone ?? null,
+        email: parsed.data.email,
+      })
+      .select('id, email, name, role, restaurant_id, created_at')
+      .single()
+
+    if (userError || !userRow) {
+      void admin.auth.admin.deleteUser(userId)
+      return c.json({ error: 'create_failed' }, 500)
+    }
+
+    void admin.from('audit_log').insert({
+      restaurant_id: id,
+      table_name: 'users',
+      operation: 'CREATE_OWNER',
+      user_id: caller.sub,
+      new_data: { email: parsed.data.email, name: parsed.data.name, role: 'restaurant_owner' },
+    })
+
+    const row = userRow as {
+      id: string
+      email: string
+      name: string
+      role: string
+      restaurant_id: string
+      created_at: string
+    }
+
+    return c.json(
+      {
+        user: {
+          id: row.id,
+          email: row.email,
+          name: row.name,
+          role: row.role,
+          restaurant_id: row.restaurant_id,
+          force_password_change: true,
+          created_at: row.created_at,
+        },
+      },
+      201,
+    )
   })
 
   app.get('/superadmin/restaurants', async (c) => {
