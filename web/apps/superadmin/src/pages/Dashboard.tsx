@@ -4,6 +4,7 @@ import { useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
 import { MetricCard, MetricCardSkeleton } from '../components/MetricCard'
 import { SectionError } from '../components/SectionError'
+import { PageHeader } from '../components/PageHeader'
 
 function toMessage(err: unknown): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`
@@ -37,7 +38,10 @@ export function Dashboard() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Dashboard</h1>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Platform overview at a glance."
+      />
 
       {status === 'loading' ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
