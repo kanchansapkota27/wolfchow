@@ -3,6 +3,8 @@ export type {
   ApiClient,
   ApiClientConfig,
   RequestOptions,
+  // Widget / public
+  PublicSettings,
   // Hours & scheduling
   HoursRow,
   SchedulingConfig,
