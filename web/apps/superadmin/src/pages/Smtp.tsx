@@ -4,6 +4,7 @@ import { Button, Input, Modal, Select, useToast } from '@wolfchow/ui'
 import { useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
+import { PageHeader } from '../components/PageHeader'
 
 // ── Global config form ────────────────────────────────────────────────────────
 
@@ -95,9 +96,9 @@ function SmtpGlobalCard({ config, onSaved }: SmtpGlobalCardProps) {
   }
 
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+    <div className="rounded-xl border border-gray-200 bg-white p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Global SMTP</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Global SMTP</h2>
         {!editing && (
           <div className="flex gap-2">
             <Button variant="ghost" loading={testBusy} onClick={() => void sendTest()}>
@@ -119,32 +120,32 @@ function SmtpGlobalCard({ config, onSaved }: SmtpGlobalCardProps) {
       {!editing && config && (
         <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
           <div>
-            <dt className="text-gray-400">Host</dt>
-            <dd className="text-gray-100">{config.host}:{config.port}</dd>
+            <dt className="text-gray-500">Host</dt>
+            <dd className="text-gray-900">{config.host}:{config.port}</dd>
           </div>
           <div>
-            <dt className="text-gray-400">Username</dt>
-            <dd className="text-gray-100">{config.username}</dd>
+            <dt className="text-gray-500">Username</dt>
+            <dd className="text-gray-900">{config.username}</dd>
           </div>
           <div>
-            <dt className="text-gray-400">From</dt>
-            <dd className="text-gray-100">
+            <dt className="text-gray-500">From</dt>
+            <dd className="text-gray-900">
               {config.from_name} &lt;{config.from_email}&gt;
             </dd>
           </div>
           <div>
-            <dt className="text-gray-400">Monthly limit</dt>
-            <dd className="text-gray-100">{config.monthly_limit ?? 'Unlimited'}</dd>
+            <dt className="text-gray-500">Monthly limit</dt>
+            <dd className="text-gray-900">{config.monthly_limit ?? 'Unlimited'}</dd>
           </div>
           <div>
-            <dt className="text-gray-400">Password</dt>
-            <dd className="text-gray-400">{config.has_password ? '••••••••' : 'Not set'}</dd>
+            <dt className="text-gray-500">Password</dt>
+            <dd className="text-gray-500">{config.has_password ? '••••••••' : 'Not set'}</dd>
           </div>
         </dl>
       )}
 
       {!editing && !config && (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-gray-500">
           No global SMTP config yet.{' '}
           <button
             type="button"
@@ -357,29 +358,29 @@ function SmtpOverridesTable({ overrides, onDelete }: SmtpOverridesTableProps) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-800">
+    <div className="overflow-hidden rounded-xl border border-gray-200">
       <table className="w-full text-left text-sm">
-        <thead className="bg-gray-900 text-gray-400">
+        <thead className="border-b border-gray-200">
           <tr>
-            <th className="px-4 py-2">Restaurant</th>
-            <th className="px-4 py-2">Host</th>
-            <th className="px-4 py-2">From</th>
-            <th className="px-4 py-2">Usage / Limit</th>
-            <th className="px-4 py-2" />
+            <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Restaurant</th>
+            <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Host</th>
+            <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">From</th>
+            <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Usage / Limit</th>
+            <th className="px-4 py-3" />
           </tr>
         </thead>
         <tbody>
           {overrides.map((ov) => (
-            <tr key={ov.id} className="border-t border-gray-800">
+            <tr key={ov.id} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-4 py-2">
-                <div className="font-medium text-gray-100">{ov.restaurant_name ?? '—'}</div>
+                <div className="font-medium text-gray-900">{ov.restaurant_name ?? '—'}</div>
                 <div className="text-xs text-gray-500">{ov.restaurant_id}</div>
               </td>
-              <td className="px-4 py-2 text-gray-300">
+              <td className="px-4 py-2 text-gray-900">
                 {ov.host}:{ov.port}
               </td>
-              <td className="px-4 py-2 text-gray-300">{ov.from_email}</td>
-              <td className="px-4 py-2 text-gray-300">
+              <td className="px-4 py-2 text-gray-900">{ov.from_email}</td>
+              <td className="px-4 py-2 text-gray-900">
                 {ov.monthly_used}
                 {ov.monthly_limit !== null ? ` / ${ov.monthly_limit}` : ' / ∞'}
               </td>
@@ -442,35 +443,56 @@ export function Smtp() {
     }
   }
 
+  const hasGlobal = globalQ.data?.config != null
+
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">SMTP Configuration</h1>
+    <div className="space-y-6">
+      <PageHeader
+        title="Platform SMTP"
+        subtitle="Manage global fallback credentials and restaurant-specific overrides."
+        action={
+          hasGlobal ? (
+            <span className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+              Global Fallback Active
+            </span>
+          ) : undefined
+        }
+      />
 
-      {/* Global config */}
-      {globalQ.status === 'loading' && <p className="text-gray-400">Loading…</p>}
-      {globalQ.status === 'error' && <SectionError onRetry={globalQ.reload} />}
-      {globalQ.status === 'success' && (
-        <SmtpGlobalCard
-          config={globalQ.data?.config ?? null}
-          onSaved={globalQ.reload}
-        />
-      )}
-
-      {/* Per-restaurant overrides */}
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Per-restaurant overrides</h2>
-          <Button onClick={() => setAddOpen(true)}>Add override</Button>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Global settings card */}
+        <div>
+          {globalQ.status === 'loading' && <p className="text-sm text-gray-500">Loading…</p>}
+          {globalQ.status === 'error' && <SectionError onRetry={globalQ.reload} />}
+          {globalQ.status === 'success' && (
+            <SmtpGlobalCard config={globalQ.data?.config ?? null} onSaved={globalQ.reload} />
+          )}
         </div>
 
-        {overridesQ.status === 'loading' && <p className="text-gray-400">Loading…</p>}
-        {overridesQ.status === 'error' && <SectionError onRetry={overridesQ.reload} />}
-        {overridesQ.status === 'success' && (
-          <SmtpOverridesTable
-            overrides={overridesQ.data?.overrides ?? []}
-            onDelete={setDeleting}
-          />
-        )}
+        {/* Overrides card */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+              Restaurant Overrides
+            </h2>
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              + Add Override
+            </button>
+          </div>
+          {overridesQ.status === 'loading' && <p className="text-sm text-gray-500">Loading…</p>}
+          {overridesQ.status === 'error' && <SectionError onRetry={overridesQ.reload} />}
+          {overridesQ.status === 'success' && (
+            <SmtpOverridesTable
+              overrides={overridesQ.data?.overrides ?? []}
+              onDelete={setDeleting}
+            />
+          )}
+        </div>
       </div>
 
       <AddSmtpOverrideModal
@@ -485,7 +507,7 @@ export function Smtp() {
         onClose={() => setDeleting(null)}
         title="Remove SMTP override"
       >
-        <div className="text-gray-100">
+        <div className="text-gray-700">
           <p>
             Remove the custom SMTP config for{' '}
             <strong>{deleting?.restaurant_name ?? deleting?.restaurant_id}</strong>? The restaurant

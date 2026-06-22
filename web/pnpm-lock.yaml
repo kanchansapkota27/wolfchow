@@ -138,6 +138,9 @@ importers:
       '@wolfchow/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      lucide-react:
+        specifier: ^1.21.0
+        version: 1.21.0(react@19.2.7)
       react:
         specifier: ^19.0.0
         version: 19.2.7
