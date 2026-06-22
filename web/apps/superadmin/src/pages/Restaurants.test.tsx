@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ApiClient } from '@wolfchow/api-client'
 import type { Plan, Restaurant, RestaurantListItem } from '@wolfchow/types'
@@ -114,6 +114,9 @@ function renderPage(client: ApiClient) {
 }
 
 describe('STORY-050 · Restaurants UI', () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
+  afterEach(() => vi.useRealTimers())
+
   it('search filters table rows', async () => {
     const all = [item('Alpha Diner', 'alpha'), item('Beta Cafe', 'beta')]
     const listRestaurants = vi.fn<SuperadminApi['listRestaurants']>(async (query) => {
@@ -128,6 +131,8 @@ describe('STORY-050 · Restaurants UI', () => {
     expect(screen.getByText('Beta Cafe')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Search restaurants'), 'Alpha')
+    // Advance past the 300ms debounce
+    await act(async () => { vi.advanceTimersByTime(350) })
 
     await waitFor(() => expect(screen.queryByText('Beta Cafe')).not.toBeInTheDocument())
     expect(screen.getByText('Alpha Diner')).toBeInTheDocument()

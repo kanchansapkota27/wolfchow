@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Plan, Restaurant, RestaurantUpdate } from '@wolfchow/types'
-import { Badge, Button, Modal } from '@wolfchow/ui'
+import { Badge, Button, Input, Modal } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
 import { ADMIN_URL, useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
 import { SectionError } from './SectionError'
 import { InlineEdit } from './InlineEdit'
 
-type Tab = 'overview' | 'limits' | 'smtp'
+type ApiClient = ReturnType<typeof useApi>
+
+type Tab = 'overview' | 'limits' | 'smtp' | 'admin'
 
 interface RestaurantDetailProps {
   restaurantId: string
@@ -114,7 +116,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
         {status === 'success' && r && (
           <>
             <div className="mb-4 flex gap-2" role="tablist" aria-label="Restaurant detail tabs">
-              {(['overview', 'limits', 'smtp'] as Tab[]).map((t) => (
+              {(['overview', 'limits', 'smtp', 'admin'] as Tab[]).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -126,7 +128,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
                     tab === t ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-100',
                   ].join(' ')}
                 >
-                  {t === 'smtp' ? 'SMTP' : t}
+                  {t === 'smtp' ? 'SMTP' : t === 'admin' ? 'Admin user' : t}
                 </button>
               ))}
             </div>
@@ -195,6 +197,10 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
               </p>
             )}
 
+            {tab === 'admin' && (
+              <CreateAdminTab restaurantId={restaurantId} api={api as ApiClient} />
+            )}
+
             <div className="mt-6 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
               {r.active ? (
                 <Button variant="danger" onClick={() => setConfirm('suspend')}>
@@ -247,6 +253,72 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
     <div className="flex items-center justify-between gap-4">
       <dt className="text-gray-500">{label}</dt>
       <dd className="text-right">{children}</dd>
+    </div>
+  )
+}
+
+function CreateAdminTab({ restaurantId, api }: { restaurantId: string; api: ApiClient }) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [phone, setPhone] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [created, setCreated] = useState<{ email: string; name: string } | null>(null)
+
+  async function submit() {
+    if (!name.trim() || !email.trim() || password.length < 8) {
+      setError('Name, email and a password of at least 8 characters are required.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const user = await api.superadmin.createRestaurantUser(restaurantId, {
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        phone: phone.trim() || undefined,
+      })
+      setCreated({ email: user.email, name: user.name })
+      setName('')
+      setEmail('')
+      setPassword('')
+      setPhone('')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      setError(msg.includes('409') || msg.toLowerCase().includes('email') ? 'That email is already in use.' : 'Failed to create user. Try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-gray-500">
+        Create a <strong>restaurant_owner</strong> user account for this restaurant. They will be required to change their password on first login.
+      </p>
+
+      {created && (
+        <div role="status" className="rounded-md border border-green-200 bg-green-50 p-3 text-green-800">
+          ✓ Created <strong>{created.name}</strong> ({created.email})
+        </div>
+      )}
+
+      <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+      <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
+      <Input label="Temporary password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" />
+      <Input label="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" />
+
+      {error && (
+        <p role="alert" className="text-xs text-red-600">{error}</p>
+      )}
+
+      <div className="flex justify-end">
+        <Button onClick={() => void submit()} loading={saving} disabled={!name || !email || password.length < 8}>
+          Create admin user
+        </Button>
+      </div>
     </div>
   )
 }

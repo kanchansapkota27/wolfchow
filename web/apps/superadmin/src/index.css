@@ -9,16 +9,10 @@
 @import 'tailwindcss';
 @source "./";
 
-/* Dark theme overrides for the shared wc-* CSS variables. */
-:root {
-  --wc-bg: #030712;
-  --wc-surface: #111827;
-  --wc-surface-2: #1f2937;
-  --wc-text: #f3f4f6;
-  --wc-muted: #9ca3af;
-  --wc-border: #1f2937;
-  --wc-input-bg: #1f2937;
-}
+/* The app uses a light content layout (white cards, Tailwind utilities) with
+   a dark sidebar built via Tailwind's bg-gray-900. The shared wc-* components
+   (Input, Modal, Button) default to light via the UI package — no variable
+   overrides needed here. */
 
 html,
 body,
@@ -28,8 +22,8 @@ body,
 }
 
 body {
-  background: var(--wc-bg);
-  color: var(--wc-text);
+  background: #f3f4f6;
+  color: #111827;
   font-family:
     system-ui,
     -apple-system,
