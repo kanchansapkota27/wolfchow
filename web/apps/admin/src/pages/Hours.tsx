@@ -263,7 +263,6 @@ export function Hours() {
   const [slots, setSlots] = useState<string[]>([])
   const [loadingHours, setLoadingHours] = useState(true)
   const [savingHours, setSavingHours] = useState(false)
-  const [savingScheduling, setSavingScheduling] = useState(false)
   const [showClosureModal, setShowClosureModal] = useState(false)
   const [deletingClosureId, setDeletingClosureId] = useState<string | null>(null)
   const [hoursSaved, setHoursSaved] = useState(false)
