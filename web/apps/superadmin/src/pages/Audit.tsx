@@ -83,14 +83,14 @@ function DiffPanel({
               {old_data && key in old_data ? (
                 <span className="rounded bg-red-50 px-1">{JSON.stringify((old_data)[key])}</span>
               ) : (
-                <span className="text-gray-300">—</span>
+                <span className="text-gray-400">—</span>
               )}
             </td>
             <td className="py-1 font-mono text-green-700">
               {new_data && key in new_data ? (
                 <span className="rounded bg-green-50 px-1">{JSON.stringify((new_data)[key])}</span>
               ) : (
-                <span className="text-gray-300">—</span>
+                <span className="text-gray-400">—</span>
               )}
             </td>
           </tr>
@@ -268,11 +268,11 @@ export function Audit() {
                               ) : e.restaurant_id ? (
                                 <code className="text-xs text-gray-500">{e.restaurant_id}</code>
                               ) : (
-                                <span className="text-gray-300">—</span>
+                                <span className="text-gray-400">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-gray-700">
-                              {e.table_name ?? <span className="text-gray-300">—</span>}
+                              {e.table_name ?? <span className="text-gray-400">—</span>}
                             </td>
                             <td className="px-4 py-3">
                               <Badge variant={operationVariant(e.operation)}>
@@ -280,7 +280,7 @@ export function Audit() {
                               </Badge>
                             </td>
                             <td className="px-4 py-3 text-gray-500">
-                              {e.user_name ?? <span className="text-gray-300">—</span>}
+                              {e.user_name ?? <span className="text-gray-400">—</span>}
                             </td>
                             <td className="px-4 py-3 text-gray-400">
                               {expanded === e.id

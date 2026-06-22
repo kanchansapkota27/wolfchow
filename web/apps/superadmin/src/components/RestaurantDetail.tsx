@@ -91,7 +91,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
       <aside
         role="dialog"
         aria-label={`Restaurant ${r?.display_name ?? ''}`}
-        className="h-full w-[480px] max-w-full overflow-y-auto border-l border-gray-800 bg-gray-900 p-6 text-gray-100"
+        className="h-full w-[480px] max-w-full overflow-y-auto border-l border-gray-200 bg-white p-6 text-gray-900"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between">
@@ -103,7 +103,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
               </span>
             )}
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="text-gray-400 hover:text-gray-100">
+          <button type="button" aria-label="Close" onClick={onClose} className="text-gray-400 hover:text-gray-700">
             ✕
           </button>
         </div>
@@ -123,7 +123,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
                   onClick={() => setTab(t)}
                   className={[
                     'rounded-md px-3 py-1.5 text-sm capitalize',
-                    tab === t ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800/60',
+                    tab === t ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-100',
                   ].join(' ')}
                 >
                   {t === 'smtp' ? 'SMTP' : t}
@@ -136,7 +136,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
                 <Row label="Display name">{r.display_name}</Row>
                 <Row label="Business name">{r.business_name}</Row>
                 <Row label="Slug">
-                  <code className="text-gray-300">{r.slug}</code>
+                  <code className="text-gray-600">{r.slug}</code>
                 </Row>
                 <Row label="Timezone">{r.timezone}</Row>
                 <Row label="Currency">{r.currency}</Row>
@@ -145,7 +145,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
                     aria-label="Plan"
                     value={r.plan_id ?? ''}
                     onChange={(e) => void patch({ plan_id: e.target.value })}
-                    className="rounded-md border border-gray-700 bg-gray-800 px-2 py-1"
+                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-gray-900 focus:border-blue-500 focus:outline-none"
                   >
                     {plans.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -195,7 +195,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
               </p>
             )}
 
-            <div className="mt-6 flex flex-wrap gap-2 border-t border-gray-800 pt-4">
+            <div className="mt-6 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
               {r.active ? (
                 <Button variant="danger" onClick={() => setConfirm('suspend')}>
                   Suspend
@@ -217,7 +217,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
           onClose={() => setConfirm(null)}
           title={confirm === 'suspend' ? 'Suspend restaurant' : 'Reactivate restaurant'}
         >
-          <div className="text-gray-100">
+          <div className="text-gray-700">
             <p>
               {confirm === 'suspend'
                 ? `Suspend ${r?.display_name}? This will disable their widget and admin panel.`

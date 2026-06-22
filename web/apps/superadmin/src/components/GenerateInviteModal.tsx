@@ -80,10 +80,10 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
   return (
     <Modal open={open} onClose={onClose} title="Generate invite">
       {result ? (
-        <div className="flex flex-col gap-4 text-gray-100">
-          <p className="text-sm text-gray-400">Share this link with the new restaurant:</p>
-          <div className="flex items-center gap-2 rounded-md border border-indigo-500/50 bg-indigo-950/40 p-3">
-            <code data-testid="invite-url" className="flex-1 break-all text-sm text-indigo-200">
+        <div className="flex flex-col gap-4 text-gray-700">
+          <p className="text-sm text-gray-500">Share this link with the new restaurant:</p>
+          <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3">
+            <code data-testid="invite-url" className="flex-1 break-all text-sm text-blue-700">
               {result.invite_url}
             </code>
             <Button onClick={() => void copy()}>{copied ? 'Copied!' : 'Copy'}</Button>
@@ -95,13 +95,13 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 text-gray-100">
+        <div className="flex flex-col gap-4 text-gray-700">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-300">Plan</span>
+            <span className="text-gray-500">Plan</span>
             <select
               value={planId}
               onChange={(e) => setPlanId(e.target.value)}
-              className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2"
+              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none"
             >
               {plans.map((plan) => (
                 <option key={plan.id} value={plan.id}>
@@ -121,12 +121,12 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
           />
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-300">Billing note</span>
+            <span className="text-gray-500">Billing note</span>
             <textarea
               value={billingNote}
               onChange={(e) => setBillingNote(e.target.value)}
               rows={2}
-              className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2"
+              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none"
             />
           </label>
 

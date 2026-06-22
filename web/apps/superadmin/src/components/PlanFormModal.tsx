@@ -74,7 +74,7 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
 
   return (
     <Modal open={open} onClose={onClose} title={initial ? 'Edit plan' : 'Create plan'}>
-      <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto pr-1 text-gray-100">
+      <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto pr-1 text-gray-700">
         <Input
           label="Plan name"
           value={form.name}
@@ -108,7 +108,7 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
         />
 
         <fieldset>
-          <legend className="mb-2 text-sm font-medium text-gray-300">Feature flags</legend>
+          <legend className="mb-2 text-sm font-medium text-gray-700">Feature flags</legend>
           <div className="grid grid-cols-2 gap-2">
             {FEATURE_FLAGS.map((flag) => (
               <label key={flag.key} className="flex items-center gap-2 text-sm">
@@ -126,7 +126,7 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
         </fieldset>
 
         <fieldset>
-          <legend className="mb-2 text-sm font-medium text-gray-300">Commission</legend>
+          <legend className="mb-2 text-sm font-medium text-gray-700">Commission</legend>
           <div className="flex gap-4 mb-3">
             {COMMISSION_TYPES.map((ct) => (
               <label key={ct.value} className="flex items-center gap-2 text-sm">
@@ -170,7 +170,7 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
                   ? 'Commission rate (%)'
                   : 'Commission amount ($/month)'
               }
-              className="w-full rounded border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
             />
           </div>
           <p className="mt-1 text-xs text-gray-500">
@@ -193,7 +193,7 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
         </label>
 
         <fieldset>
-          <legend className="mb-2 text-sm font-medium text-gray-300">Payment methods</legend>
+          <legend className="mb-2 text-sm font-medium text-gray-700">Payment methods</legend>
           <div className="flex gap-2">
             {PAYMENT_METHODS.map((method) => {
               const active = form.payment_methods_allowed.includes(method.value)
@@ -206,8 +206,8 @@ export function PlanFormModal({ open, initial, onClose, onSubmit }: PlanFormModa
                   className={[
                     'rounded-md border px-3 py-1.5 text-sm',
                     active
-                      ? 'border-indigo-500 bg-indigo-600 text-white'
-                      : 'border-gray-700 text-gray-300',
+                      ? 'border-blue-500 bg-blue-600 text-white'
+                      : 'border-gray-200 text-gray-700 hover:bg-gray-50',
                   ].join(' ')}
                 >
                   {method.label}
