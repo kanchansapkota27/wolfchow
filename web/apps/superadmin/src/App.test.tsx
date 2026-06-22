@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, type AuthNavigator } from '@wolfchow/auth'
 import { createApiClient, createMemorySession } from '@wolfchow/api-client'
 import { ApiProvider } from './lib/api'
+import { makeTestQueryClient } from './lib/test-utils'
 import { App } from './App'
 
-/** Unsigned JWT with the given claims (decode-only on the client). */
 function makeToken(claims: Record<string, unknown>): string {
   const enc = (obj: unknown) =>
     btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -22,13 +23,15 @@ describe('STORY-049 · App role guard', () => {
     const client = createApiClient({ baseUrl: 'http://api.test', session, fetch: vi.fn() })
 
     render(
-      <MemoryRouter>
-        <ApiProvider client={client}>
-          <AuthProvider client={client} session={session} navigator={navigator}>
-            <App />
-          </AuthProvider>
-        </ApiProvider>
-      </MemoryRouter>,
+      <QueryClientProvider client={makeTestQueryClient()}>
+        <MemoryRouter>
+          <ApiProvider client={client}>
+            <AuthProvider client={client} session={session} navigator={navigator}>
+              <App />
+            </AuthProvider>
+          </ApiProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
     )
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login'))
@@ -40,16 +43,17 @@ describe('STORY-049 · App role guard', () => {
     const client = createApiClient({ baseUrl: 'http://api.test', session, fetch: vi.fn() })
 
     render(
-      <MemoryRouter initialEntries={['/login']}>
-        <ApiProvider client={client}>
-          <AuthProvider client={client} session={session} navigator={navigator}>
-            <App />
-          </AuthProvider>
-        </ApiProvider>
-      </MemoryRouter>,
+      <QueryClientProvider client={makeTestQueryClient()}>
+        <MemoryRouter initialEntries={['/login']}>
+          <ApiProvider client={client}>
+            <AuthProvider client={client} session={session} navigator={navigator}>
+              <App />
+            </AuthProvider>
+          </ApiProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
     )
 
-    // Superadmin offers staff login only — the staff form renders, no method tabs.
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /device token/i })).not.toBeInTheDocument()
