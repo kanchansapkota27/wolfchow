@@ -5,6 +5,11 @@
 -- ── Seed restaurant owner in Supabase Auth ────────────────────────────────────
 -- Password: devpassword123
 -- Email:    admin@wolfchow.dev
+--
+-- GoTrue v2.189+ maps confirmation_token, recovery_token, email_change,
+-- email_change_token_new, email_change_token_current, reauthentication_token,
+-- and phone_change_token as non-pointer Go strings — NULL causes a scan panic.
+-- Set them all to '' here; ones with a DB default of '' are listed for clarity.
 INSERT INTO auth.users (
   id,
   instance_id,
@@ -13,6 +18,14 @@ INSERT INTO auth.users (
   email,
   encrypted_password,
   email_confirmed_at,
+  confirmation_token,
+  recovery_token,
+  email_change_token_new,
+  email_change,
+  email_change_token_current,
+  reauthentication_token,
+  phone_change,
+  phone_change_token,
   raw_app_meta_data,
   raw_user_meta_data,
   created_at,
@@ -25,6 +38,14 @@ INSERT INTO auth.users (
   'admin@wolfchow.dev',
   crypt('devpassword123', gen_salt('bf')),
   now(),
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
   jsonb_build_object(
     'provider', 'email',
     'providers', ARRAY['email']
@@ -32,7 +53,7 @@ INSERT INTO auth.users (
   '{}',
   now(),
   now()
-) ON CONFLICT (email) DO NOTHING;
+) ON CONFLICT (id) DO NOTHING;
 
 -- ── Seed restaurant ───────────────────────────────────────────────────────────
 INSERT INTO restaurants (
@@ -53,7 +74,7 @@ SELECT
   'USD',
   id
 FROM plans WHERE name = 'Growth'
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 -- ── Seed public.users profile for the owner ───────────────────────────────────
 INSERT INTO public.users (
