@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Button, Input } from '@wolfchow/ui'
 import { ApiError } from '@wolfchow/api-client'
-import { COUNTRIES } from '@wolfchow/utils'
+import { COUNTRIES, CURRENCIES } from '@wolfchow/utils'
 import { useApi } from '../lib/api'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -17,17 +17,6 @@ function slugify(value: string): string {
 
 const TIMEZONES = Intl.supportedValuesOf('timeZone')
 
-const CURRENCIES = [
-  { code: 'USD', label: 'USD — US Dollar' },
-  { code: 'EUR', label: 'EUR — Euro' },
-  { code: 'GBP', label: 'GBP — British Pound' },
-  { code: 'TRY', label: 'TRY — Turkish Lira' },
-  { code: 'AED', label: 'AED — UAE Dirham' },
-  { code: 'SAR', label: 'SAR — Saudi Riyal' },
-  { code: 'AUD', label: 'AUD — Australian Dollar' },
-  { code: 'CAD', label: 'CAD — Canadian Dollar' },
-  { code: 'INR', label: 'INR — Indian Rupee' },
-]
 
 // ── Step 1: Account ─────────────────────────────────────────────────────────
 
@@ -85,9 +74,13 @@ function Step2({ data, onChange, error }: {
   error: string | null
 }) {
   const [tzSearch, setTzSearch] = useState('')
-  const filteredTz = TIMEZONES.filter((tz) =>
-    tz.toLowerCase().includes(tzSearch.toLowerCase()),
-  ).slice(0, 30)
+  const filteredTz = (() => {
+    const results = TIMEZONES.filter((tz) =>
+      tz.toLowerCase().includes(tzSearch.toLowerCase()),
+    ).slice(0, 30)
+    if (data.timezone && !results.includes(data.timezone)) results.unshift(data.timezone)
+    return results
+  })()
 
   return (
     <div className="space-y-4">
@@ -112,7 +105,9 @@ function Step2({ data, onChange, error }: {
         </p>
       )}
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Timezone</label>
+        <label htmlFor="signup-timezone" className="mb-1 block text-sm font-medium text-gray-700">
+          Timezone
+        </label>
         <Input
           label=""
           placeholder="Search timezones…"
@@ -120,6 +115,7 @@ function Step2({ data, onChange, error }: {
           onChange={(e) => setTzSearch(e.target.value)}
         />
         <select
+          id="signup-timezone"
           className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           value={data.timezone}
           onChange={(e) => onChange({ timezone: e.target.value })}

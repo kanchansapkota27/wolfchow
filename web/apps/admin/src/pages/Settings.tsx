@@ -127,8 +127,11 @@ function RestaurantDetailsSection({ restaurant, onSave }: {
           autoComplete="address-level2"
         />
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Country</label>
+          <label htmlFor="settings-country" className="mb-1 block text-sm font-medium text-gray-700">
+            Country
+          </label>
           <select
+            id="settings-country"
             value={address.country}
             onChange={(e) => setAddress((a) => ({ ...a, country: e.target.value }))}
             autoComplete="country-name"
