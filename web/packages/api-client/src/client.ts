@@ -62,6 +62,18 @@ export interface CreateClosureInput {
   reason?: string
 }
 
+export interface PublicSettings {
+  slug: string
+  display_name: string
+  brand_colors: {
+    primary: string
+    secondary: string
+    accent: string
+    text: string
+  } | null
+  font_family: string | null
+}
+
 export type StaffPermission = 'orders:accept_reject' | 'orders:status' | 'inventory:write' | 'orders:pause'
 
 export interface StaffMember {
@@ -499,6 +511,7 @@ export function createApiClient(config: ApiClientConfig) {
   // typed against the shared contract today so apps can build against them.
   const menu = {
     getMenu: (slug: string) => apiFetch<{ categories: unknown[] }>(`/public/${slug}/menu`, { skipAuth: true }),
+    getSettings: (slug: string) => apiFetch<PublicSettings>(`/public/${slug}/settings`, { skipAuth: true }),
   }
   const orders = {
     listActive: () =>
