@@ -1,4 +1,5 @@
 export { formatCurrency } from './currency'
+export { CURRENCIES, COUNTRIES, US_STATES, CA_PROVINCES, AU_STATES, getSubdivisions } from './locales'
 export { formatDate, formatSlot } from './date'
 export { slugify } from './slug'
 export { calcPromoDiscount } from './promo'

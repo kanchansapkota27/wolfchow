@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { CommissionType, Plan } from '@wolfchow/types'
 import { Button, Input, Modal, useToast } from '@wolfchow/ui'
+import { CURRENCIES, COUNTRIES, getSubdivisions } from '@wolfchow/utils'
 import { useApi } from '../lib/api'
+
+const TIMEZONES = Intl.supportedValuesOf('timeZone')
+
+const SELECT = 'rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none w-full'
+const LABEL = 'mb-1 block text-sm text-gray-300'
 
 interface CreateRestaurantModalProps {
   open: boolean
@@ -15,11 +21,11 @@ interface FormState {
   display_name: string
   slug: string
   timezone: string
+  tzSearch: string
   currency: string
   country: string
   state: string
   plan_id: string
-  // Override commission — only sent when useOverride = true
   override_type: CommissionType
   override_value: string
 }
@@ -30,6 +36,7 @@ function empty(): FormState {
     display_name: '',
     slug: '',
     timezone: 'UTC',
+    tzSearch: '',
     currency: 'USD',
     country: '',
     state: '',
@@ -73,11 +80,17 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
       setForm((f) => {
         const next = { ...f, [key]: value }
         if (key === 'business_name' && !slugEdited) next.slug = toSlug(value)
+        if (key === 'country') next.state = ''
         return next
       })
     }
   }
 
+  const filteredTz = TIMEZONES.filter((tz) =>
+    tz.toLowerCase().includes(form.tzSearch.toLowerCase()),
+  ).slice(0, 40)
+
+  const subdivisions = getSubdivisions(form.country)
   const selectedPlan = plans.find((p) => p.id === form.plan_id)
 
   async function submit() {
@@ -107,8 +120,8 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
         display_name: form.display_name.trim() || undefined,
         slug: form.slug,
         timezone: form.timezone,
-        currency: form.currency.toUpperCase(),
-        country: form.country.trim() || undefined,
+        currency: form.currency,
+        country: form.country || undefined,
         state: form.state.trim() || undefined,
         plan_id: form.plan_id || undefined,
         override_commission_type,
@@ -158,38 +171,95 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
           helperText="Lowercase letters, numbers, and hyphens only."
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* Timezone — searchable list */}
+        <div>
+          <label className={LABEL}>Timezone</label>
           <Input
-            label="Timezone"
+            label=""
+            placeholder="Search timezones…"
+            value={form.tzSearch}
+            onChange={field('tzSearch')}
+          />
+          <select
+            aria-label="Timezone"
             value={form.timezone}
             onChange={field('timezone')}
-            placeholder="America/New_York"
-            helperText="IANA timezone (e.g. Europe/London)"
-          />
-          <Input
-            label="Currency (ISO 4217)"
+            size={4}
+            className={`mt-1 ${SELECT}`}
+          >
+            {filteredTz.map((tz) => (
+              <option key={tz} value={tz}>{tz}</option>
+            ))}
+          </select>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Selected: <span className="text-gray-300">{form.timezone}</span>
+          </p>
+        </div>
+
+        {/* Currency */}
+        <div>
+          <label htmlFor="modal-currency" className={LABEL}>Currency</label>
+          <select
+            id="modal-currency"
             value={form.currency}
             onChange={field('currency')}
-            placeholder="USD"
-            helperText="3-letter code: USD, EUR, GBP…"
-          />
+            className={SELECT}
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
         </div>
 
+        {/* Country + State row */}
         <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="Country (optional)"
-            value={form.country}
-            onChange={field('country')}
-            placeholder="United States"
-          />
-          <Input
-            label="State / Region (optional)"
-            value={form.state}
-            onChange={field('state')}
-            placeholder="California"
-          />
+          <div>
+            <label htmlFor="modal-country" className={LABEL}>Country (optional)</label>
+            <select
+              id="modal-country"
+              value={form.country}
+              onChange={field('country')}
+              className={SELECT}
+            >
+              <option value="">— Select country —</option>
+              {COUNTRIES.map((c) => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="modal-state" className={LABEL}>
+              {subdivisions ? 'State / Province' : 'State / Region'}{' '}
+              <span className="text-gray-500">(optional)</span>
+            </label>
+            {subdivisions ? (
+              <select
+                id="modal-state"
+                value={form.state}
+                onChange={field('state')}
+                className={SELECT}
+              >
+                <option value="">— Select —</option>
+                {subdivisions.map((s) => (
+                  <option key={s.abbr} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id="modal-state"
+                type="text"
+                value={form.state}
+                onChange={field('state')}
+                placeholder="Region / state"
+                className={SELECT}
+                autoComplete="address-level1"
+              />
+            )}
+          </div>
         </div>
 
+        {/* Plan */}
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-gray-300">Plan (optional)</span>
           <select

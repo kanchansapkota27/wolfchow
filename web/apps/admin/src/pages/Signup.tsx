@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Button, Input } from '@wolfchow/ui'
 import { ApiError } from '@wolfchow/api-client'
+import { COUNTRIES } from '@wolfchow/utils'
 import { useApi } from '../lib/api'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -129,9 +130,32 @@ function Step2({ data, onChange, error }: {
           ))}
         </select>
       </div>
-      <Input label="Address line 1" value={data.addressLine1} onChange={(e) => onChange({ addressLine1: e.target.value })} />
-      <Input label="City" value={data.city} onChange={(e) => onChange({ city: e.target.value })} />
-      <Input label="Country" value={data.country} onChange={(e) => onChange({ country: e.target.value })} />
+      <Input
+        label="Address line 1"
+        value={data.addressLine1}
+        onChange={(e) => onChange({ addressLine1: e.target.value })}
+        autoComplete="street-address"
+      />
+      <Input
+        label="City"
+        value={data.city}
+        onChange={(e) => onChange({ city: e.target.value })}
+        autoComplete="address-level2"
+      />
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Country</label>
+        <select
+          value={data.country}
+          onChange={(e) => onChange({ country: e.target.value })}
+          autoComplete="country-name"
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">— Select country —</option>
+          {COUNTRIES.map((c) => (
+            <option key={c.name} value={c.name}>{c.name}</option>
+          ))}
+        </select>
+      </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Currency</label>
         <select
