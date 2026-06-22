@@ -484,6 +484,13 @@ export function createApiClient(config: ApiClientConfig) {
         `/superadmin/restaurants/${id}/impersonate`,
         { method: 'POST' },
       ),
+    createRestaurantUser: (
+      restaurantId: string,
+      data: { email: string; password: string; name: string; phone?: string },
+    ) =>
+      apiFetch<{
+        user: { id: string; email: string; name: string; role: string; restaurant_id: string; force_password_change: boolean; created_at: string }
+      }>(`/superadmin/restaurants/${restaurantId}/users`, { method: 'POST', body: data }).then((r) => r.user),
     getSmtpGlobal: () =>
       apiFetch<{ config: SmtpConfig }>('/superadmin/smtp/global'),
     putSmtpGlobal: (data: SmtpGlobalInput) =>

@@ -4,6 +4,7 @@ import { formatDate } from '@wolfchow/utils'
 import { Plus } from 'lucide-react'
 import { useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
+import { useDebounce } from '../lib/useDebounce'
 import { SectionError } from '../components/SectionError'
 import { RestaurantDetail } from '../components/RestaurantDetail'
 import { CreateRestaurantModal } from '../components/CreateRestaurantModal'
@@ -17,15 +18,17 @@ export function Restaurants() {
   const [selected, setSelected] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
+  const debouncedSearch = useDebounce(search, 300)
+
   const plansAsync = useAsync(() => api.superadmin.listPlans(), [api])
   const list = useAsync(
     () =>
       api.superadmin.listRestaurants({
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         plan_id: planFilter || undefined,
         active: statusFilter || undefined,
       }),
-    [api, search, planFilter, statusFilter],
+    [api, debouncedSearch, planFilter, statusFilter],
   )
 
   const plans = plansAsync.data?.plans ?? []
@@ -52,7 +55,7 @@ export function Restaurants() {
       <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Input
-            label="Search"
+            label="Search restaurants"
             placeholder="Name or slug…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
