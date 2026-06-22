@@ -8,25 +8,19 @@ import { Restaurants } from './pages/Restaurants'
 import { Smtp } from './pages/Smtp'
 import { Billing } from './pages/Billing'
 import { Audit } from './pages/Audit'
+import { Settings } from './pages/Settings'
 
-/** Gate + shell: only platform roles get in; others are bounced to /login. */
 function ProtectedLayout() {
   return (
     <RequireRole
       roles={['superadmin', 'support']}
-      fallback={<div className="p-8 text-gray-100">Loading…</div>}
+      fallback={<div className="p-8 text-gray-600">Loading…</div>}
     >
       <Layout />
     </RequireRole>
   )
 }
 
-/**
- * Superadmin route tree. `/login` is public; everything else sits behind the
- * role gate. Section pages other than the dashboard and plans are placeholders
- * until STORY-050/052–055 land. The Router + providers live in main.tsx (and in
- * tests).
- */
 export function App() {
   return (
     <Routes>
@@ -39,6 +33,7 @@ export function App() {
         <Route path="smtp" element={<Smtp />} />
         <Route path="billing" element={<Billing />} />
         <Route path="audit" element={<Audit />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   )
