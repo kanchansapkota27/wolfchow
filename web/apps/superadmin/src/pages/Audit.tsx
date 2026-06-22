@@ -135,7 +135,14 @@ export function Audit() {
     [api, restaurantFilter, tableFilter, operationFilter, dateFrom, dateTo, page],
   )
 
-  const entries: AuditEntry[] = auditQ.data?.entries ?? []
+  const allEntries: AuditEntry[] = auditQ.data?.entries ?? []
+  const entries = search
+    ? allEntries.filter(
+        (e) =>
+          e.id.toLowerCase().includes(search.toLowerCase()) ||
+          e.operation.toLowerCase().includes(search.toLowerCase()),
+      )
+    : allEntries
   const total = auditQ.data?.total ?? 0
   const pageSize = auditQ.data?.page_size ?? 50
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
