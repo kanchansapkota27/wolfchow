@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Button, Input } from '@wolfchow/ui'
 import { ApiError } from '@wolfchow/api-client'
 import type { Restaurant } from '@wolfchow/types'
+import { COUNTRIES } from '@wolfchow/utils'
 import { useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
 
@@ -113,9 +114,35 @@ function RestaurantDetailsSection({ restaurant, onSave }: {
         <ReadonlyField label="Slug" value={restaurant.slug} hint="Contact support to change your URL slug." />
         <ReadonlyField label="Timezone" value={restaurant.timezone} hint="Contact support to change your timezone." />
         <ReadonlyField label="Currency" value={restaurant.currency} hint="Contact support to change your currency." />
-        <Input label="Address line 1" value={address.line1} onChange={(e) => setAddress((a) => ({ ...a, line1: e.target.value }))} />
-        <Input label="City" value={address.city} onChange={(e) => setAddress((a) => ({ ...a, city: e.target.value }))} />
-        <Input label="Country" value={address.country} onChange={(e) => setAddress((a) => ({ ...a, country: e.target.value }))} />
+        <Input
+          label="Address line 1"
+          value={address.line1}
+          onChange={(e) => setAddress((a) => ({ ...a, line1: e.target.value }))}
+          autoComplete="street-address"
+        />
+        <Input
+          label="City"
+          value={address.city}
+          onChange={(e) => setAddress((a) => ({ ...a, city: e.target.value }))}
+          autoComplete="address-level2"
+        />
+        <div>
+          <label htmlFor="settings-country" className="mb-1 block text-sm font-medium text-gray-700">
+            Country
+          </label>
+          <select
+            id="settings-country"
+            value={address.country}
+            onChange={(e) => setAddress((a) => ({ ...a, country: e.target.value }))}
+            autoComplete="country-name"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">— Select country —</option>
+            {COUNTRIES.map((c) => (
+              <option key={c.name} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+        </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Cuisine type</label>
