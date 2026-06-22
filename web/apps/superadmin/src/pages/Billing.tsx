@@ -11,9 +11,11 @@ import {
 } from 'recharts'
 import type { BillingMonthRow, BillingSummaryRow } from '@wolfchow/types'
 import { Button, Modal, useToast } from '@wolfchow/ui'
+import { Download } from 'lucide-react'
 import { useApi } from '../lib/api'
 import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
+import { PageHeader } from '../components/PageHeader'
 
 /** Generic numeric money display — billing summary doesn't carry per-restaurant currency. */
 function fmtMoney(value: number): string {
@@ -101,10 +103,10 @@ function BillingNoteCell({ restaurantId, initialNote, onSaved }: BillingNoteCell
         onClick={() => setEditing(true)}
         className="group flex w-full items-center gap-1 text-left"
       >
-        <span className={initialNote ? 'text-gray-300' : 'text-gray-600 italic'}>
+        <span className={initialNote ? 'text-gray-600' : 'text-gray-400 italic'}>
           {initialNote ?? 'add note…'}
         </span>
-        <span className="hidden text-gray-600 group-hover:inline">✏️</span>
+        <span className="hidden text-gray-400 group-hover:inline">✏️</span>
       </button>
     )
   }
@@ -113,7 +115,7 @@ function BillingNoteCell({ restaurantId, initialNote, onSaved }: BillingNoteCell
     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
       <input
         autoFocus
-        className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-0.5 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
+        className="w-full rounded border border-gray-200 bg-white px-2 py-0.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
@@ -127,14 +129,14 @@ function BillingNoteCell({ restaurantId, initialNote, onSaved }: BillingNoteCell
         type="button"
         onClick={() => void save()}
         disabled={busy}
-        className="shrink-0 text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+        className="shrink-0 text-xs text-blue-500 hover:text-blue-700 disabled:opacity-50"
       >
         {busy ? '…' : '✓'}
       </button>
       <button
         type="button"
         onClick={cancel}
-        className="shrink-0 text-xs text-gray-500 hover:text-gray-300"
+        className="shrink-0 text-xs text-gray-500 hover:text-gray-700"
       >
         ✕
       </button>
@@ -189,9 +191,9 @@ function MonthlyDetailModal({
         )}
         {monthlyQ.status === 'success' && chartData.length > 0 && (
           <>
-            <p className="mb-4 text-sm text-gray-400">
+            <p className="mb-4 text-sm text-gray-500">
               Commission:{' '}
-              <strong className="text-gray-200">
+              <strong className="text-gray-900">
                 {commissionType === 'fixed'
                   ? `$${(commissionValue / 100).toFixed(2)}/mo flat`
                   : `${(commissionValue / 100).toFixed(2)}% of monthly sales`}
@@ -199,40 +201,40 @@ function MonthlyDetailModal({
             </p>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="month" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} width={60} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="month" tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} width={60} />
                 <Tooltip
-                  contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 6 }}
-                  labelStyle={{ color: '#f3f4f6' }}
-                  itemStyle={{ color: '#d1d5db' }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 6 }}
+                  labelStyle={{ color: '#111827' }}
+                  itemStyle={{ color: '#374151' }}
                 />
-                <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
+                <Legend wrapperStyle={{ color: '#6b7280', fontSize: 12 }} />
                 <Bar dataKey="GMV" fill="#6366f1" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="Commission" fill="#10b981" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-            <div className="mt-4 overflow-x-auto rounded-lg border border-gray-800">
+            <div className="mt-4 overflow-x-auto overflow-hidden rounded-xl border border-gray-200">
               <table className="w-full text-left text-xs">
-                <thead className="bg-gray-900 text-gray-500">
-                  <tr>
-                    <th className="px-3 py-2">Month</th>
-                    <th className="px-3 py-2 text-right">Orders</th>
-                    <th className="px-3 py-2 text-right">GMV</th>
-                    <th className="px-3 py-2 text-right">Commission</th>
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="px-3 py-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">Month</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold tracking-wider text-gray-500 uppercase">Orders</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold tracking-wider text-gray-500 uppercase">GMV</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold tracking-wider text-gray-500 uppercase">Commission</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(monthlyQ.data?.months ?? []).map((m) => (
-                    <tr key={m.month} className="border-t border-gray-800">
-                      <td className="px-3 py-1.5 text-gray-300">
+                    <tr key={m.month} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-1.5 text-gray-900">
                         {new Date(m.month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })}
                       </td>
-                      <td className="px-3 py-1.5 text-right text-gray-300">{m.order_count}</td>
-                      <td className="px-3 py-1.5 text-right text-gray-300">
+                      <td className="px-3 py-1.5 text-right text-gray-600">{m.order_count}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-600">
                         {fmtMoney(Number(m.order_value))}
                       </td>
-                      <td className="px-3 py-1.5 text-right text-green-400">
+                      <td className="px-3 py-1.5 text-right text-green-600">
                         {fmtMoney(Number(m.estimated_commission))}
                       </td>
                     </tr>
@@ -277,21 +279,21 @@ export function Billing() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Billing & Commission</h1>
-          {data?.cached && (
-            <p className="mt-0.5 text-xs text-gray-500">Cached — refreshes every 5 min</p>
-          )}
-        </div>
-        <Button
-          variant="secondary"
-          disabled={rows.length === 0}
-          onClick={() => exportCsv(rows)}
-        >
-          Export CSV
-        </Button>
-      </div>
+      <PageHeader
+        title="Billing & Commission"
+        subtitle={data?.cached ? 'Cached — refreshes every 5 min' : 'Per-restaurant commission and order volume.'}
+        action={
+          <button
+            type="button"
+            disabled={rows.length === 0}
+            onClick={() => exportCsv(rows)}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+          >
+            <Download size={15} />
+            Export CSV
+          </button>
+        }
+      />
 
       {/* Totals row */}
       {status === 'success' && rows.length > 0 && (
@@ -301,9 +303,9 @@ export function Billing() {
             { label: 'GMV (30d)', value: fmtMoney(totals.gmv30d) },
             { label: 'Est. Commission (30d)', value: fmtMoney(totals.commission30d) },
           ].map((card) => (
-            <div key={card.label} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-              <p className="text-xs text-gray-400">{card.label}</p>
-              <p className="mt-1 text-xl font-semibold text-gray-100">{card.value}</p>
+            <div key={card.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="text-xs text-gray-500">{card.label}</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{card.value}</p>
             </div>
           ))}
         </div>
@@ -313,17 +315,17 @@ export function Billing() {
       {status === 'error' && <SectionError message={String(error)} onRetry={reload} />}
 
       {status === 'success' && (
-        <div className="overflow-x-auto rounded-lg border border-gray-800">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="bg-gray-900 text-gray-400">
-              <tr>
-                <th className="px-4 py-2">Restaurant</th>
-                <th className="px-4 py-2">Commission</th>
-                <th className="px-4 py-2 min-w-[160px]">Billing Note</th>
-                <th className="px-4 py-2 text-right">Orders 30d</th>
-                <th className="px-4 py-2 text-right">GMV 30d</th>
-                <th className="px-4 py-2 text-right">Est. Commission 30d</th>
-                <th className="px-4 py-2" />
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Restaurant</th>
+                <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Commission</th>
+                <th className="px-4 py-3 min-w-[160px] text-xs font-semibold tracking-wider text-gray-500 uppercase">Billing Note</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold tracking-wider text-gray-500 uppercase">Orders 30d</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold tracking-wider text-gray-500 uppercase">GMV 30d</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold tracking-wider text-gray-500 uppercase">Est. Commission 30d</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -335,12 +337,12 @@ export function Billing() {
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.id} className="border-t border-gray-800">
+                  <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-2">
-                      <div className="font-medium text-gray-100">{r.display_name}</div>
+                      <div className="font-medium text-gray-900">{r.display_name}</div>
                       <div className="text-xs text-gray-500">{r.slug}</div>
                     </td>
-                    <td className="px-4 py-2 text-gray-300">
+                    <td className="px-4 py-2 text-gray-600">
                       {r.effective_commission_type === 'fixed'
                         ? `$${(r.effective_commission_value / 100).toFixed(2)}/mo`
                         : `${(r.effective_commission_value / 100).toFixed(2)}%`}
@@ -352,11 +354,11 @@ export function Billing() {
                         onSaved={(note) => setNotes((n) => ({ ...n, [r.id]: note }))}
                       />
                     </td>
-                    <td className="px-4 py-2 text-right text-gray-300">{r.total_orders_30d}</td>
-                    <td className="px-4 py-2 text-right text-gray-300">
+                    <td className="px-4 py-2 text-right text-gray-600">{r.total_orders_30d}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">
                       {fmtMoney(Number(r.total_order_value_30d))}
                     </td>
-                    <td className="px-4 py-2 text-right font-medium text-green-400">
+                    <td className="px-4 py-2 text-right font-medium text-green-600">
                       {fmtMoney(Number(r.estimated_commission_30d))}
                     </td>
                     <td className="px-4 py-2 text-right">
