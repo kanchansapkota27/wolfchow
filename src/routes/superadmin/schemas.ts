@@ -113,3 +113,13 @@ export const smtpOverrideSchema = smtpGlobalSchema.extend({
 
 export type SmtpGlobalInput = z.infer<typeof smtpGlobalSchema>
 export type SmtpOverrideInput = z.infer<typeof smtpOverrideSchema>
+
+/** Create a restaurant owner account directly (superadmin-provisioned). */
+export const createRestaurantUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(72),
+  name: z.string().min(1).max(255),
+  phone: z.string().max(50).optional(),
+})
+
+export type CreateRestaurantUserInput = z.infer<typeof createRestaurantUserSchema>
