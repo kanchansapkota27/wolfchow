@@ -1,16 +1,23 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Menu } from './Menu'
-import type { MenuCategory, MenuItem } from '@wolfchow/types'
+import type { MenuCategory, MenuItem, ModifierGroup } from '@wolfchow/types'
 
 const mockListCategories = vi.fn()
 const mockCreateCategory = vi.fn()
 const mockUpdateCategory = vi.fn()
 const mockDeleteCategory = vi.fn()
+const mockReorderCategories = vi.fn()
 const mockListItems = vi.fn()
 const mockCreateItem = vi.fn()
 const mockUpdateItem = vi.fn()
 const mockDeleteItem = vi.fn()
+const mockGetItemImageUrl = vi.fn()
+const mockListModifierGroups = vi.fn()
+const mockCreateModifierGroup = vi.fn()
+const mockUpdateModifierGroup = vi.fn()
+const mockDeleteModifierGroup = vi.fn()
+const mockCreateModifierOption = vi.fn()
 
 vi.mock('../lib/api', () => ({
   useApi: () => ({
@@ -19,10 +26,17 @@ vi.mock('../lib/api', () => ({
       createCategory: mockCreateCategory,
       updateCategory: mockUpdateCategory,
       deleteCategory: mockDeleteCategory,
+      reorderCategories: mockReorderCategories,
       listItems: mockListItems,
       createItem: mockCreateItem,
       updateItem: mockUpdateItem,
       deleteItem: mockDeleteItem,
+      getItemImageUrl: mockGetItemImageUrl,
+      listModifierGroups: mockListModifierGroups,
+      createModifierGroup: mockCreateModifierGroup,
+      updateModifierGroup: mockUpdateModifierGroup,
+      deleteModifierGroup: mockDeleteModifierGroup,
+      createModifierOption: mockCreateModifierOption,
     },
   }),
 }))
@@ -65,6 +79,12 @@ beforeEach(() => {
   vi.resetAllMocks()
   mockListCategories.mockResolvedValue([CAT1, CAT2])
   mockListItems.mockResolvedValue([ITEM1])
+  mockReorderCategories.mockResolvedValue({ ok: true })
+  mockUpdateItem.mockResolvedValue({ ...ITEM1 })
+  mockListModifierGroups.mockResolvedValue([])
+  mockCreateModifierGroup.mockResolvedValue({ id: 'grp1', name: 'Size', type: 'single', required: false, options: [] })
+  mockCreateModifierOption.mockResolvedValue({ id: 'opt1', name: 'Small', price_delta: 0, available: true })
+  mockDeleteModifierGroup.mockResolvedValue(undefined)
 })
 
 describe('STORY-058 · Menu management UI', () => {
@@ -122,5 +142,146 @@ describe('STORY-058 · Menu management UI', () => {
     const dialogDeleteBtn = deleteButtons.find((el) => el.closest('[role="dialog"]'))!
     fireEvent.click(dialogDeleteBtn)
     await waitFor(() => expect(mockDeleteItem).toHaveBeenCalledWith('item1'))
+  })
+
+  it('reorder categories: move-up calls reorderCategories with swapped sort_order', async () => {
+    render(<Menu />)
+    await screen.findAllByText('Mains')
+    // CAT2 is at index 1 — its move-up button swaps it above CAT1
+    const moveUpBtn = screen.getByLabelText('Move Mains up')
+    fireEvent.click(moveUpBtn)
+    await waitFor(() =>
+      expect(mockReorderCategories).toHaveBeenCalledWith([
+        { id: 'cat2', sort_order: 0 },
+        { id: 'cat1', sort_order: 1 },
+      ]),
+    )
+  })
+
+  it('reorder categories: first item move-up button is disabled', async () => {
+    render(<Menu />)
+    await screen.findAllByText('Starters')
+    const moveUpBtn = screen.getByLabelText('Move Starters up')
+    expect((moveUpBtn as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('out-of-stock timer: restore_at input shown when availability is out_of_stock', async () => {
+    render(<Menu />)
+    await waitFor(() => screen.getByText('+ Add item'))
+    fireEvent.click(screen.getByText('+ Add item'))
+    // Select "Out of Stock" radio
+    const outOfStockRadio = screen.getByDisplayValue('out_of_stock')
+    fireEvent.click(outOfStockRadio)
+    await waitFor(() => screen.getByTestId('restore-at-input'))
+    expect(screen.getByTestId('restore-at-input')).toBeTruthy()
+  })
+
+  it('out-of-stock timer: restore_at NOT shown for in_stock', async () => {
+    render(<Menu />)
+    await waitFor(() => screen.getByText('+ Add item'))
+    fireEvent.click(screen.getByText('+ Add item'))
+    // Default is in_stock — restore-at should not be visible
+    expect(screen.queryByTestId('restore-at-input')).toBeNull()
+  })
+
+  it('dietary tags: toggle selects and deselects tag', async () => {
+    render(<Menu />)
+    await waitFor(() => screen.getByText('+ Add item'))
+    fireEvent.click(screen.getByText('+ Add item'))
+    // The modal has Vegan as a button; ITEM1 also shows a Vegan badge on the card.
+    // Find the button specifically (tagName='BUTTON') within the dialog.
+    const dialog = screen.getByRole('dialog', { name: 'Add item' })
+    const veganBtn = Array.from(dialog.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Vegan',
+    )!
+    expect(veganBtn).toBeTruthy()
+    fireEvent.click(veganBtn)
+    expect(veganBtn.className).toContain('border-indigo-600')
+    fireEvent.click(veganBtn)
+    expect(veganBtn.className).not.toContain('border-indigo-600')
+  })
+
+  it('availability quick-toggle: clicking badge calls updateItem with new state', async () => {
+    render(<Menu />)
+    await waitFor(() => screen.getByText('Bruschetta'))
+    // The availability badge for ITEM1 (in_stock) — click it
+    const badge = screen.getByLabelText('Availability: in_stock')
+    fireEvent.click(badge)
+    // The dropdown should show options
+    await waitFor(() => screen.getByText('Out of Stock'))
+    fireEvent.click(screen.getByText('Out of Stock'))
+    await waitFor(() =>
+      expect(mockUpdateItem).toHaveBeenCalledWith('item1', { availability_state: 'out_of_stock' }),
+    )
+  })
+
+  it('modifier groups: add group calls createModifierGroup', async () => {
+    render(<Menu />)
+    await waitFor(() => screen.getByText('Bruschetta'))
+    // Open edit modal by clicking the item card's role="button" div
+    const cards = screen.getAllByRole('button', { name: undefined })
+    const cardDiv = screen.getByText('Bruschetta').closest('[role="button"]')!
+    fireEvent.click(cardDiv)
+    // Modifier groups section appears (item.id = 'item1' is truthy)
+    await waitFor(() => screen.getByText('Modifier groups'))
+    fireEvent.click(screen.getByText('+ Add group'))
+    const groupNameInput = screen.getByLabelText('New modifier group name')
+    fireEvent.change(groupNameInput, { target: { value: 'Size' } })
+    fireEvent.click(screen.getByText('Add group'))
+    await waitFor(() =>
+      expect(mockCreateModifierGroup).toHaveBeenCalledWith(
+        'item1',
+        expect.objectContaining({ name: 'Size', type: 'single', required: false }),
+      ),
+    )
+  })
+
+  it('variants: cannot delete the last variant', async () => {
+    render(<Menu />)
+    await waitFor(() => screen.getByText('+ Add item'))
+    fireEvent.click(screen.getByText('+ Add item'))
+    // Enable variants
+    const variantsCheckbox = screen.getByRole('checkbox', {
+      name: 'This item has multiple sizes / variants',
+    })
+    fireEvent.click(variantsCheckbox)
+    // Add one variant — now there is exactly 1
+    fireEvent.click(screen.getByText('+ Add variant'))
+    // With exactly 1 variant, the aria-label indicates it cannot be deleted and the button is disabled
+    const deleteVariantBtn = screen.getByLabelText('Cannot delete last variant')
+    expect((deleteVariantBtn as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('modifier group add option: calls createModifierOption', async () => {
+    const GROUP: ModifierGroup = {
+      id: 'grp1', restaurant_id: 'r1', item_id: 'item1',
+      name: 'Size', type: 'single', required: false,
+      availability_state: 'in_stock', sort_order: 0,
+      options: [],
+    }
+    mockListModifierGroups.mockResolvedValue([GROUP])
+    render(<Menu />)
+    await waitFor(() => screen.getByText('Bruschetta'))
+    const cardDiv = screen.getByText('Bruschetta').closest('[role="button"]')!
+    fireEvent.click(cardDiv)
+    await waitFor(() => screen.getByText('Size'))
+    // Expand the group — use the first ▶ expand button inside the modifier groups section
+    const expandBtns = screen.getAllByLabelText('Expand')
+    fireEvent.click(expandBtns[0])
+    await waitFor(() => screen.getByText('+ Add option'))
+    fireEvent.click(screen.getByText('+ Add option'))
+    fireEvent.change(screen.getByLabelText('New option name'), { target: { value: 'Small' } })
+    fireEvent.change(screen.getByLabelText('Price delta'), { target: { value: '0' } })
+    // The add-option form has a plain text "Save" button; the modal footer also has one.
+    // Pick the first non-disabled Save button within the expanded group area.
+    const saveBtns = screen.getAllByRole('button', { name: 'Save' })
+    const optionSaveBtn = saveBtns.find((b) => !(b as HTMLButtonElement).disabled && b.closest('.rounded-md.border'))!
+    fireEvent.click(optionSaveBtn)
+    await waitFor(() =>
+      expect(mockCreateModifierOption).toHaveBeenCalledWith(
+        'item1', 'grp1',
+        expect.objectContaining({ name: 'Small' }),
+      ),
+    )
   })
 })
