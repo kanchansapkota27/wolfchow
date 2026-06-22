@@ -6,8 +6,8 @@ import { useApi } from '../lib/api'
 
 const TIMEZONES = Intl.supportedValuesOf('timeZone')
 
-const SELECT = 'rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none w-full'
-const LABEL = 'mb-1 block text-sm text-gray-300'
+const SELECT = 'rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none w-full'
+const LABEL = 'mb-1 block text-sm text-gray-700'
 
 interface CreateRestaurantModalProps {
   open: boolean
@@ -261,11 +261,11 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
 
         {/* Plan */}
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-gray-300">Plan (optional)</span>
+          <span className="text-gray-700">Plan (optional)</span>
           <select
             value={form.plan_id}
             onChange={field('plan_id')}
-            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-gray-100"
+            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none"
           >
             <option value="">— No plan —</option>
             {plans.map((p) => (
@@ -289,14 +289,14 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
         </label>
 
         {/* Commission override */}
-        <div className="rounded-lg border border-gray-800 p-3">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={useOverride}
               onChange={(e) => setUseOverride(e.target.checked)}
             />
-            <span className="text-gray-300">Override commission for this restaurant</span>
+            <span className="text-gray-700">Override commission for this restaurant</span>
           </label>
 
           {useOverride && (
@@ -333,7 +333,7 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
                     }))
                   }
                   aria-label={form.override_type === 'percentage' ? 'Override rate (%)' : 'Override fee ($/month)'}
-                  className="w-full rounded border border-gray-700 bg-gray-800 py-1.5 pl-8 pr-3 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
                 />
               </div>
             </div>

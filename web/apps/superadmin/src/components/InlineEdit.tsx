@@ -21,7 +21,7 @@ export function InlineEdit({ value, onSave, ariaLabel, type = 'text', placeholde
       <button
         type="button"
         aria-label={ariaLabel}
-        className="rounded px-2 py-1 text-left text-gray-100 hover:bg-gray-800"
+        className="rounded px-2 py-1 text-left text-gray-700 hover:bg-gray-100"
         onClick={() => {
           setDraft(value)
           setEditing(true)
