@@ -53,7 +53,7 @@ INSERT INTO auth.users (
   '{}',
   now(),
   now()
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (email) DO NOTHING;
 
 -- ── Seed restaurant ───────────────────────────────────────────────────────────
 INSERT INTO restaurants (
@@ -74,7 +74,7 @@ SELECT
   'USD',
   id
 FROM plans WHERE name = 'Growth'
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (slug) DO NOTHING;
 
 -- ── Seed public.users profile for the owner ───────────────────────────────────
 INSERT INTO public.users (
