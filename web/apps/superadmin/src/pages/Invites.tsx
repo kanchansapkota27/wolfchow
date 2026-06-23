@@ -3,8 +3,8 @@ import type { InviteStatus, InviteSummary } from '@wolfchow/types'
 import { Badge, type BadgeVariant, Button, Modal } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
 import { Plus, Filter, Copy } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
 import { GenerateInviteModal } from '../components/GenerateInviteModal'
 import { PageHeader } from '../components/PageHeader'
@@ -21,13 +21,17 @@ type Filter = (typeof FILTERS)[number]
 
 export function Invites() {
   const api = useApi()
-  const { status, data, reload } = useAsync(async () => {
-    const [invites, plans] = await Promise.all([
-      api.superadmin.listInvites(),
-      api.superadmin.listPlans(),
-    ])
-    return { invites: invites.invites, plans: plans.plans }
-  }, [api])
+  const queryClient = useQueryClient()
+  const { status, data } = useQuery({
+    queryKey: ['invites'],
+    queryFn: async () => {
+      const [invites, plans] = await Promise.all([
+        api.superadmin.listInvites(),
+        api.superadmin.listPlans(),
+      ])
+      return { invites: invites.invites, plans: plans.plans }
+    },
+  })
 
   const [statusDropdown, setStatusDropdown] = useState('all')
   const [search, setSearch] = useState('')
@@ -56,7 +60,7 @@ export function Invites() {
     try {
       await api.superadmin.revokeInvite(revoking.id)
       setRevoking(null)
-      reload()
+      await queryClient.invalidateQueries({ queryKey: ['invites'] })
     } finally {
       setRevokeBusy(false)
     }
@@ -113,8 +117,8 @@ export function Invites() {
         </div>
       </div>
 
-      {status === 'loading' && <p className="text-sm text-gray-500">Loading invites…</p>}
-      {status === 'error' && <SectionError onRetry={reload} />}
+      {status === 'pending' && <p className="text-sm text-gray-500">Loading invites…</p>}
+      {status === 'error' && <SectionError />}
 
       {status === 'success' && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -185,7 +189,7 @@ export function Invites() {
       <GenerateInviteModal
         open={genOpen}
         plans={data?.plans ?? []}
-        onClose={() => { setGenOpen(false); reload() }}
+        onClose={() => { setGenOpen(false); void queryClient.invalidateQueries({ queryKey: ['invites'] }) }}
         onCreate={(input) => api.superadmin.createInvite(input)}
       />
 
