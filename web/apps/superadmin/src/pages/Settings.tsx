@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Lock, Zap, Database, Eye, EyeOff, RotateCcw, Save } from 'lucide-react'
 import { useToast } from '@wolfchow/ui'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SectionError } from '../components/SectionError'
 import { PageHeader } from '../components/PageHeader'
 
@@ -36,11 +36,12 @@ function settingsToForm(s: PlatformSettings): FormState {
 export function Settings() {
   const api = useApi()
   const { notify } = useToast()
+  const queryClient = useQueryClient()
 
-  const { status, data, reload } = useAsync(
-    () => api.superadmin.getSettings(),
-    [api],
-  )
+  const { status, data } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.superadmin.getSettings(),
+  })
 
   const [form, setForm] = useState<FormState | null>(null)
   const [showSecret, setShowSecret] = useState(false)
@@ -48,9 +49,9 @@ export function Settings() {
   const [regenBusy, setRegenBusy] = useState(false)
 
   // Initialise form once data loads (only on first load)
-  if (status === 'success' && data && form === null) {
-    setForm(settingsToForm(data.settings))
-  }
+  useEffect(() => {
+    if (data && form === null) setForm(settingsToForm(data.settings))
+  }, [data, form])
 
   function field<K extends keyof FormState>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -69,7 +70,7 @@ export function Settings() {
         r2_public_domain: form.r2_public_domain,
       })
       notify('success', 'Platform settings saved.')
-      reload()
+      await queryClient.invalidateQueries({ queryKey: ['settings'] })
     } catch {
       notify('error', 'Failed to save settings.')
     } finally {
@@ -84,7 +85,7 @@ export function Settings() {
       // this will fail. Fallback: use api.superadmin.updateSettings({ webhook_signing_secret: '' })
       await api.superadmin.regenerateWebhookSecret()
       notify('success', 'Webhook signing secret regenerated.')
-      reload()
+      await queryClient.invalidateQueries({ queryKey: ['settings'] })
     } catch {
       notify('error', 'Failed to regenerate secret.')
     } finally {
@@ -103,8 +104,8 @@ export function Settings() {
         subtitle="Configure global security, feature toggles, and system-wide defaults."
       />
 
-      {status === 'loading' && <p className="text-sm text-gray-500">Loading settings…</p>}
-      {status === 'error' && <SectionError onRetry={reload} />}
+      {status === 'pending' && <p className="text-sm text-gray-500">Loading settings…</p>}
+      {status === 'error' && <SectionError onRetry={() => queryClient.invalidateQueries({ queryKey: ['settings'] })} />}
 
       {status === 'success' && form && (
         <>
