@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ApiClient } from '@wolfchow/api-client'
 import type { RestaurantListItem, SmtpConfig, SmtpOverrideItem } from '@wolfchow/types'
-import { ToastProvider } from '@wolfchow/ui'
-import { ApiProvider } from '../lib/api'
+import { renderWithQuery } from '../lib/test-utils'
 import { Smtp } from './Smtp'
 
 type SuperadminApi = ApiClient['superadmin']
@@ -63,13 +62,7 @@ function fakeClient(superadmin: Partial<SuperadminApi>): ApiClient {
 }
 
 function renderSmtp(client: ApiClient) {
-  return render(
-    <ToastProvider>
-      <ApiProvider client={client}>
-        <Smtp />
-      </ApiProvider>
-    </ToastProvider>,
-  )
+  return renderWithQuery(<Smtp />, client)
 }
 
 const listRestaurants = vi

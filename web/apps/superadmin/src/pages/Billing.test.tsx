@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ApiClient } from '@wolfchow/api-client'
 import type { BillingMonthRow, BillingSummaryRow } from '@wolfchow/types'
-import { ToastProvider } from '@wolfchow/ui'
-import { ApiProvider } from '../lib/api'
+import { renderWithQuery } from '../lib/test-utils'
 import { Billing } from './Billing'
 
 type SuperadminApi = ApiClient['superadmin']
@@ -42,13 +41,7 @@ function fakeClient(superadmin: Partial<SuperadminApi>): ApiClient {
 }
 
 function renderBilling(client: ApiClient) {
-  return render(
-    <ToastProvider>
-      <ApiProvider client={client}>
-        <Billing />
-      </ApiProvider>
-    </ToastProvider>,
-  )
+  return renderWithQuery(<Billing />, client)
 }
 
 describe('STORY-054 · Billing UI — summary table', () => {
@@ -226,7 +219,9 @@ describe('STORY-054 · Billing UI — CSV export', () => {
 
     renderBilling(client)
 
-    const btn = await screen.findByRole('button', { name: 'Export CSV' })
+    // Wait for data to load before asserting the button is enabled
+    await screen.findByText('The Burger Place')
+    const btn = screen.getByRole('button', { name: 'Export CSV' })
     expect(btn).not.toBeDisabled()
   })
 })

@@ -12,8 +12,8 @@ import {
 import type { BillingMonthRow, BillingSummaryRow } from '@wolfchow/types'
 import { Button, Modal, useToast } from '@wolfchow/ui'
 import { Download } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
 import { PageHeader } from '../components/PageHeader'
 
@@ -162,15 +162,13 @@ function MonthlyDetailModal({
   onClose,
 }: MonthlyDetailModalProps) {
   const api = useApi()
-  const monthlyQ = useAsync(
-    () =>
-      restaurantId
-        ? api.superadmin.getRestaurantBilling(restaurantId)
-        : Promise.resolve({ months: [] }),
-    [api, restaurantId],
-  )
+  const { status: monthlyStatus, data: monthlyData } = useQuery({
+    queryKey: ['restaurant-billing', restaurantId],
+    queryFn: () => api.superadmin.getRestaurantBilling(restaurantId!),
+    enabled: restaurantId !== null,
+  })
 
-  const chartData = (monthlyQ.data?.months ?? []).map((m) => ({
+  const chartData = (monthlyData?.months ?? []).map((m) => ({
     month: new Date(m.month).toLocaleDateString('en', { month: 'short', year: '2-digit' }),
     'GMV': Number(m.order_value),
     'Commission': Number(m.estimated_commission),
@@ -180,16 +178,16 @@ function MonthlyDetailModal({
   return (
     <Modal open={restaurantId !== null} onClose={onClose} title={`${restaurantName} — Monthly`}>
       <div className="min-h-[320px]">
-        {monthlyQ.status === 'loading' && (
+        {monthlyStatus === 'pending' && (
           <p className="py-8 text-center text-gray-400">Loading…</p>
         )}
-        {monthlyQ.status === 'error' && (
-          <SectionError onRetry={monthlyQ.reload} />
+        {monthlyStatus === 'error' && (
+          <SectionError onRetry={() => {}} />
         )}
-        {monthlyQ.status === 'success' && chartData.length === 0 && (
+        {monthlyStatus === 'success' && chartData.length === 0 && (
           <p className="py-8 text-center text-gray-500">No captured orders yet.</p>
         )}
-        {monthlyQ.status === 'success' && chartData.length > 0 && (
+        {monthlyStatus === 'success' && chartData.length > 0 && (
           <>
             <p className="mb-4 text-sm text-gray-500">
               Commission:{' '}
@@ -225,7 +223,7 @@ function MonthlyDetailModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {(monthlyQ.data?.months ?? []).map((m) => (
+                  {(monthlyData?.months ?? []).map((m) => (
                     <tr key={m.month} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-1.5 text-gray-900">
                         {new Date(m.month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })}
@@ -253,10 +251,10 @@ function MonthlyDetailModal({
 
 export function Billing() {
   const api = useApi()
-  const { status, data, error, reload } = useAsync(
-    () => api.superadmin.getBilling(),
-    [api],
-  )
+  const { status, data, error } = useQuery({
+    queryKey: ['billing'],
+    queryFn: () => api.superadmin.getBilling(),
+  })
 
   // Local billing_note state so inline edits update immediately without re-fetch
   const [notes, setNotes] = useState<Record<string, string | null>>({})
@@ -311,8 +309,8 @@ export function Billing() {
         </div>
       )}
 
-      {status === 'loading' && <p className="text-gray-400">Loading…</p>}
-      {status === 'error' && <SectionError message={String(error)} onRetry={reload} />}
+      {status === 'pending' && <p className="text-gray-400">Loading…</p>}
+      {status === 'error' && <SectionError message={String(error)} onRetry={() => {}} />}
 
       {status === 'success' && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
