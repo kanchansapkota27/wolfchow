@@ -162,7 +162,7 @@ function MonthlyDetailModal({
   onClose,
 }: MonthlyDetailModalProps) {
   const api = useApi()
-  const { status: monthlyStatus, data: monthlyData } = useQuery({
+  const { status: monthlyStatus, data: monthlyData, refetch: refetchMonthly } = useQuery({
     queryKey: ['restaurant-billing', restaurantId],
     queryFn: () => api.superadmin.getRestaurantBilling(restaurantId!),
     enabled: restaurantId !== null,
@@ -182,7 +182,7 @@ function MonthlyDetailModal({
           <p className="py-8 text-center text-gray-400">Loading…</p>
         )}
         {monthlyStatus === 'error' && (
-          <SectionError onRetry={() => {}} />
+          <SectionError onRetry={() => void refetchMonthly()} />
         )}
         {monthlyStatus === 'success' && chartData.length === 0 && (
           <p className="py-8 text-center text-gray-500">No captured orders yet.</p>
@@ -251,7 +251,7 @@ function MonthlyDetailModal({
 
 export function Billing() {
   const api = useApi()
-  const { status, data, error } = useQuery({
+  const { status, data, error, refetch } = useQuery({
     queryKey: ['billing'],
     queryFn: () => api.superadmin.getBilling(),
   })
@@ -310,7 +310,7 @@ export function Billing() {
       )}
 
       {status === 'pending' && <p className="text-gray-400">Loading…</p>}
-      {status === 'error' && <SectionError message={String(error)} onRetry={() => {}} />}
+      {status === 'error' && <SectionError message={String(error)} onRetry={() => void refetch()} />}
 
       {status === 'success' && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
