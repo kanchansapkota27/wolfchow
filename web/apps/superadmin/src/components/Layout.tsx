@@ -28,7 +28,7 @@ const NAV = [
 export function Layout() {
   const { user, logout } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const initial = (user?.email ?? 'S')[0].toUpperCase()
+  const initial = (user?.email?.[0] ?? 'S').toUpperCase()
 
   const sidebarContent = (
     <div className="flex h-full w-64 flex-col bg-[#1e2235]">
@@ -42,11 +42,11 @@ export function Layout() {
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 px-3 py-2">
-        {NAV.map(({ to, label, icon: Icon, end }) => (
+        {NAV.map(({ to, label, icon: Icon, ...rest }) => (
           <NavLink
             key={to}
             to={to}
-            end={end}
+            end={'end' in rest ? rest.end : undefined}
             onClick={() => setDrawerOpen(false)}
             className={({ isActive }) =>
               [

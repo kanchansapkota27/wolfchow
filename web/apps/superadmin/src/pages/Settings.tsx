@@ -40,7 +40,7 @@ export function Settings() {
 
   const { status, data } = useQuery({
     queryKey: ['settings'],
-    queryFn: () => api.superadmin.getSettings(),
+    queryFn: () => api.superadmin.getPlatformSettings(),
   })
 
   const [form, setForm] = useState<FormState | null>(null)
@@ -63,7 +63,7 @@ export function Settings() {
     if (!form) return
     setBusy(true)
     try {
-      await api.superadmin.updateSettings({
+      await api.superadmin.updatePlatformSettings({
         jwt_expiry_minutes: parseInt(form.jwt_expiry_minutes, 10),
         global_rate_limit: parseInt(form.global_rate_limit, 10),
         maintenance_mode: form.maintenance_mode,

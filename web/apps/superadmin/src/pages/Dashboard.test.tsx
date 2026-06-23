@@ -14,13 +14,14 @@ function fakeClient(superadmin: Partial<SuperadminApi>): ApiClient {
 describe('STORY-049 · Dashboard', () => {
   it('summary cards render with values after fetch', async () => {
     const client = fakeClient({
-      getBilling: vi.fn(async () => ({
+      getBilling: vi.fn<SuperadminApi['getBilling']>().mockResolvedValue({
         summary: [
-          { total_orders_30d: 10, estimated_commission_30d: 5 },
-          { total_orders_30d: 5, estimated_commission_30d: 2.5 },
-          { total_orders_30d: 0, estimated_commission_30d: 0 },
+          { total_orders_30d: 10, estimated_commission_30d: 5 } as never,
+          { total_orders_30d: 5, estimated_commission_30d: 2.5 } as never,
+          { total_orders_30d: 0, estimated_commission_30d: 0 } as never,
         ],
-      })),
+        cached: false,
+      }),
       listRestaurants: vi.fn(async () => ({ restaurants: [], page: 1, page_size: 20, total: 2 })),
     })
 
@@ -45,7 +46,7 @@ describe('STORY-049 · Dashboard', () => {
     const getBilling = vi
       .fn<SuperadminApi['getBilling']>()
       .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce({ summary: [] })
+      .mockResolvedValueOnce({ summary: [], cached: false })
     const listRestaurants = vi.fn(async () => ({ restaurants: [], page: 1, page_size: 20, total: 0 }))
     const client = fakeClient({ getBilling, listRestaurants })
 

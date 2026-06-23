@@ -32,6 +32,9 @@ function plan(over: Partial<Plan> = {}): Plan {
       scheduled_orders_enabled: false,
     },
     payment_methods_allowed: ['card'],
+    commission_type: 'percentage',
+    commission_value: 500,
+    is_public: true,
     created_at: '2026-01-01T00:00:00Z',
     ...over,
   }
