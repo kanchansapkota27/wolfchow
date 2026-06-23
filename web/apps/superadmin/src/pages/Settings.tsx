@@ -51,7 +51,8 @@ export function Settings() {
   // Initialise form once data loads (only on first load)
   useEffect(() => {
     if (data && form === null) setForm(settingsToForm(data.settings))
-  }, [data, form])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
 
   function field<K extends keyof FormState>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
