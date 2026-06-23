@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ApiClient } from '@wolfchow/api-client'
 import type { AuditEntry, RestaurantListItem } from '@wolfchow/types'
-import { ToastProvider } from '@wolfchow/ui'
-import { ApiProvider } from '../lib/api'
+import { renderWithQuery } from '../lib/test-utils'
 import { Audit } from './Audit'
 
 type SuperadminApi = ApiClient['superadmin']
@@ -50,13 +49,7 @@ function fakeClient(superadmin: Partial<SuperadminApi>): ApiClient {
 }
 
 function renderAudit(client: ApiClient) {
-  return render(
-    <ToastProvider>
-      <ApiProvider client={client}>
-        <Audit />
-      </ApiProvider>
-    </ToastProvider>,
-  )
+  return renderWithQuery(<Audit />, client)
 }
 
 describe('STORY-056 · Audit log viewer UI', () => {
@@ -67,8 +60,9 @@ describe('STORY-056 · Audit log viewer UI', () => {
 
     renderAudit(fakeClient({ listAudit, listRestaurants }))
 
-    // Dropdown should be populated with restaurant name
+    // Wait for restaurants data to load (option populated by TQ query)
     const select = await screen.findByRole('combobox', { name: /filter by restaurant/i })
+    await screen.findByRole('option', { name: 'The Burger Place' })
     expect(select).toBeInTheDocument()
     await userEvent.selectOptions(select, 'rest-abc')
 
@@ -86,8 +80,8 @@ describe('STORY-056 · Audit log viewer UI', () => {
 
     const { container } = renderAudit(fakeClient({ listAudit, listRestaurants }))
 
-    // Wait for the audit table to render (auditQ resolved)
-    await screen.findByText('menu_items')
+    // Wait for the audit table to render — "Update" badge only appears when auditQ resolves
+    await screen.findByText('Update')
 
     // Scope to the tbody so we're not matching the dropdown <option> element
     const tbody = container.querySelector('tbody')!
@@ -103,7 +97,8 @@ describe('STORY-056 · Audit log viewer UI', () => {
 
     renderAudit(fakeClient({ listAudit, listRestaurants }))
 
-    await screen.findByText('menu_items')
+    // Wait for audit table to render — row only appears when auditQ resolves
+    await screen.findByText('Update')
     await userEvent.click(screen.getByRole('row', { name: /menu_items/i }))
 
     expect(await screen.findByText('name')).toBeInTheDocument()

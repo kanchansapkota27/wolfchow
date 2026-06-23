@@ -1,9 +1,9 @@
 import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Plan, PlanInput } from '@wolfchow/types'
 import { Button, Modal } from '@wolfchow/ui'
 import { Pencil, Trash2, Plus, Users, ShoppingBag, List, Layers, Mail, Clock } from 'lucide-react'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
 import { PlanFormModal } from '../components/PlanFormModal'
 import { FEATURE_FLAGS, PAYMENT_METHODS } from '../lib/planMeta'
@@ -13,7 +13,11 @@ type Editing = Plan | null | undefined
 
 export function Plans() {
   const api = useApi()
-  const { status, data, reload } = useAsync(() => api.superadmin.listPlans(), [api])
+  const queryClient = useQueryClient()
+  const { status, data } = useQuery({
+    queryKey: ['plans'],
+    queryFn: () => api.superadmin.listPlans(),
+  })
   const [editing, setEditing] = useState<Editing>(undefined)
   const [deleting, setDeleting] = useState<Plan | null>(null)
   const [deletingBusy, setDeletingBusy] = useState(false)
@@ -22,7 +26,7 @@ export function Plans() {
     const target = editing
     if (target) await api.superadmin.updatePlan(target.id, input)
     else await api.superadmin.createPlan(input)
-    reload()
+    await queryClient.invalidateQueries({ queryKey: ['plans'] })
   }
 
   async function confirmDelete() {
@@ -31,7 +35,7 @@ export function Plans() {
     try {
       await api.superadmin.deletePlan(deleting.id)
       setDeleting(null)
-      reload()
+      await queryClient.invalidateQueries({ queryKey: ['plans'] })
     } finally {
       setDeletingBusy(false)
     }
@@ -49,15 +53,15 @@ export function Plans() {
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             <Plus size={16} />
-            Create Plan
+            Create plan
           </button>
         }
       />
 
-      {status === 'loading' && (
+      {status === 'pending' && (
         <p className="text-sm text-gray-500">Loading plans…</p>
       )}
-      {status === 'error' && <SectionError onRetry={reload} />}
+      {status === 'error' && <SectionError onRetry={() => void queryClient.invalidateQueries({ queryKey: ['plans'] })} />}
 
       {status === 'success' && data && (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -106,7 +110,6 @@ function PlanCard({ plan, onEdit, onDelete }: { plan: Plan; onEdit: () => void; 
 
   return (
     <div className="flex flex-col rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-lg font-bold text-gray-900">{plan.name}</h2>
@@ -119,7 +122,7 @@ function PlanCard({ plan, onEdit, onDelete }: { plan: Plan; onEdit: () => void; 
             type="button"
             onClick={onEdit}
             className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-            aria-label="Edit plan"
+            aria-label="Edit"
           >
             <Pencil size={15} />
           </button>
@@ -129,14 +132,13 @@ function PlanCard({ plan, onEdit, onDelete }: { plan: Plan; onEdit: () => void; 
             disabled={inUse}
             title={inUse ? `${plan.restaurant_count} restaurants on this plan` : undefined}
             className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
-            aria-label="Delete plan"
+            aria-label="Delete"
           >
             <Trash2 size={15} />
           </button>
         </div>
       </div>
 
-      {/* Capability grid */}
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
         {[
           { icon: Users, label: 'STAFF CAP', value: capValue(plan.staff_cap) },
@@ -156,7 +158,6 @@ function PlanCard({ plan, onEdit, onDelete }: { plan: Plan; onEdit: () => void; 
         ))}
       </div>
 
-      {/* Feature flags */}
       {enabledFlags.length > 0 && (
         <div className="mt-4">
           <p className="mb-1.5 text-[10px] font-semibold tracking-wider text-gray-400 uppercase">Feature Flags</p>
@@ -170,7 +171,6 @@ function PlanCard({ plan, onEdit, onDelete }: { plan: Plan; onEdit: () => void; 
         </div>
       )}
 
-      {/* Payment methods */}
       {methods.length > 0 && (
         <div className="mt-4">
           <p className="mb-1.5 text-[10px] font-semibold tracking-wider text-gray-400 uppercase">Allowed Payments</p>

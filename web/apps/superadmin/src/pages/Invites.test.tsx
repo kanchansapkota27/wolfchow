@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ApiClient } from '@wolfchow/api-client'
 import type { InviteStatus, InviteSummary, Plan } from '@wolfchow/types'
-import { ApiProvider } from '../lib/api'
+import { renderWithQuery } from '../lib/test-utils'
 import { Invites } from './Invites'
 
 type SuperadminApi = ApiClient['superadmin']
@@ -32,6 +32,9 @@ function plan(over: Partial<Plan> = {}): Plan {
       scheduled_orders_enabled: false,
     },
     payment_methods_allowed: ['card'],
+    commission_type: 'percentage',
+    commission_value: 500,
+    is_public: true,
     created_at: '2026-01-01T00:00:00Z',
     ...over,
   }
@@ -59,11 +62,7 @@ function fakeClient(superadmin: Partial<SuperadminApi>): ApiClient {
 }
 
 function renderInvites(client: ApiClient) {
-  return render(
-    <ApiProvider client={client}>
-      <Invites />
-    </ApiProvider>,
-  )
+  return renderWithQuery(<Invites />, client)
 }
 
 beforeEach(() => {

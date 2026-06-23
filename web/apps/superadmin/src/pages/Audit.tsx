@@ -3,8 +3,8 @@ import { ChevronDown, ChevronUp, Search } from 'lucide-react'
 import type { AuditEntry, RestaurantListItem } from '@wolfchow/types'
 import { Badge } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
+import { useQuery } from '@tanstack/react-query'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
 import { PageHeader } from '../components/PageHeader'
 
@@ -103,11 +103,12 @@ function DiffPanel({
 export function Audit() {
   const api = useApi()
 
-  const restaurantsQ = useAsync(
-    () => api.superadmin.listRestaurants({ page_size: 500 }),
-    [api],
-  )
-  const restaurants: RestaurantListItem[] = restaurantsQ.data?.restaurants ?? []
+  const { data: restaurantsData } = useQuery({
+    queryKey: ['audit-restaurants'],
+    queryFn: () => api.superadmin.listRestaurants({ page_size: 500 }),
+    staleTime: 5 * 60 * 1000,
+  })
+  const restaurants: RestaurantListItem[] = restaurantsData?.restaurants ?? []
   const restaurantMap = useMemo(
     () => new Map(restaurants.map((r) => [r.id, r])),
     [restaurants],
@@ -122,8 +123,9 @@ export function Audit() {
   const [page, setPage] = useState(1)
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const auditQ = useAsync(
-    () =>
+  const { status: auditStatus, data: auditData } = useQuery({
+    queryKey: ['audit', { restaurantFilter, tableFilter, operationFilter, dateFrom, dateTo, page }],
+    queryFn: () =>
       api.superadmin.listAudit({
         restaurant_id: restaurantFilter || undefined,
         table_name: tableFilter || undefined,
@@ -132,10 +134,9 @@ export function Audit() {
         date_to: dateTo || undefined,
         page,
       }),
-    [api, restaurantFilter, tableFilter, operationFilter, dateFrom, dateTo, page],
-  )
+  })
 
-  const allEntries: AuditEntry[] = auditQ.data?.entries ?? []
+  const allEntries: AuditEntry[] = auditData?.entries ?? []
   const entries = search
     ? allEntries.filter(
         (e) =>
@@ -143,8 +144,8 @@ export function Audit() {
           e.operation.toLowerCase().includes(search.toLowerCase()),
       )
     : allEntries
-  const total = auditQ.data?.total ?? 0
-  const pageSize = auditQ.data?.page_size ?? 50
+  const total = auditData?.total ?? 0
+  const pageSize = auditData?.page_size ?? 50
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1
   const pageEnd = Math.min(page * pageSize, total)
@@ -213,7 +214,7 @@ export function Audit() {
           <button type="button" onClick={clearFilters} className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
             Clear
           </button>
-          {auditQ.status === 'success' && (
+          {auditStatus === 'success' && (
             <span className="ml-auto text-xs text-gray-400">
               {total.toLocaleString()} {total === 1 ? 'entry' : 'entries'}
             </span>
@@ -221,10 +222,10 @@ export function Audit() {
         </div>
       </div>
 
-      {auditQ.status === 'loading' && <p className="text-sm text-gray-500">Loading…</p>}
-      {auditQ.status === 'error' && <SectionError onRetry={auditQ.reload} />}
+      {auditStatus === 'pending' && <p className="text-sm text-gray-500">Loading…</p>}
+      {auditStatus === 'error' && <SectionError />}
 
-      {auditQ.status === 'success' && (
+      {auditStatus === 'success' && (
         <>
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
             <div className="overflow-x-auto">

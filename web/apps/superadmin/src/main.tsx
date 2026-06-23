@@ -1,10 +1,12 @@
 import { StrictMode, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, useNavigate, useSearchParams } from 'react-router'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, type AuthNavigator } from '@wolfchow/auth'
 import { createLocalStorageSession } from '@wolfchow/api-client'
 import { ToastProvider } from '@wolfchow/ui'
 import { ApiProvider, buildApiClient } from './lib/api'
+import { createQueryClient } from './lib/queryClient'
 import { App } from './App'
 import './index.css'
 
@@ -30,15 +32,18 @@ function Providers() {
     () => buildApiClient(session, () => navigate('/login')),
     [session, navigate],
   )
+  const queryClient = useMemo(() => createQueryClient(), [])
 
   return (
-    <ToastProvider>
-      <ApiProvider client={client}>
-        <AuthProvider client={client} session={session} navigator={authNavigator}>
-          <App />
-        </AuthProvider>
-      </ApiProvider>
-    </ToastProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <ApiProvider client={client}>
+          <AuthProvider client={client} session={session} navigator={authNavigator}>
+            <App />
+          </AuthProvider>
+        </ApiProvider>
+      </ToastProvider>
+    </QueryClientProvider>
   )
 }
 

@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Badge, Input } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
 import { Plus } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { useDebounce } from '../lib/useDebounce'
 import { SectionError } from '../components/SectionError'
 import { RestaurantDetail } from '../components/RestaurantDetail'
@@ -20,19 +20,25 @@ export function Restaurants() {
 
   const debouncedSearch = useDebounce(search, 300)
 
-  const plansAsync = useAsync(() => api.superadmin.listPlans(), [api])
-  const list = useAsync(
-    () =>
+  const queryClient = useQueryClient()
+
+  const { data: plansData } = useQuery({
+    queryKey: ['plans'],
+    queryFn: () => api.superadmin.listPlans(),
+  })
+
+  const { status, data } = useQuery({
+    queryKey: ['restaurants', { search: debouncedSearch, plan_id: planFilter, active: statusFilter }],
+    queryFn: () =>
       api.superadmin.listRestaurants({
         search: debouncedSearch || undefined,
         plan_id: planFilter || undefined,
         active: statusFilter || undefined,
       }),
-    [api, debouncedSearch, planFilter, statusFilter],
-  )
+  })
 
-  const plans = plansAsync.data?.plans ?? []
-  const rows = list.data?.restaurants ?? []
+  const plans = plansData?.plans ?? []
+  const rows = data?.restaurants ?? []
 
   return (
     <div>
@@ -90,9 +96,9 @@ export function Restaurants() {
         </div>
       </div>
 
-      {list.status === 'error' && <SectionError onRetry={list.reload} />}
+      {status === 'error' && <SectionError onRetry={() => void queryClient.invalidateQueries({ queryKey: ['restaurants'] })} />}
 
-      {list.status !== 'error' && (
+      {status !== 'error' && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -112,7 +118,7 @@ export function Restaurants() {
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">
-                      {list.status === 'loading' ? 'Loading…' : 'No restaurants found.'}
+                      {status === 'pending' ? 'Loading…' : 'No restaurants found.'}
                     </td>
                   </tr>
                 ) : (
@@ -158,7 +164,7 @@ export function Restaurants() {
           restaurantId={selected}
           plans={plans}
           onClose={() => setSelected(null)}
-          onChanged={() => list.reload()}
+          onChanged={() => void queryClient.invalidateQueries({ queryKey: ['restaurants'] })}
         />
       )}
 
@@ -166,7 +172,7 @@ export function Restaurants() {
         open={createOpen}
         plans={plans}
         onClose={() => setCreateOpen(false)}
-        onCreated={() => list.reload()}
+        onCreated={() => void queryClient.invalidateQueries({ queryKey: ['restaurants'] })}
       />
     </div>
   )

@@ -1,7 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import { formatCurrency } from '@wolfchow/utils'
 import { ApiError } from '@wolfchow/api-client'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { MetricCard, MetricCardSkeleton } from '../components/MetricCard'
 import { SectionError } from '../components/SectionError'
 import { PageHeader } from '../components/PageHeader'
@@ -22,35 +22,34 @@ interface SummaryRow {
 const sum = (rows: SummaryRow[], key: keyof SummaryRow): number =>
   rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
 
-/** Platform home: four summary cards over the billing summary + active count. */
 export function Dashboard() {
   const api = useApi()
-  const { status, data, error, reload } = useAsync(async () => {
-    const [billing, active] = await Promise.all([
-      api.superadmin.getBilling(),
-      api.superadmin.listRestaurants({ active: true }),
-    ])
-    return {
-      summary: (billing.summary ?? []) as SummaryRow[],
-      activeCount: active.total,
-    }
-  }, [api])
+  const { status, data, error, refetch } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: async () => {
+      const [billing, active] = await Promise.all([
+        api.superadmin.getBilling(),
+        api.superadmin.listRestaurants({ active: true }),
+      ])
+      return {
+        summary: (billing.summary ?? []) as SummaryRow[],
+        activeCount: active.total,
+      }
+    },
+  })
 
   return (
     <div>
-      <PageHeader
-        title="Dashboard"
-        subtitle="Platform overview at a glance."
-      />
+      <PageHeader title="Dashboard" subtitle="Platform overview at a glance." />
 
-      {status === 'loading' ? (
+      {status === 'pending' ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <MetricCardSkeleton key={index} />
           ))}
         </div>
       ) : status === 'error' || !data ? (
-        <SectionError message={toMessage(error)} onRetry={reload} />
+        <SectionError message={toMessage(error)} onRetry={() => void refetch()} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard label="Total restaurants" value={data.summary.length} />

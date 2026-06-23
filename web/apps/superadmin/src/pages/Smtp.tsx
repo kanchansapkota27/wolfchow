@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import type { RestaurantListItem, SmtpConfig, SmtpGlobalInput, SmtpOverrideInput, SmtpOverrideItem } from '@wolfchow/types'
 import { Button, Input, Modal, Select, useToast } from '@wolfchow/ui'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { SectionError } from '../components/SectionError'
 import { PageHeader } from '../components/PageHeader'
 
@@ -402,27 +402,28 @@ function SmtpOverridesTable({ overrides, onDelete }: SmtpOverridesTableProps) {
 export function Smtp() {
   const api = useApi()
   const { notify } = useToast()
+  const queryClient = useQueryClient()
 
-  const globalQ = useAsync(
-    async () => {
+  const { status: globalStatus, data: globalData } = useQuery({
+    queryKey: ['smtp-global'],
+    queryFn: async () => {
       try {
         return await api.superadmin.getSmtpGlobal()
       } catch {
         return null
       }
     },
-    [api],
-  )
+  })
 
-  const overridesQ = useAsync(
-    () => api.superadmin.listSmtpOverrides(),
-    [api],
-  )
+  const { status: overridesStatus, data: overridesData } = useQuery({
+    queryKey: ['smtp-overrides'],
+    queryFn: () => api.superadmin.listSmtpOverrides(),
+  })
 
-  const restaurantsQ = useAsync(
-    () => api.superadmin.listRestaurants({ page_size: 200 }),
-    [api],
-  )
+  const { data: smtpRestaurantsData } = useQuery({
+    queryKey: ['smtp-restaurants'],
+    queryFn: () => api.superadmin.listRestaurants({ page_size: 200 }),
+  })
 
   const [addOpen, setAddOpen] = useState(false)
   const [deleting, setDeleting] = useState<SmtpOverrideItem | null>(null)
@@ -435,7 +436,7 @@ export function Smtp() {
       await api.superadmin.deleteSmtpOverride(deleting.restaurant_id)
       notify('success', `Override for ${deleting.restaurant_name ?? deleting.restaurant_id} removed.`)
       setDeleting(null)
-      overridesQ.reload()
+      await queryClient.invalidateQueries({ queryKey: ['smtp-overrides'] })
     } catch {
       notify('error', 'Failed to remove override.')
     } finally {
@@ -443,7 +444,7 @@ export function Smtp() {
     }
   }
 
-  const hasGlobal = globalQ.data?.config != null
+  const hasGlobal = globalData?.config != null
 
   return (
     <div className="space-y-6">
@@ -463,10 +464,10 @@ export function Smtp() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Global settings card */}
         <div>
-          {globalQ.status === 'loading' && <p className="text-sm text-gray-500">Loading…</p>}
-          {globalQ.status === 'error' && <SectionError onRetry={globalQ.reload} />}
-          {globalQ.status === 'success' && (
-            <SmtpGlobalCard config={globalQ.data?.config ?? null} onSaved={globalQ.reload} />
+          {globalStatus === 'pending' && <p className="text-sm text-gray-500">Loading…</p>}
+          {globalStatus === 'error' && <SectionError onRetry={() => void queryClient.invalidateQueries({ queryKey: ['smtp-global'] })} />}
+          {globalStatus === 'success' && (
+            <SmtpGlobalCard config={globalData?.config ?? null} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['smtp-global'] })} />
           )}
         </div>
 
@@ -484,11 +485,11 @@ export function Smtp() {
               + Add Override
             </button>
           </div>
-          {overridesQ.status === 'loading' && <p className="text-sm text-gray-500">Loading…</p>}
-          {overridesQ.status === 'error' && <SectionError onRetry={overridesQ.reload} />}
-          {overridesQ.status === 'success' && (
+          {overridesStatus === 'pending' && <p className="text-sm text-gray-500">Loading…</p>}
+          {overridesStatus === 'error' && <SectionError onRetry={() => void queryClient.invalidateQueries({ queryKey: ['smtp-overrides'] })} />}
+          {overridesStatus === 'success' && (
             <SmtpOverridesTable
-              overrides={overridesQ.data?.overrides ?? []}
+              overrides={overridesData?.overrides ?? []}
               onDelete={setDeleting}
             />
           )}
@@ -498,8 +499,8 @@ export function Smtp() {
       <AddSmtpOverrideModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSaved={overridesQ.reload}
-        restaurants={restaurantsQ.data?.restaurants ?? []}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['smtp-overrides'] })}
+        restaurants={smtpRestaurantsData?.restaurants ?? []}
       />
 
       <Modal

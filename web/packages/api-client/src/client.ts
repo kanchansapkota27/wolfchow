@@ -512,6 +512,12 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ months: BillingMonthRow[] }>(`/superadmin/billing/${id}`),
     listAudit: (query?: RequestOptions['query']) =>
       apiFetch<{ entries: AuditEntry[]; page: number; page_size: number; total: number }>('/superadmin/audit', { query }),
+    getPlatformSettings: () =>
+      apiFetch<{ settings: { jwt_expiry_minutes: number; global_rate_limit: number; maintenance_mode: boolean; support_email: string; r2_public_domain: string; webhook_signing_secret: string } }>('/superadmin/settings'),
+    updatePlatformSettings: (data: { jwt_expiry_minutes: number; global_rate_limit: number; maintenance_mode: boolean; support_email: string; r2_public_domain: string }) =>
+      apiFetch<{ ok: boolean }>('/superadmin/settings', { method: 'PATCH', body: data }),
+    regenerateWebhookSecret: () =>
+      apiFetch<{ webhook_signing_secret: string }>('/superadmin/settings/webhook-secret', { method: 'POST' }),
   }
 
   // Forward-looking named functions for routes landing in later slices. They are
