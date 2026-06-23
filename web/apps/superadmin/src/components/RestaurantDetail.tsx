@@ -3,8 +3,8 @@ import type { ReactNode } from 'react'
 import type { Plan, Restaurant, RestaurantUpdate } from '@wolfchow/types'
 import { Badge, Button, Input, Modal } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ADMIN_URL, useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
 import { SectionError } from './SectionError'
 import { InlineEdit } from './InlineEdit'
 
@@ -23,10 +23,11 @@ interface RestaurantDetailProps {
 /** Right-side detail panel for a single restaurant. */
 export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: RestaurantDetailProps) {
   const api = useApi()
-  const { status, data, reload } = useAsync(
-    () => api.superadmin.getRestaurant(restaurantId),
-    [restaurantId],
-  )
+  const queryClient = useQueryClient()
+  const { status, data } = useQuery({
+    queryKey: ['restaurant', restaurantId],
+    queryFn: () => api.superadmin.getRestaurant(restaurantId),
+  })
   const [tab, setTab] = useState<Tab>('overview')
   const [local, setLocal] = useState<Restaurant | null>(null)
   const [confirm, setConfirm] = useState<null | 'suspend' | 'reactivate'>(null)
@@ -39,6 +40,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
   async function patch(update: RestaurantUpdate) {
     const res = await api.superadmin.updateRestaurant(restaurantId, update)
     setLocal((cur) => (cur ? ({ ...cur, ...res } as Restaurant) : cur))
+    await queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] })
     onChanged()
   }
 
@@ -50,6 +52,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
         : await api.superadmin.suspendRestaurant(restaurantId)
       setLocal((cur) => (cur ? { ...cur, active: res.active } : cur))
       setConfirm(null)
+      await queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] })
       onChanged()
     } finally {
       setBusy(false)
@@ -110,8 +113,8 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
           </button>
         </div>
 
-        {status === 'loading' && <p className="text-gray-400">Loading…</p>}
-        {status === 'error' && <SectionError onRetry={reload} />}
+        {status === 'pending' && <p className="text-gray-400">Loading…</p>}
+        {status === 'error' && <SectionError onRetry={() => void queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] })} />}
 
         {status === 'success' && r && (
           <>

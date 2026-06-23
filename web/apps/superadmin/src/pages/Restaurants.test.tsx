@@ -1,10 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, within, act } from '@testing-library/react'
+import { screen, waitFor, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ApiClient } from '@wolfchow/api-client'
 import type { Plan, Restaurant, RestaurantListItem } from '@wolfchow/types'
-import { ToastProvider } from '@wolfchow/ui'
-import { ApiProvider } from '../lib/api'
+import { renderWithQuery } from '../lib/test-utils'
 import { Restaurants } from './Restaurants'
 
 type SuperadminApi = ApiClient['superadmin']
@@ -103,16 +102,6 @@ function fakeClient(superadmin: Partial<SuperadminApi>): ApiClient {
   return { superadmin } as unknown as ApiClient
 }
 
-function renderPage(client: ApiClient) {
-  return render(
-    <ToastProvider>
-      <ApiProvider client={client}>
-        <Restaurants />
-      </ApiProvider>
-    </ToastProvider>,
-  )
-}
-
 describe('STORY-050 · Restaurants UI', () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
   afterEach(() => vi.useRealTimers())
@@ -125,7 +114,7 @@ describe('STORY-050 · Restaurants UI', () => {
       return { restaurants, page: 1, page_size: 20, total: restaurants.length }
     })
     const listPlans = vi.fn<SuperadminApi['listPlans']>().mockResolvedValue({ plans: [plan()] })
-    renderPage(fakeClient({ listRestaurants, listPlans }))
+    renderWithQuery(<Restaurants />, fakeClient({ listRestaurants, listPlans }))
 
     expect(await screen.findByText('Alpha Diner')).toBeInTheDocument()
     expect(screen.getByText('Beta Cafe')).toBeInTheDocument()
@@ -147,7 +136,7 @@ describe('STORY-050 · Restaurants UI', () => {
     const suspendRestaurant = vi
       .fn<SuperadminApi['suspendRestaurant']>()
       .mockResolvedValue({ id: 'r1', active: false })
-    renderPage(fakeClient({ listRestaurants, listPlans, getRestaurant, suspendRestaurant }))
+    renderWithQuery(<Restaurants />, fakeClient({ listRestaurants, listPlans, getRestaurant, suspendRestaurant }))
 
     await userEvent.click(await screen.findByText('Acme'))
     const panel = await screen.findByRole('dialog', { name: /restaurant acme/i })
@@ -169,7 +158,7 @@ describe('STORY-050 · Restaurants UI', () => {
     const updateRestaurant = vi
       .fn<SuperadminApi['updateRestaurant']>()
       .mockResolvedValue({ id: 'r1', billing_note: 'VIP client' })
-    renderPage(fakeClient({ listRestaurants, listPlans, getRestaurant, updateRestaurant }))
+    renderWithQuery(<Restaurants />, fakeClient({ listRestaurants, listPlans, getRestaurant, updateRestaurant }))
 
     await userEvent.click(await screen.findByText('Acme'))
     await screen.findByRole('dialog', { name: /restaurant acme/i })
@@ -198,7 +187,7 @@ describe('STORY-050 · Restaurants UI', () => {
     const openSpy = vi
       .spyOn(window, 'open')
       .mockReturnValue({ postMessage } as unknown as Window)
-    renderPage(fakeClient({ listRestaurants, listPlans, getRestaurant, impersonate }))
+    renderWithQuery(<Restaurants />, fakeClient({ listRestaurants, listPlans, getRestaurant, impersonate }))
 
     await userEvent.click(await screen.findByText('Acme'))
     const panel = await screen.findByRole('dialog', { name: /restaurant acme/i })
