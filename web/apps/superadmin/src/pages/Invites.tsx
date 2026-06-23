@@ -22,7 +22,7 @@ type Filter = (typeof FILTERS)[number]
 export function Invites() {
   const api = useApi()
   const queryClient = useQueryClient()
-  const { status, data } = useQuery({
+  const { status, data, refetch } = useQuery({
     queryKey: ['invites'],
     queryFn: async () => {
       const [invites, plans] = await Promise.all([
@@ -118,7 +118,7 @@ export function Invites() {
       </div>
 
       {status === 'pending' && <p className="text-sm text-gray-500">Loading invites…</p>}
-      {status === 'error' && <SectionError />}
+      {status === 'error' && <SectionError onRetry={() => void refetch()} />}
 
       {status === 'success' && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
