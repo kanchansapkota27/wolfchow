@@ -10,6 +10,11 @@ import { createQueryClient } from './lib/queryClient'
 import { App } from './App'
 import './index.css'
 
+// Created outside any component so React's Concurrent Mode render cycles
+// (StrictMode double-invoke, Suspense retries) never recreate it.
+// A new QueryClient means an empty cache — every route change would re-fetch everything.
+const queryClient = createQueryClient()
+
 /**
  * Bridges the auth layer to react-router: `RequireRole`/login redirects and
  * invite query reads go through the live router instead of `window.location`.
@@ -32,7 +37,6 @@ function Providers() {
     () => buildApiClient(session, () => navigate('/login')),
     [session, navigate],
   )
-  const queryClient = useMemo(() => createQueryClient(), [])
 
   return (
     <QueryClientProvider client={queryClient}>
