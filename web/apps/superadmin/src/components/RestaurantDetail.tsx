@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ADMIN_URL, useApi } from '../lib/api'
 import { SectionError } from './SectionError'
 import { InlineEdit } from './InlineEdit'
+import { CreateOwnerModal } from './CreateOwnerModal'
 
 type ApiClient = ReturnType<typeof useApi>
 
@@ -31,6 +32,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
   const [tab, setTab] = useState<Tab>('overview')
   const [local, setLocal] = useState<Restaurant | null>(null)
   const [confirm, setConfirm] = useState<null | 'suspend' | 'reactivate'>(null)
+  const [createOwnerOpen, setCreateOwnerOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -217,9 +219,19 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
               <Button variant="ghost" onClick={impersonate}>
                 View as admin
               </Button>
+              <Button variant="ghost" onClick={() => setCreateOwnerOpen(true)}>
+                Create owner
+              </Button>
             </div>
           </>
         )}
+
+        <CreateOwnerModal
+          open={createOwnerOpen}
+          restaurantId={restaurantId}
+          restaurantName={r?.display_name ?? ''}
+          onClose={() => setCreateOwnerOpen(false)}
+        />
 
         <Modal
           open={confirm !== null}
