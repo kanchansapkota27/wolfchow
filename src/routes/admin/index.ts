@@ -19,6 +19,7 @@ import { registerAutomationRoutes } from './automation'
 import { registerPromotionsRoutes } from './promotions'
 import { registerNoticesRoutes, type NoticesRouteDeps } from './notices'
 import { registerTransactionRoutes, type TransactionRouteDeps } from './transactions'
+import { registerAdminOrderRoutes } from './orders'
 
 export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps, SmtpRouteDeps, NotificationRouteDeps, NoticesRouteDeps, TransactionRouteDeps {}
 
@@ -55,4 +56,5 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerPromotionsRoutes(app)
   registerNoticesRoutes(app, deps)
   registerTransactionRoutes(app, deps)
+  registerAdminOrderRoutes(app)
 }

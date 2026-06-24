@@ -217,8 +217,8 @@ export type RefundReason = 'duplicate' | 'fraudulent' | 'requested_by_customer'
 export interface TransactionRow {
   id: string
   status: string
-  total_cents: number
-  payment_intent_id: string | null
+  total: number
+  stripe_intent_id: string | null
   created_at: string
   customer_name: string
   customer_email: string
@@ -579,6 +579,9 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ ok: boolean }>('/admin/restaurant/password', { method: 'PATCH', body: data }),
     getLogoUploadUrl: () =>
       apiFetch<{ upload_url: string; r2_key: string }>('/admin/restaurant/logo', { method: 'POST' }),
+    // ── Orders ───────────────────────────────────────────────────────────────────
+    listActiveOrders: () =>
+      apiFetch<{ orders: Order[] }>('/admin/orders/active').then((r) => r.orders),
     // ── Orders pause ─────────────────────────────────────────────────────────────
     getPauseState: () =>
       apiFetch<PauseState>('/admin/orders/pause'),

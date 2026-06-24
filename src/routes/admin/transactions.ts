@@ -42,7 +42,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
     const admin = createAdminClient(c.env)
     const { data, error, count } = await admin
       .from('orders')
-      .select('id, status, total_cents, payment_intent_id, created_at, customer_name, customer_email, refund_id, refunded_at', { count: 'exact' })
+      .select('id, status, total, stripe_intent_id, created_at, customer_name, customer_email, refund_id, refunded_at', { count: 'exact' })
       .eq('restaurant_id', restaurantId)
       .gte('created_at', since)
       .order('created_at', { ascending: false })

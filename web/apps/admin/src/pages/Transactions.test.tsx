@@ -33,8 +33,8 @@ vi.mock('@wolfchow/ui', () => ({
 const TX_CARD: TransactionRow = {
   id: 'aaaaaaaa-0000-0000-0000-000000000001',
   status: 'completed',
-  total_cents: 2500,
-  payment_intent_id: 'pi_test_123',
+  total: 25.00,
+  stripe_intent_id: 'pi_test_123',
   created_at: '2026-01-15T12:00:00Z',
   customer_name: 'Alice Smith',
   customer_email: 'alice@example.com',
@@ -45,7 +45,7 @@ const TX_CARD: TransactionRow = {
 const TX_CASH: TransactionRow = {
   ...TX_CARD,
   id: 'bbbbbbbb-0000-0000-0000-000000000002',
-  payment_intent_id: null,
+  stripe_intent_id: null,
   customer_name: 'Bob Jones',
   customer_email: 'bob@example.com',
 }
