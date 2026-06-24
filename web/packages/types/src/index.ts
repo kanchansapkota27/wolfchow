@@ -28,7 +28,7 @@ export interface User {
   role: Role
   name: string
   phone: string | null
-  email: string
+  email: string | null
   device_id: string | null
   permissions: Permission[]
   active: boolean
@@ -240,7 +240,7 @@ export interface Invite {
 
 // ── Menu ─────────────────────────────────────────────────────────────────────
 
-export type AvailabilityState = 'in_stock' | 'out_of_stock' | 'limited' | 'hidden'
+export type AvailabilityState = 'available' | 'out_of_stock' | 'unavailable' | 'scheduled'
 
 export interface MenuCategory {
   id: string
@@ -284,7 +284,9 @@ export interface MenuItem {
   image_r2_key: string | null
   tags: MenuItemTag[]
   has_variants: boolean
+  sort_order: number
   variants?: ItemVariant[]
+  modifier_groups?: Array<{ id: string; name: string }>
 }
 
 export type ModifierGroupType = 'single' | 'multi'
@@ -301,7 +303,7 @@ export interface ModifierOption {
 export interface ModifierGroup {
   id: string
   restaurant_id: string
-  item_id: string
+  item_id: string | null
   name: string
   type: ModifierGroupType
   required: boolean
@@ -503,6 +505,7 @@ export interface AuditEntry {
   new_data: Record<string, unknown> | null
   user_id: string | null
   user_name: string | null
+  ip_address: string | null
   created_at: string
 }
 

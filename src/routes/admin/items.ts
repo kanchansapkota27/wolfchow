@@ -3,6 +3,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 import { generatePresignedPutUrl, randomId } from '../../services/r2'
 import type { Broadcaster } from '../../services/realtime'
 
@@ -71,6 +72,10 @@ const variantReorderSchema = z
   .array(z.object({ id: z.string().uuid(), sort_order: z.number().int().min(0) }))
   .min(1)
 
+const modifierAssignmentsSchema = z.object({
+  group_ids: z.array(z.string().uuid()),
+})
+
 async function parseBody(req: Request): Promise<unknown> {
   try {
     return await req.json()
@@ -101,7 +106,7 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
     const admin = createAdminClient(c.env)
     let q = admin
       .from('menu_items')
-      .select('*, modifier_groups(id)')
+      .select('*, item_modifier_groups(modifier_group_id, modifier_groups(id, name))')
       .eq('restaurant_id', restaurantId)
       .eq('active', true)
       .order('sort_order', { ascending: true })
@@ -112,10 +117,17 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
     if (error) return c.json({ error: 'fetch_failed' }, 500)
 
     const items = (data ?? []).map((item: Record<string, unknown>) => {
-      const groups = item['modifier_groups']
-      const modifier_group_count = Array.isArray(groups) ? groups.length : 0
-      const { modifier_groups: _, ...rest } = item
-      return { ...rest, modifier_group_count }
+      const assignments = item['item_modifier_groups']
+      const modifier_groups: Array<{ id: string; name: string }> = Array.isArray(assignments)
+        ? assignments
+            .map((a: Record<string, unknown>) => {
+              const g = a['modifier_groups'] as { id: string; name: string } | null
+              return g ? { id: g.id, name: g.name } : null
+            })
+            .filter((g): g is { id: string; name: string } => g !== null)
+        : []
+      const { item_modifier_groups: _, ...rest } = item
+      return { ...rest, modifier_groups }
     })
 
     return c.json({ items })
@@ -134,9 +146,8 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
 
     const admin = createAdminClient(c.env)
 
-    // item_cap check from plan KV
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    // item_cap check — resolve plan with DB fallback on KV miss
+    const plan = await resolvePlan(c.env, restaurantId)
     const itemCap = typeof plan?.item_cap === 'number' ? plan.item_cap : null
 
     if (itemCap !== null) {
@@ -171,6 +182,36 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
     await invalidateAndBroadcast(c.env, restaurantId, deps.broadcaster)
 
     return c.json(data, 201)
+  })
+
+  // ── POST /admin/menu/items/reorder ───────────────────────────────────────
+  // Must be registered before /:id routes so 'reorder' is not matched as an id.
+
+  app.post('/admin/menu/items/reorder', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+
+    const parsed = variantReorderSchema.safeParse(await parseBody(c.req.raw))
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
+    }
+
+    const admin = createAdminClient(c.env)
+    const updates = await Promise.all(
+      parsed.data.map(({ id, sort_order }) =>
+        admin
+          .from('menu_items')
+          .update({ sort_order })
+          .eq('id', id)
+          .eq('restaurant_id', restaurantId),
+      ),
+    )
+
+    if (updates.find((r) => r.error)) return c.json({ error: 'reorder_failed' }, 500)
+
+    await invalidateAndBroadcast(c.env, restaurantId, deps.broadcaster)
+
+    return c.body(null, 204)
   })
 
   // ── PATCH /admin/menu/items/:id ───────────────────────────────────────────
@@ -235,9 +276,8 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
     const restaurantId = jwt.restaurant_id!
     const itemId = c.req.param('id')
 
-    // Check menu_photos feature flag from plan KV
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    // Check menu_photos feature flag — resolve plan with DB fallback on KV miss
+    const plan = await resolvePlan(c.env, restaurantId)
     const flags = plan?.feature_flags as Record<string, unknown> | undefined
     const photosEnabled = flags?.menu_photos === true
 
@@ -249,7 +289,12 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
     }
 
     const r2Key = `${restaurantId}/${itemId}/${randomId()}.webp`
-    const uploadUrl = await getUploadUrl(c.env, r2Key, 15 * 60)
+
+    // Local dev: when R2 credentials aren't configured, return a Worker-handled
+    // upload URL that stores directly to the MEDIA_BUCKET binding.
+    const uploadUrl = c.env.R2_ACCOUNT_ID
+      ? await getUploadUrl(c.env, r2Key, 15 * 60)
+      : `${new URL(c.req.url).origin}/r2/${r2Key}`
 
     return c.json({ upload_url: uploadUrl, r2_key: r2Key }, 201)
   })
@@ -283,6 +328,97 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
     await invalidateAndBroadcast(c.env, restaurantId, deps.broadcaster)
 
     return c.json(data)
+  })
+
+  // ── GET /admin/menu/items/:item_id/modifier-assignments ──────────────────
+
+  app.get('/admin/menu/items/:item_id/modifier-assignments', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+    const itemId = c.req.param('item_id')
+
+    const admin = createAdminClient(c.env)
+
+    const { data: item } = await admin
+      .from('menu_items')
+      .select('id')
+      .eq('id', itemId)
+      .eq('restaurant_id', restaurantId)
+      .single()
+
+    if (!item) return c.json({ error: 'not_found' }, 404)
+
+    const { data, error } = await admin
+      .from('item_modifier_groups')
+      .select('modifier_group_id, sort_order')
+      .eq('item_id', itemId)
+      .order('sort_order', { ascending: true })
+
+    if (error) return c.json({ error: 'fetch_failed' }, 500)
+
+    return c.json({ group_ids: (data ?? []).map((r: { modifier_group_id: string }) => r.modifier_group_id) })
+  })
+
+  // ── PUT /admin/menu/items/:item_id/modifier-assignments ───────────────────
+
+  app.put('/admin/menu/items/:item_id/modifier-assignments', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+    const itemId = c.req.param('item_id')
+
+    const parsed = modifierAssignmentsSchema.safeParse(await parseBody(c.req.raw))
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
+    }
+
+    const admin = createAdminClient(c.env)
+
+    const { data: item } = await admin
+      .from('menu_items')
+      .select('id')
+      .eq('id', itemId)
+      .eq('restaurant_id', restaurantId)
+      .single()
+
+    if (!item) return c.json({ error: 'not_found' }, 404)
+
+    if (parsed.data.group_ids.length > 0) {
+      const { data: groups } = await admin
+        .from('modifier_groups')
+        .select('id')
+        .in('id', parsed.data.group_ids)
+        .eq('restaurant_id', restaurantId)
+        .is('item_id', null)
+
+      if (!groups || groups.length !== parsed.data.group_ids.length) {
+        return c.json({ error: 'invalid_group_ids' }, 422)
+      }
+    }
+
+    const { error: delErr } = await admin
+      .from('item_modifier_groups')
+      .delete()
+      .eq('item_id', itemId)
+
+    if (delErr) return c.json({ error: 'update_failed' }, 500)
+
+    if (parsed.data.group_ids.length > 0) {
+      const rows = parsed.data.group_ids.map((gid, i) => ({
+        item_id: itemId,
+        modifier_group_id: gid,
+        sort_order: i,
+      }))
+
+      const { error: insErr } = await admin
+        .from('item_modifier_groups')
+        .insert(rows)
+
+      if (insErr) return c.json({ error: 'update_failed' }, 500)
+    }
+
+    await invalidateAndBroadcast(c.env, restaurantId, deps.broadcaster)
+
+    return c.json({ group_ids: parsed.data.group_ids })
   })
 
   // ── GET /admin/menu/items/:item_id/variants ───────────────────────────────
@@ -526,6 +662,7 @@ export function registerItemRoutes(app: Hono<HonoEnv>, deps: ItemRouteDeps = {})
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 async function invalidateAndBroadcast(
   env: HonoEnv['Bindings'],

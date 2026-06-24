@@ -3,6 +3,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 import type { Broadcaster } from '../../services/realtime'
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -46,27 +47,25 @@ export interface ModifierRouteDeps {
 }
 
 export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDeps = {}): void {
-  // ── GET /admin/menu/items/:item_id/modifiers ───────────────────────────────
+  // ── GET /admin/menu/modifiers ─────────────────────────────────────────────
+  // List all global modifier groups (item_id IS NULL) for this restaurant.
 
-  app.get('/admin/menu/items/:item_id/modifiers', async (c) => {
+  app.get('/admin/menu/modifiers', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    const plan = await resolvePlan(c.env, restaurantId)
     const flags = plan?.feature_flags as Record<string, boolean> | undefined
     if (!flags?.item_modifiers) {
       return c.json({ error: 'feature_locked', feature: 'item_modifiers' }, 402)
     }
 
-    const itemId = c.req.param('item_id')
     const admin = createAdminClient(c.env)
-
     const { data, error } = await admin
       .from('modifier_groups')
-      .select('*, modifier_options(*)')
-      .eq('item_id', itemId)
+      .select('*, options:modifier_options(*)')
       .eq('restaurant_id', restaurantId)
+      .is('item_id', null)
       .order('sort_order', { ascending: true })
 
     if (error) return c.json({ error: 'fetch_failed' }, 500)
@@ -74,16 +73,15 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
     return c.json({ groups: data ?? [] })
   })
 
-  // ── POST /admin/menu/items/:item_id/modifiers ──────────────────────────────
+  // ── POST /admin/menu/modifiers ────────────────────────────────────────────
+  // Create a global modifier group (item_id = null).
 
-  app.post('/admin/menu/items/:item_id/modifiers', async (c) => {
+  app.post('/admin/menu/modifiers', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    const plan = await resolvePlan(c.env, restaurantId)
     const flags = plan?.feature_flags as Record<string, boolean> | undefined
-
     if (!flags?.item_modifiers) {
       return c.json({ error: 'feature_locked', feature: 'item_modifiers' }, 402)
     }
@@ -95,24 +93,14 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
       return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
     }
 
-    const itemId = c.req.param('item_id')
     const admin = createAdminClient(c.env)
-
-    // Verify item belongs to this restaurant before inserting
-    const { data: item } = await admin
-      .from('menu_items')
-      .select('id')
-      .eq('id', itemId)
-      .eq('restaurant_id', restaurantId)
-      .single()
-
-    if (!item) return c.json({ error: 'not_found' }, 404)
 
     if (modifierCap !== null) {
       const { count } = await admin
         .from('modifier_groups')
         .select('id', { count: 'exact', head: true })
         .eq('restaurant_id', restaurantId)
+        .is('item_id', null)
         .then((r) => ({ count: r.count ?? 0 }))
 
       if (count >= modifierCap) {
@@ -122,7 +110,7 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
 
     const { data, error } = await admin
       .from('modifier_groups')
-      .insert({ ...parsed.data, item_id: itemId, restaurant_id: restaurantId })
+      .insert({ ...parsed.data, item_id: null, restaurant_id: restaurantId })
       .select()
       .single()
 
@@ -174,7 +162,6 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
 
     const admin = createAdminClient(c.env)
 
-    // Hard delete — DB cascades to modifier_options via ON DELETE CASCADE
     const { error } = await admin
       .from('modifier_groups')
       .delete()
@@ -202,7 +189,6 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
 
     const admin = createAdminClient(c.env)
 
-    // Verify the group belongs to this restaurant
     const { data: group } = await admin
       .from('modifier_groups')
       .select('id')
@@ -216,7 +202,7 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
 
     const { data, error } = await admin
       .from('modifier_options')
-      .insert({ name: parsed.data.name, price_delta: priceDeltaCents, available: parsed.data.available, group_id: groupId })
+      .insert({ name: parsed.data.name, price_delta: priceDeltaCents, available: parsed.data.available, group_id: groupId, restaurant_id: restaurantId })
       .select()
       .single()
 
@@ -250,7 +236,6 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
       updates.price_delta = Math.round(parsed.data.price_delta * 100)
     }
 
-    // Join through modifier_groups to verify restaurant ownership
     const { data: option } = await admin
       .from('modifier_options')
       .select('id, modifier_groups!inner(restaurant_id)')
@@ -283,7 +268,6 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
 
     const admin = createAdminClient(c.env)
 
-    // Verify ownership via join before deleting
     const { data: option } = await admin
       .from('modifier_options')
       .select('id, modifier_groups!inner(restaurant_id)')
