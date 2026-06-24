@@ -10,7 +10,7 @@ const createPromoSchema = z
   .object({
     title: z.string().min(1),
     description: z.string().optional(),
-    promo_code: z.string().max(20).optional(),
+    promo_code: z.string().min(1).max(20).optional(),
     discount_type: z.enum(['percentage', 'fixed', 'free_item', 'bogo']),
     discount_value: z.number().min(0),
     free_item_id: z.string().uuid().optional(),
@@ -127,7 +127,7 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
     if (error || !data) return c.json({ error: 'create_failed' }, 500)
 
     await invalidatePromoKv(c.env.SETTINGS_CACHE, restaurantId)
-    return c.json(data, 201)
+    return c.json({ promotion: data }, 201)
   })
 
   // ── PATCH /admin/promotions/:id ────────────────────────────────────────────
@@ -153,7 +153,7 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
     if (error || !data) return c.json({ error: 'not_found' }, 404)
 
     await invalidatePromoKv(c.env.SETTINGS_CACHE, restaurantId)
-    return c.json(data)
+    return c.json({ promotion: data })
   })
 
   // ── PATCH /admin/promotions/:id/toggle ────────────────────────────────────

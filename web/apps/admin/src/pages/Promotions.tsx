@@ -80,6 +80,10 @@ function PromoModal({ initial, onSave, onClose }: PromoModalProps) {
       setError('Please select the item for this promotion type.')
       return
     }
+    if (!form.auto_apply && !form.promo_code?.trim()) {
+      setError('Enter a promo code, or enable auto-apply.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
