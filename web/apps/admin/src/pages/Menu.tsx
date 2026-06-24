@@ -833,6 +833,8 @@ export function Menu() {
   const [categoryModal, setCategoryModal] = useState<{ mode: 'add' | 'edit'; category?: MenuCategory } | null>(null)
   const [deleteCat, setDeleteCat] = useState<MenuCategory | null>(null)
   const [editItem, setEditItem] = useState<{ mode: 'add' | 'edit'; item?: MenuItem } | null>(null)
+  const [showCatCapModal, setShowCatCapModal] = useState(false)
+  const [showItemCapModal, setShowItemCapModal] = useState(false)
 
   const dragCatId = useRef<string | null>(null)
   const dragOverCatId = useRef<string | null>(null)
@@ -855,6 +857,11 @@ export function Menu() {
   })
 
   const itemsArr: MenuItem[] = (items ?? []) as MenuItem[]
+
+  const catCount = usage?.categories ?? cats.length
+  const itemCount = usage?.items ?? itemsArr.length
+  const catAtCap = plan != null && catCount >= plan.category_cap
+  const itemAtCap = plan != null && itemCount >= plan.item_cap
 
   const saveCategory = useCallback(async (data: { name: string; active: boolean }) => {
     if (categoryModal?.mode === 'edit' && categoryModal.category) {
@@ -959,7 +966,7 @@ export function Menu() {
           <div className="text-right">
             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Categories</p>
             <p className="text-sm font-bold text-gray-800">
-              {usage?.categories ?? cats.length}
+              {catCount}
               <span className="font-normal text-gray-400">/{plan?.category_cap ?? 999}</span>
             </p>
           </div>
@@ -967,7 +974,7 @@ export function Menu() {
           <div className="text-right">
             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Items</p>
             <p className="text-sm font-bold text-gray-800">
-              {usage?.items ?? itemsArr.length}
+              {itemCount}
               <span className="font-normal text-gray-400">/{plan?.item_cap ?? 999}</span>
             </p>
           </div>
@@ -987,9 +994,13 @@ export function Menu() {
                 <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Categories</span>
                 <button
                   type="button"
-                  onClick={() => setCategoryModal({ mode: 'add' })}
-                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => catAtCap ? setShowCatCapModal(true) : setCategoryModal({ mode: 'add' })}
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-lg text-white',
+                    catAtCap ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700',
+                  )}
                   aria-label="Add category"
+                  title={catAtCap ? `Category limit reached (${plan?.category_cap})` : 'Add category'}
                 >
                   <Plus size={13} />
                 </button>
@@ -1059,8 +1070,12 @@ export function Menu() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEditItem({ mode: 'add' })}
-                      className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-blue-700"
+                      onClick={() => itemAtCap ? setShowItemCapModal(true) : setEditItem({ mode: 'add' })}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider text-white',
+                        itemAtCap ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700',
+                      )}
+                      title={itemAtCap ? `Item limit reached (${plan?.item_cap})` : 'Add item'}
                     >
                       <Plus size={14} />
                       Add Item
@@ -1075,7 +1090,7 @@ export function Menu() {
                     <div className="text-center">
                       <ImageIcon size={28} className="mx-auto mb-2 text-gray-300" />
                       <p className="text-sm font-medium text-gray-500">No items in this category</p>
-                      <button type="button" onClick={() => setEditItem({ mode: 'add' })} className="mt-1 text-sm font-semibold text-blue-600 hover:text-blue-700">
+                      <button type="button" onClick={() => itemAtCap ? setShowItemCapModal(true) : setEditItem({ mode: 'add' })} className="mt-1 text-sm font-semibold text-blue-600 hover:text-blue-700">
                         + Add your first item
                       </button>
                     </div>
@@ -1180,6 +1195,18 @@ export function Menu() {
           upgradeMessage={upgradeMessage}
         />
       )}
+
+      {/* Cap-reached upgrade modals */}
+      <UpgradeModal
+        open={showCatCapModal}
+        onClose={() => setShowCatCapModal(false)}
+        upgradeMessage={{ title: 'Category limit reached', html: `<p>Your plan allows up to ${plan?.category_cap ?? 0} categories. Upgrade to add more.</p>` }}
+      />
+      <UpgradeModal
+        open={showItemCapModal}
+        onClose={() => setShowItemCapModal(false)}
+        upgradeMessage={{ title: 'Item limit reached', html: `<p>Your plan allows up to ${plan?.item_cap ?? 0} items. Upgrade to add more.</p>` }}
+      />
     </div>
   )
 }
