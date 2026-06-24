@@ -279,20 +279,25 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
   app.delete('/admin/staff/device/:id', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
-    const deviceId = c.req.param('id')
+    const id = c.req.param('id')
 
     const admin = createAdminClient(c.env)
 
-    // Fetch the users row to get the device_token KV key (via device_id)
+    // Look up by primary key — the frontend passes device.id (users.id),
+    // then use the device_id from the row to revoke the KV token.
     const { data: user } = await admin
       .from('users')
       .select('id, device_id')
-      .eq('device_id', deviceId)
+      .eq('id', id)
       .eq('restaurant_id', restaurantId)
       .eq('role', 'kitchen')
       .single()
 
-    if (!user) return c.json({ error: 'not_found' }, 404)
+    if (!user || !(user as { device_id: string | null }).device_id) {
+      return c.json({ error: 'not_found' }, 404)
+    }
+
+    const deviceId = (user as { device_id: string }).device_id
 
     // O(1) revoke via secondary index: restaurantId-scoped, no cross-tenant scan
     const indexKey = deviceIndexKey(restaurantId, deviceId)
@@ -308,7 +313,7 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
     await admin
       .from('users')
       .update({ active: false })
-      .eq('device_id', deviceId)
+      .eq('id', id)
       .eq('restaurant_id', restaurantId)
 
     return c.body(null, 204)
