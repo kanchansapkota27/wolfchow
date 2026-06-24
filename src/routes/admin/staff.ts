@@ -130,9 +130,11 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
       }
     }
 
-    // Send Supabase auth invite
-    const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(parsed.data.email)
-    if (inviteError) {
+    // Send Supabase auth invite — captures the auth user's id so the profile
+    // row can be linked to auth.users (even though the FK is now gone, we keep
+    // the ids in sync for future RLS policies).
+    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(parsed.data.email)
+    if (inviteError || !inviteData?.user) {
       return c.json({ error: 'invite_failed' }, 500)
     }
 
@@ -140,6 +142,7 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
     const { data, error } = await admin
       .from('users')
       .insert({
+        id: inviteData.user.id,
         role: 'kitchen',
         restaurant_id: restaurantId,
         name: parsed.data.name,

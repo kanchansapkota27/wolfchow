@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@wolfchow/ui'
 import { useApi } from '../lib/api'
 import { ApiError } from '@wolfchow/api-client'
 import type { Promotion, CreatePromotionInput, DiscountType, ActiveDay } from '@wolfchow/api-client'
+import type { MenuItem } from '@wolfchow/types'
 
 type DayName = ActiveDay
 const ALL_DAYS: DayName[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -33,12 +34,16 @@ interface PromoModalProps {
   onClose: () => void
 }
 
+const ITEM_TYPES: DiscountType[] = ['free_item', 'bogo']
+
 function PromoModal({ initial, onSave, onClose }: PromoModalProps) {
+  const api = useApi()
   const [form, setForm] = useState<CreatePromotionInput>({
     title: initial?.title ?? '',
     description: initial?.description ?? '',
     discount_type: initial?.discount_type ?? 'percentage',
     discount_value: initial?.discount_value ?? 10,
+    free_item_id: initial?.free_item_id ?? undefined,
     promo_code: initial?.promo_code ?? '',
     auto_apply: initial?.auto_apply ?? false,
     minimum_order_amount: initial?.minimum_order_amount ?? undefined,
@@ -47,29 +52,41 @@ function PromoModal({ initial, onSave, onClose }: PromoModalProps) {
     end_time: initial?.end_time ?? '',
     active_days: initial?.active_days ?? undefined,
   })
+  const [allItems, setAllItems] = useState<MenuItem[]>([])
+  const [itemsLoading, setItemsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const fetchedItems = useRef(false)
 
-  const discountLabel =
-    form.discount_type === 'percentage' ? '%'
-    : form.discount_type === 'fixed' ? '$'
-    : 'Value'
+  const needsItem = ITEM_TYPES.includes(form.discount_type)
+
+  useEffect(() => {
+    if (!needsItem || fetchedItems.current) return
+    fetchedItems.current = true
+    setItemsLoading(true)
+    void api.admin.listItems().then(setAllItems).finally(() => setItemsLoading(false))
+  }, [needsItem, api])
+
+  const discountLabel = form.discount_type === 'percentage' ? '%' : '$'
 
   function toggleDay(day: DayName) {
     const days = form.active_days ?? []
-    setForm({
-      ...form,
-      active_days: days.includes(day) ? days.filter((d) => d !== day) : [...days, day],
-    })
+    setForm({ ...form, active_days: days.includes(day) ? days.filter((d) => d !== day) : [...days, day] })
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (needsItem && !form.free_item_id) {
+      setError('Please select the item for this promotion type.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
       await onSave({
         ...form,
+        discount_value: needsItem ? 0 : form.discount_value,
+        free_item_id: needsItem ? form.free_item_id : undefined,
         promo_code: form.auto_apply ? undefined : form.promo_code || undefined,
         minimum_order_amount: form.minimum_order_amount || undefined,
         usage_limit: form.usage_limit || undefined,
@@ -122,13 +139,16 @@ function PromoModal({ initial, onSave, onClose }: PromoModalProps) {
             <span className="block text-sm font-medium text-gray-700 mb-2">Discount type</span>
             <div className="grid grid-cols-2 gap-2">
               {(Object.entries(DISCOUNT_LABELS) as Array<[DiscountType, string]>).map(([type, label]) => (
-                <label key={type} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-sm ${form.discount_type === type ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}>
+                <label
+                  key={type}
+                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-sm ${form.discount_type === type ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700'}`}
+                >
                   <input
                     type="radio"
                     name="discount_type"
                     value={type}
                     checked={form.discount_type === type}
-                    onChange={() => setForm({ ...form, discount_type: type })}
+                    onChange={() => setForm({ ...form, discount_type: type, free_item_id: undefined })}
                     className="text-indigo-600"
                   />
                   {label}
@@ -136,20 +156,61 @@ function PromoModal({ initial, onSave, onClose }: PromoModalProps) {
               ))}
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Discount value ({discountLabel})</label>
-            <input
-              type="number"
-              min={0}
-              max={form.discount_type === 'percentage' ? 100 : undefined}
-              step={form.discount_type === 'fixed' ? 0.01 : 1}
-              value={form.discount_value}
-              onChange={(e) => setForm({ ...form, discount_value: Number(e.target.value) })}
-              required
-              className="border border-gray-200 rounded-md px-3 py-2 text-sm w-28 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-              aria-label="Discount value"
-            />
-          </div>
+
+          {/* Discount value — hidden for free_item / bogo (value is implicit) */}
+          {!needsItem && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Discount value ({discountLabel})
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={form.discount_type === 'percentage' ? 100 : undefined}
+                step={form.discount_type === 'fixed' ? 0.01 : 1}
+                value={form.discount_value}
+                onChange={(e) => setForm({ ...form, discount_value: Number(e.target.value) })}
+                required
+                className="border border-gray-200 rounded-md px-3 py-2 text-sm w-28 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                aria-label="Discount value"
+              />
+            </div>
+          )}
+
+          {/* Item picker — shown for free_item / bogo */}
+          {needsItem && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {form.discount_type === 'bogo' ? 'BOGO item (buy one, get one free)' : 'Free item to give'}
+              </label>
+              {itemsLoading ? (
+                <p className="text-sm text-gray-400">Loading items…</p>
+              ) : allItems.length === 0 ? (
+                <p className="text-sm text-amber-600">No menu items found. Add items to your menu first.</p>
+              ) : (
+                <select
+                  value={form.free_item_id ?? ''}
+                  onChange={(e) => setForm({ ...form, free_item_id: e.target.value || undefined })}
+                  className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  aria-label="Select item"
+                >
+                  <option value="">— Select an item —</option>
+                  {allItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                      {!item.has_variants ? ` — ${(item.price / 100).toFixed(2)}` : ' (variants)'}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {form.discount_type === 'bogo' && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Customers who add this item get a second one free.
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -260,13 +321,14 @@ function PromoModal({ initial, onSave, onClose }: PromoModalProps) {
 
 interface PromoCardProps {
   promo: Promotion
+  freeItemName?: string
   onToggle: (id: string) => Promise<void>
   onEdit: (p: Promotion) => void
   onDelete: (id: string) => Promise<void>
   onDeactivate: (id: string) => Promise<void>
 }
 
-function PromoCard({ promo, onToggle, onEdit, onDelete, onDeactivate }: PromoCardProps) {
+function PromoCard({ promo, freeItemName, onToggle, onEdit, onDelete, onDeactivate }: PromoCardProps) {
   const [toggling, setToggling] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -284,6 +346,12 @@ function PromoCard({ promo, onToggle, onEdit, onDelete, onDeactivate }: PromoCar
         <div>
           <h3 className="text-sm font-semibold text-gray-900">{promo.title}</h3>
           {promo.description && <p className="text-xs text-gray-500 mt-0.5">{promo.description}</p>}
+          {freeItemName && (
+            <p className="text-xs text-indigo-600 mt-0.5">
+              {promo.discount_type === 'bogo' ? 'BOGO: ' : 'Free: '}
+              <span className="font-medium">{freeItemName}</span>
+            </p>
+          )}
         </div>
         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 whitespace-nowrap">
           {formatDiscount(promo)}
@@ -354,13 +422,21 @@ function PromoCard({ promo, onToggle, onEdit, onDelete, onDeactivate }: PromoCar
 export function Promotions() {
   const api = useApi()
   const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [itemsMap, setItemsMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [planEnabled, setPlanEnabled] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [editPromo, setEditPromo] = useState<Promotion | null>(null)
 
   useEffect(() => {
-    void api.admin.listPromotions().then(setPromotions).finally(() => setLoading(false))
+    void Promise.all([
+      api.admin.listPromotions().then(setPromotions),
+      api.admin.listItems().then((items) => {
+        const map: Record<string, string> = {}
+        for (const item of items) map[item.id] = item.name
+        setItemsMap(map)
+      }),
+    ]).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -431,6 +507,7 @@ export function Promotions() {
             <PromoCard
               key={promo.id}
               promo={promo}
+              freeItemName={promo.free_item_id ? itemsMap[promo.free_item_id] : undefined}
               onToggle={handleToggle}
               onEdit={setEditPromo}
               onDelete={handleDelete}
