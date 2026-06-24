@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
-import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 import { EncryptionService } from '../../services/encryption'
 
 const DEFAULT_HISTORY_DAYS = 30
@@ -28,8 +28,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
   app.get('/admin/transactions', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
 
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    const plan = await resolvePlan(c.env, restaurantId)
     const historyDays = (plan?.history_days as number | undefined) ?? DEFAULT_HISTORY_DAYS
 
     const pageParam = c.req.query('page')

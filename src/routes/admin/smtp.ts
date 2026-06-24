@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
-import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 import { EncryptionService } from '../../services/encryption'
 import { requireRole } from '../../middleware/guards'
 
@@ -136,8 +136,7 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
       .maybeSingle()
 
     if (global) {
-      const cache = new KvCache(c.env.SETTINGS_CACHE)
-      const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+      const plan = await resolvePlan(c.env, restaurantId)
       const monthlyLimit = typeof plan?.smtp_monthly_limit === 'number' ? plan.smtp_monthly_limit : null
       const used = await monthlyUsed(c.env.SMTP_COUNTERS, restaurantId)
       return c.json({ ...(global as object), smtp_source: 'global', monthly_limit: monthlyLimit, monthly_used: used })

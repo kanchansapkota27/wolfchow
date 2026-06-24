@@ -3,6 +3,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -89,9 +90,8 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
 
     const admin = createAdminClient(c.env)
 
-    // Check promotions_enabled feature flag from plan KV
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    // Check promotions_enabled feature flag
+    const plan = await resolvePlan(c.env, restaurantId)
     if (!plan?.promotions_enabled) {
       return c.json({ error: 'feature_locked', feature: 'promotions_enabled' }, 402)
     }

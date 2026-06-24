@@ -2,7 +2,8 @@ import { z } from 'zod'
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
-import { buildKey, KvCache } from '../../services/kv'
+import { KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 import { requireRole } from '../../middleware/guards'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -110,10 +111,9 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
     }
 
     const admin = createAdminClient(c.env)
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
 
-    // Check staff_cap from plan KV
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    // Check staff_cap from plan
+    const plan = await resolvePlan(c.env, restaurantId)
     const staffCap = typeof plan?.staff_cap === 'number' ? plan.staff_cap : null
 
     if (staffCap !== null) {
@@ -224,10 +224,9 @@ export function registerStaffRoutes(app: Hono<HonoEnv>): void {
     }
 
     const admin = createAdminClient(c.env)
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
 
-    // Check staff_cap from plan KV (devices count against the same cap)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    // Check staff_cap from plan (devices count against the same cap)
+    const plan = await resolvePlan(c.env, restaurantId)
     const staffCap = typeof plan?.staff_cap === 'number' ? plan.staff_cap : null
 
     if (staffCap !== null) {
