@@ -4,6 +4,7 @@ import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
 import { EncryptionService } from '../../services/encryption'
+import { requireRole } from '../../middleware/guards'
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
 
   // ── POST /admin/payments/stripe ────────────────────────────────────────────
 
-  app.post('/admin/payments/stripe', async (c) => {
+  app.post('/admin/payments/stripe', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
@@ -111,7 +112,7 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
 
   // ── DELETE /admin/payments/stripe ──────────────────────────────────────────
 
-  app.delete('/admin/payments/stripe', async (c) => {
+  app.delete('/admin/payments/stripe', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 

@@ -4,6 +4,7 @@ import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
 import { EncryptionService } from '../../services/encryption'
+import { requireRole } from '../../middleware/guards'
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ export interface SmtpRouteDeps {
 export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {}): void {
   // ── POST /admin/smtp ───────────────────────────────────────────────────────
 
-  app.post('/admin/smtp', async (c) => {
+  app.post('/admin/smtp', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
@@ -147,7 +148,7 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
 
   // ── DELETE /admin/smtp ─────────────────────────────────────────────────────
 
-  app.delete('/admin/smtp', async (c) => {
+  app.delete('/admin/smtp', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
