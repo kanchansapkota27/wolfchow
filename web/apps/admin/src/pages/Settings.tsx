@@ -1042,6 +1042,7 @@ const SUB_NAV: Array<{ id: ConfigSection; label: string; icon: React.ElementType
 export function Settings() {
   const api = useApi()
   const qc = useQueryClient()
+  const { plan } = usePlan()
   const [searchParams, setSearchParams] = useSearchParams()
   const section = (searchParams.get('section') ?? 'profile') as ConfigSection
 
@@ -1065,10 +1066,14 @@ export function Settings() {
           <h1 className="text-3xl font-bold text-gray-900">Configuration</h1>
           <p className="mt-1 text-sm text-gray-500">Manage your restaurant identity, payments, and automation.</p>
         </div>
-        {restaurant?.plan_id && (
-          <button className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold tracking-wider text-white hover:bg-blue-700">
+        {plan && (
+          <button
+            type="button"
+            onClick={() => setSection('plan')}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold tracking-wider text-white hover:bg-blue-700"
+          >
             <Zap size={13} />
-            ACTIVE PLAN ENTERPRISE
+            {plan.name.toUpperCase()}
           </button>
         )}
       </div>

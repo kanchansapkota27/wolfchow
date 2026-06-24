@@ -3,6 +3,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 import { EncryptionService } from '../../services/encryption'
 import { requireRole } from '../../middleware/guards'
 
@@ -150,8 +151,7 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
 
     const { payment_methods } = parsed.data
 
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    const plan = await resolvePlan(c.env, restaurantId)
     const allowed = Array.isArray(plan?.payment_methods_allowed) ? plan.payment_methods_allowed as string[] : null
 
     if (allowed !== null) {
@@ -177,7 +177,8 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
 
     if (error || !data) return c.json({ error: 'update_failed' }, 500)
 
-    await cache.delete(buildKey('settings', restaurantId))
+    const settingsCache = new KvCache(c.env.SETTINGS_CACHE)
+    await settingsCache.delete(buildKey('settings', restaurantId))
 
     return c.json(data)
   })
