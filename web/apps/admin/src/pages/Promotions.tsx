@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router'
 import { Button } from '@wolfchow/ui'
 import { useApi } from '../lib/api'
+import { usePlan } from '../lib/usePlan'
+import { sanitizeHtml } from '../lib/sanitize'
 import { ApiError } from '@wolfchow/api-client'
 import type { Promotion, CreatePromotionInput, DiscountType, ActiveDay } from '@wolfchow/api-client'
 import type { MenuItem } from '@wolfchow/types'
@@ -425,12 +428,15 @@ function PromoCard({ promo, freeItemName, onToggle, onEdit, onDelete, onDeactiva
 
 export function Promotions() {
   const api = useApi()
+  const { plan, isLoading: planLoading, upgradeMessage } = usePlan()
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [itemsMap, setItemsMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [planEnabled, setPlanEnabled] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [editPromo, setEditPromo] = useState<Promotion | null>(null)
+
+  // plan.feature_flags.promotions_enabled: false means feature locked on this plan
+  const planEnabled = plan == null || plan.feature_flags.promotions_enabled !== false
 
   useEffect(() => {
     void Promise.all([
@@ -445,16 +451,8 @@ export function Promotions() {
   }, [])
 
   async function handleCreate(data: CreatePromotionInput) {
-    try {
-      const promo = await api.admin.createPromotion(data)
-      setPromotions((prev) => [promo, ...prev])
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 402) {
-        const body = err.body as { error?: string }
-        if (body?.error === 'feature_locked') setPlanEnabled(false)
-      }
-      throw err
-    }
+    const promo = await api.admin.createPromotion(data)
+    setPromotions((prev) => [promo, ...prev])
   }
 
   async function handleUpdate(data: CreatePromotionInput) {
@@ -479,16 +477,21 @@ export function Promotions() {
     setPromotions((prev) => prev.map((p) => p.id === id ? { ...p, active: false } : p))
   }
 
-  if (loading) return <div className="p-8 text-gray-500">Loading…</div>
+  if (loading || planLoading) return <div className="p-8 text-gray-500">Loading…</div>
 
   if (!planEnabled) {
     return (
       <div className="p-8 max-w-2xl">
         <div className="bg-white rounded-xl border border-amber-200 p-8 text-center space-y-4">
-          <div className="text-5xl">🔒</div>
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">🔒</div>
           <h2 className="text-lg font-semibold text-gray-900">Promotions not available on your plan</h2>
-          <p className="text-gray-500 text-sm">Upgrade your plan to create discount codes, auto-apply promotions, and BOGO offers.</p>
-          <Button onClick={() => { /* navigate to plan upgrade */ }}>Upgrade plan</Button>
+          <p
+            className="text-sm text-gray-500 [&_a]:text-blue-600 [&_a]:underline [&_strong]:font-semibold"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(upgradeMessage.html || '<p>Upgrade your plan to create discount codes, auto-apply promotions, and BOGO offers.</p>') }}
+          />
+          <Link to="/settings?section=plan" className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+            View plan options
+          </Link>
         </div>
       </div>
     )
