@@ -269,6 +269,7 @@ export interface CreatePromotionInput {
   promo_code?: string
   discount_type: DiscountType
   discount_value: number
+  free_item_id?: string
   minimum_order_amount?: number
   usage_limit?: number
   auto_apply?: boolean
@@ -598,8 +599,8 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<void>(`/admin/menu/categories/${id}`, { method: 'DELETE' }),
     reorderCategories: (order: Array<{ id: string; sort_order: number }>) =>
       apiFetch<{ ok: boolean }>('/admin/menu/categories/reorder', { method: 'POST', body: order }),
-    listItems: (categoryId: string) =>
-      apiFetch<{ items: MenuItem[] }>(`/admin/menu/items?category_id=${categoryId}`).then((r) => r.items),
+    listItems: (categoryId?: string) =>
+      apiFetch<{ items: MenuItem[] }>(categoryId ? `/admin/menu/items?category_id=${categoryId}` : '/admin/menu/items').then((r) => r.items),
     createItem: (data: Record<string, unknown>) =>
       apiFetch<{ item: MenuItem }>('/admin/menu/items', { method: 'POST', body: data }).then((r) => r.item),
     updateItem: (id: string, data: Record<string, unknown>) =>

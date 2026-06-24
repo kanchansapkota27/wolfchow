@@ -12,7 +12,7 @@ const createPromoSchema = z
     description: z.string().optional(),
     promo_code: z.string().max(20).optional(),
     discount_type: z.enum(['percentage', 'fixed', 'free_item', 'bogo']),
-    discount_value: z.number().positive(),
+    discount_value: z.number().min(0),
     free_item_id: z.string().uuid().optional(),
     minimum_order_amount: z.number().min(0).optional(),
     usage_limit: z.number().int().positive().optional(),
@@ -30,6 +30,9 @@ const createPromoSchema = z
     }
     if (['free_item', 'bogo'].includes(data.discount_type) && !data.free_item_id) {
       ctx.addIssue({ code: 'custom', message: 'free_item_id required for free_item/bogo discount types', path: ['free_item_id'] })
+    }
+    if (!['free_item', 'bogo'].includes(data.discount_type) && data.discount_value <= 0) {
+      ctx.addIssue({ code: 'custom', message: 'discount_value must be positive for percentage/fixed types', path: ['discount_value'] })
     }
     if (data.discount_type === 'percentage' && data.discount_value > 100) {
       ctx.addIssue({ code: 'custom', message: 'percentage discount cannot exceed 100', path: ['discount_value'] })
