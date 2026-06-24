@@ -252,7 +252,7 @@ export function Orders() {
   useEffect(() => {
     const load = async () => {
       const [orders, pause, automation] = await Promise.all([
-        api.orders.listActive().catch(() => [] as Order[]),
+        api.admin.listActiveOrders().catch(() => [] as Order[]),
         api.admin.getPauseState().catch(() => null),
         api.admin.getAutomationConfig().catch(() => null),
       ])

@@ -15,8 +15,8 @@ const STATUS_BADGE: Record<string, string> = {
   auth_success:    'bg-gray-100 text-gray-600',
 }
 
-function cents(n: number): string {
-  return `$${(n / 100).toFixed(2)}`
+function money(n: number): string {
+  return `$${Number(n).toFixed(2)}`
 }
 
 const REASON_LABELS: Record<RefundReason, string> = {
@@ -40,8 +40,7 @@ function RefundModal({ tx, onConfirm, onClose }: RefundModalProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const maxCents = tx.total_cents
-  const maxDollars = maxCents / 100
+  const maxDollars = Number(tx.total)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -49,7 +48,7 @@ function RefundModal({ tx, onConfirm, onClose }: RefundModalProps) {
     if (mode === 'partial') {
       const entered = parseFloat(amountStr)
       if (isNaN(entered) || entered <= 0) { setError('Enter a valid amount'); return }
-      if (entered > maxDollars) { setError(`Amount cannot exceed ${cents(maxCents)}`); return }
+      if (entered > maxDollars) { setError(`Amount cannot exceed ${money(maxDollars)}`); return }
     }
     setSubmitting(true)
     try {
@@ -74,7 +73,7 @@ function RefundModal({ tx, onConfirm, onClose }: RefundModalProps) {
           <div className="space-y-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" checked={mode === 'full'} onChange={() => setMode('full')} className="text-indigo-600" />
-              <span className="text-sm text-gray-700">Full refund <span className="text-gray-500">({cents(maxCents)})</span></span>
+              <span className="text-sm text-gray-700">Full refund <span className="text-gray-500">({money(maxDollars)})</span></span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" checked={mode === 'partial'} onChange={() => setMode('partial')} className="text-indigo-600" />
@@ -131,7 +130,7 @@ interface DetailPanelProps {
 
 function DetailPanel({ tx, onRefund, onClose }: DetailPanelProps) {
   const [showRefundModal, setShowRefundModal] = useState(false)
-  const isCard = tx.payment_intent_id !== null
+  const isCard = tx.stripe_intent_id !== null
   const alreadyRefunded = tx.refund_id !== null
 
   async function handleRefund(data: RefundInput) {
@@ -149,10 +148,10 @@ function DetailPanel({ tx, onRefund, onClose }: DetailPanelProps) {
         <dl className="text-sm space-y-2">
           <div><dt className="text-gray-500">Customer</dt><dd className="font-medium">{tx.customer_name} ({tx.customer_email})</dd></div>
           <div><dt className="text-gray-500">Status</dt><dd><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_BADGE[tx.status] ?? 'bg-gray-100 text-gray-600'}`}>{tx.status}</span></dd></div>
-          <div><dt className="text-gray-500">Total</dt><dd className="font-medium">{cents(tx.total_cents)}</dd></div>
+          <div><dt className="text-gray-500">Total</dt><dd className="font-medium">{money(tx.total)}</dd></div>
           <div><dt className="text-gray-500">Date</dt><dd>{new Date(tx.created_at).toLocaleString()}</dd></div>
           {isCard && (
-            <div><dt className="text-gray-500">Stripe intent</dt><dd className="font-mono text-xs break-all">{tx.payment_intent_id}</dd></div>
+            <div><dt className="text-gray-500">Stripe intent</dt><dd className="font-mono text-xs break-all">{tx.stripe_intent_id}</dd></div>
           )}
           {alreadyRefunded && (
             <div>
@@ -269,11 +268,11 @@ export function Transactions() {
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">{t.id.slice(0, 8).toUpperCase()}</td>
                   <td className="px-4 py-3 text-gray-700 max-w-40 truncate">{t.customer_name}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${t.payment_intent_id ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {t.payment_intent_id ? 'Card' : 'Cash'}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${t.stripe_intent_id ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {t.stripe_intent_id ? 'Card' : 'Cash'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right font-medium text-gray-900">{cents(t.total_cents)}</td>
+                  <td className="px-4 py-3 text-right font-medium text-gray-900">{money(t.total)}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_BADGE[t.status] ?? 'bg-gray-100 text-gray-600'}`}>
                       {t.status}
