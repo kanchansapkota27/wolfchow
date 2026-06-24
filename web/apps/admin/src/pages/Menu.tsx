@@ -287,7 +287,14 @@ function EditItemDrawer({ item, categories, selectedCategoryId, onClose, onSave,
       })
       onClose()
     } catch (err) {
-      setError(err instanceof ApiError ? String(err.message) : 'Save failed.')
+      if (err instanceof ApiError && err.status === 402) {
+        const body = err.body as { error?: string; limit?: number }
+        setError(body?.error === 'plan_limit_reached'
+          ? `Item limit reached (${body.limit ?? 0}). Upgrade your plan to add more.`
+          : 'This feature is not available on your current plan.')
+      } else {
+        setError(err instanceof ApiError ? String(err.message) : 'Save failed.')
+      }
       setSaving(false)
     }
   }
@@ -532,7 +539,14 @@ function CategoryModal({ category, onClose, onSave }: {
       await onSave({ name: name.trim(), active })
       onClose()
     } catch (err) {
-      setError(err instanceof ApiError ? String(err.message) : 'Save failed.')
+      if (err instanceof ApiError && err.status === 402) {
+        const body = err.body as { error?: string; limit?: number }
+        setError(body?.error === 'plan_limit_reached'
+          ? `Category limit reached (${body.limit ?? 0}). Upgrade your plan to add more.`
+          : 'This feature is not available on your current plan.')
+      } else {
+        setError(err instanceof ApiError ? String(err.message) : 'Save failed.')
+      }
       setSaving(false)
     }
   }
@@ -624,6 +638,7 @@ function DeleteConfirm({ title, body, onClose, onConfirm }: {
 function ModifiersTab() {
   const api = useApi()
   const qc = useQueryClient()
+  const { plan, usage, upgradeMessage } = usePlan()
 
   const { data: groups, isLoading } = useQuery({
     queryKey: ['global-modifier-groups'],
@@ -635,15 +650,20 @@ function ModifiersTab() {
   const [newGroupType, setNewGroupType] = useState<'single' | 'multi'>('single')
   const [newGroupRequired, setNewGroupRequired] = useState(false)
   const [savingGroup, setSavingGroup] = useState(false)
+  const [groupError, setGroupError] = useState('')
+  const [showModCapModal, setShowModCapModal] = useState(false)
   const [addingOption, setAddingOption] = useState<string | null>(null)
   const [newOptionName, setNewOptionName] = useState('')
   const [newOptionDelta, setNewOptionDelta] = useState('0')
 
   const groupsArr: ModifierGroup[] = groups ?? []
+  const modifierCount = usage?.modifiers ?? groupsArr.length
+  const modifierAtCap = plan != null && modifierCount >= plan.modifier_cap
 
   async function createGroup() {
     if (!newGroupName.trim()) return
     setSavingGroup(true)
+    setGroupError('')
     try {
       await api.admin.createGlobalModifierGroup({
         name: newGroupName.trim(),
@@ -655,6 +675,16 @@ function ModifiersTab() {
       setNewGroupRequired(false)
       setAddingGroup(false)
       void qc.invalidateQueries({ queryKey: ['global-modifier-groups'] })
+      void qc.invalidateQueries({ queryKey: ['admin-plan'] })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        const body = err.body as { error?: string; limit?: number }
+        setGroupError(body?.error === 'plan_limit_reached'
+          ? `Modifier group limit reached (${body.limit ?? 0}). Upgrade your plan.`
+          : 'Item modifiers are not available on your current plan.')
+      } else {
+        setGroupError('Failed to create group.')
+      }
     } finally {
       setSavingGroup(false)
     }
@@ -664,6 +694,7 @@ function ModifiersTab() {
     if (!window.confirm('Delete this modifier group? Items assigned to it will lose this modifier.')) return
     await api.admin.deleteModifierGroup(groupId)
     void qc.invalidateQueries({ queryKey: ['global-modifier-groups'] })
+    void qc.invalidateQueries({ queryKey: ['admin-plan'] })
   }
 
   async function addOption(groupId: string) {
@@ -691,13 +722,22 @@ function ModifiersTab() {
         </div>
         <button
           type="button"
-          onClick={() => setAddingGroup(true)}
-          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+          onClick={() => modifierAtCap ? setShowModCapModal(true) : setAddingGroup(true)}
+          className={cn(
+            'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white',
+            modifierAtCap ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700',
+          )}
+          title={modifierAtCap ? `Modifier group limit reached (${plan?.modifier_cap})` : 'Add modifier group'}
         >
           <Plus size={15} />
           ADD GROUP
         </button>
       </div>
+      <UpgradeModal
+        open={showModCapModal}
+        onClose={() => setShowModCapModal(false)}
+        upgradeMessage={{ title: 'Modifier group limit reached', html: `<p>Your plan allows up to ${plan?.modifier_cap ?? 0} modifier groups. Upgrade to add more.</p>` }}
+      />
 
       <div className="space-y-3">
         {!isLoading && groupsArr.length === 0 && !addingGroup && (
@@ -799,6 +839,7 @@ function ModifiersTab() {
               <input type="checkbox" checked={newGroupRequired} onChange={(e) => setNewGroupRequired(e.target.checked)} className="h-4 w-4 rounded border-gray-300 accent-blue-500" />
               Required
             </label>
+            {groupError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{groupError}</p>}
             <div className="flex gap-3">
               <button
                 type="button"
@@ -806,9 +847,9 @@ function ModifiersTab() {
                 onClick={() => void createGroup()}
                 className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                Create Group
+                {savingGroup ? 'Creating…' : 'Create Group'}
               </button>
-              <button type="button" onClick={() => { setAddingGroup(false); setNewGroupName('') }} className="text-sm text-gray-500 hover:text-gray-700">
+              <button type="button" onClick={() => { setAddingGroup(false); setNewGroupName(''); setGroupError('') }} className="text-sm text-gray-500 hover:text-gray-700">
                 Cancel
               </button>
             </div>
@@ -860,8 +901,10 @@ export function Menu() {
 
   const catCount = usage?.categories ?? cats.length
   const itemCount = usage?.items ?? itemsArr.length
+  const modifierCount = usage?.modifiers ?? 0
   const catAtCap = plan != null && catCount >= plan.category_cap
   const itemAtCap = plan != null && itemCount >= plan.item_cap
+  const modifierAtCap = plan != null && modifierCount >= plan.modifier_cap
 
   const saveCategory = useCallback(async (data: { name: string; active: boolean }) => {
     if (categoryModal?.mode === 'edit' && categoryModal.category) {
@@ -870,6 +913,7 @@ export function Menu() {
       await api.admin.createCategory(data)
     }
     void qc.invalidateQueries({ queryKey: ['categories'] })
+    void qc.invalidateQueries({ queryKey: ['admin-plan'] })
   }, [api, categoryModal, qc])
 
   const confirmDeleteCat = useCallback(async () => {
@@ -877,6 +921,7 @@ export function Menu() {
     await api.admin.deleteCategory(deleteCat.id)
     if (selectedCategoryId === deleteCat.id) setSelectedCategoryId(null)
     void qc.invalidateQueries({ queryKey: ['categories'] })
+    void qc.invalidateQueries({ queryKey: ['admin-plan'] })
   }, [api, deleteCat, selectedCategoryId, qc])
 
   const saveItem = useCallback(async (data: Record<string, unknown>) => {
@@ -887,6 +932,7 @@ export function Menu() {
       await api.admin.createItem({ ...data, category_id: activeCategoryId })
     }
     void qc.invalidateQueries({ queryKey: ['items', activeCategoryId] })
+    void qc.invalidateQueries({ queryKey: ['admin-plan'] })
   }, [api, activeCategoryId, editItem, qc])
 
   const handleCatDrop = useCallback(async () => {
@@ -978,6 +1024,18 @@ export function Menu() {
               <span className="font-normal text-gray-400">/{plan?.item_cap ?? 999}</span>
             </p>
           </div>
+          {plan?.modifier_cap != null && (
+            <>
+              <div className="h-7 w-px bg-gray-200" />
+              <div className="text-right">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Modifiers</p>
+                <p className="text-sm font-bold text-gray-800">
+                  {modifierCount}
+                  <span className="font-normal text-gray-400">/{plan.modifier_cap}</span>
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
