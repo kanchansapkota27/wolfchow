@@ -27,7 +27,7 @@ export function corsMiddleware(): MiddlewareHandler<HonoEnv> {
       return origin && allowed.includes(origin) ? origin : null
     },
     allowHeaders: ['Authorization', 'Content-Type'],
-    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     maxAge: 86400,
   })
 }

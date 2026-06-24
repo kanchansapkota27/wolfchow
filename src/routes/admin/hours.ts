@@ -68,8 +68,19 @@ export function registerHoursRoutes(app: Hono<HonoEnv>): void {
 
     if (error) return c.json({ error: 'fetch_failed' }, 500)
 
-    // Build a 7-slot array, filling any missing days with a closed default
-    const byDay = new Map((data ?? []).map((row: Record<string, unknown>) => [row['day_of_week'] as number, row]))
+    // Build a 7-slot array, filling any missing days with a closed default.
+    // Postgres returns time columns as "HH:MM:SS" — strip seconds so the
+    // frontend always holds "HH:MM" and PUT validation passes unchanged.
+    const normaliseTime = (t: unknown) =>
+      typeof t === 'string' ? t.slice(0, 5) : t
+    const normaliseRow = (row: Record<string, unknown>) => ({
+      ...row,
+      open_time: normaliseTime(row['open_time']),
+      close_time: normaliseTime(row['close_time']),
+    })
+    const byDay = new Map(
+      (data ?? []).map((row: Record<string, unknown>) => [row['day_of_week'] as number, normaliseRow(row)])
+    )
     const hours = Array.from({ length: 7 }, (_, i) => byDay.get(i) ?? closedDefault(i, restaurantId))
 
     return c.json({ hours })
@@ -103,7 +114,14 @@ export function registerHoursRoutes(app: Hono<HonoEnv>): void {
 
     await invalidateHoursCache(c.env, restaurantId)
 
-    return c.json({ hours: data })
+    const normaliseTime = (t: unknown) => (typeof t === 'string' ? t.slice(0, 5) : t)
+    const normalisedHours = (data ?? []).map((row: Record<string, unknown>) => ({
+      ...row,
+      open_time: normaliseTime(row['open_time']),
+      close_time: normaliseTime(row['close_time']),
+    }))
+
+    return c.json({ hours: normalisedHours })
   })
 
   // ── PATCH /admin/hours/:day ────────────────────────────────────────────────
