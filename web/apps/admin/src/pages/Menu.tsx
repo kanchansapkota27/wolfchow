@@ -1,129 +1,515 @@
 import { useState, useCallback, useRef } from 'react'
-import { Button, Modal } from '@wolfchow/ui'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  ImageIcon, Layers, Clock, Utensils, X, Plus,
+  Pencil, Trash2, GripVertical, ChevronRight,
+} from 'lucide-react'
+import type { AvailabilityState, MenuCategory, MenuItem, ModifierGroup } from '@wolfchow/types'
 import { ApiError } from '@wolfchow/api-client'
-import type { AvailabilityState, MenuCategory, MenuItem, ModifierGroup, ModifierOption } from '@wolfchow/types'
 import { useApi } from '../lib/api'
-import { useAsync } from '../lib/useAsync'
+import { usePlan } from '../lib/usePlan'
+import { PlanLocked, LockIcon, UpgradeModal } from '../components/UpgradeModal'
+import type { UpgradeMessage } from '../components/UpgradeModal'
+import { cn } from '../lib/utils'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const DIETARY_TAGS = [
-  { value: 'vegan', label: 'Vegan' },
-  { value: 'vegetarian', label: 'Vegetarian' },
-  { value: 'spicy', label: 'Spicy 🌶' },
-  { value: 'gluten_free', label: 'Gluten-Free' },
+  { value: 'vegan',         label: 'Vegan' },
+  { value: 'vegetarian',   label: 'Vegetarian' },
+  { value: 'spicy',        label: 'Spicy' },
+  { value: 'gluten_free',  label: 'Gluten-Free' },
   { value: 'contains_nuts', label: 'Contains Nuts' },
-  { value: 'halal', label: 'Halal' },
-  { value: 'dairy_free', label: 'Dairy-Free' },
+  { value: 'halal',        label: 'Halal' },
+  { value: 'dairy_free',   label: 'Dairy-Free' },
 ]
 
-const AVAILABILITY_OPTIONS: Array<{ value: AvailabilityState; label: string; color: string }> = [
-  { value: 'in_stock',    label: 'In Stock',     color: 'bg-green-100 text-green-800' },
-  { value: 'out_of_stock', label: 'Out of Stock', color: 'bg-red-100 text-red-800' },
-  { value: 'limited',     label: 'Limited',      color: 'bg-amber-100 text-amber-800' },
-  { value: 'hidden',      label: 'Hidden',       color: 'bg-gray-100 text-gray-600' },
+const AVAIL_OPTIONS: Array<{
+  value: AvailabilityState
+  label: string
+  dot: string
+  badge: string
+}> = [
+  { value: 'available',    label: 'In Stock',     dot: 'bg-green-500', badge: 'bg-green-100 text-green-700' },
+  { value: 'out_of_stock', label: 'Out of Stock', dot: 'bg-red-500',   badge: 'bg-red-100 text-red-700' },
+  { value: 'unavailable',  label: 'Unavailable',  dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-700' },
+  { value: 'scheduled',    label: 'Scheduled',    dot: 'bg-blue-400',  badge: 'bg-blue-100 text-blue-700' },
 ]
+
+const FIELD = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function AvailabilityBadge({ state }: { state: string }) {
-  const opt = AVAILABILITY_OPTIONS.find((o) => o.value === state) ?? AVAILABILITY_OPTIONS[0]
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${opt.color}`}>
-      {opt.label}
-    </span>
-  )
-}
 
 function formatPrice(cents: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100)
 }
 
-// ── Plan limit bar ─────────────────────────────────────────────────────────────
-
-function PlanLimitBar({ label, used, cap }: { label: string; used: number; cap: number }) {
-  const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0
+function AvailabilityBadge({ state }: { state: string }) {
+  const opt = (AVAIL_OPTIONS.find((o) => o.value === state) ?? AVAIL_OPTIONS[0])!
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-500">
-      <span>{label}: {used}/{cap}</span>
-      <div className="h-1.5 w-20 rounded-full bg-gray-200">
-        <div
-          className={`h-1.5 rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-indigo-500'}`}
-          style={{ width: `${pct}%` }}
-        />
+    <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide', opt.badge)}>
+      {opt.label}
+    </span>
+  )
+}
+
+// ── Image upload zone ──────────────────────────────────────────────────────────
+
+function ImageUploadZone({ itemId, existingKey, onUploaded, locked, upgradeMessage }: {
+  itemId: string
+  existingKey: string | null
+  onUploaded: (r2Key: string) => void
+  locked?: boolean
+  upgradeMessage?: UpgradeMessage
+}) {
+  const api = useApi()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [progress, setProgress] = useState<number | null>(null)
+  const [preview, setPreview] = useState<string | null>(existingKey ? `/r2/${existingKey}` : null)
+  const [error, setError] = useState<string | null>(null)
+  const [showUpgrade, setShowUpgrade] = useState(false)
+
+  async function handleFile(file: File) {
+    if (locked) { setShowUpgrade(true); return }
+    if (!file.type.startsWith('image/')) { setError('Please select an image file.'); return }
+    setError(null)
+    setProgress(0)
+    try {
+      const { upload_url, r2_key } = await api.admin.getItemImageUrl(itemId)
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100)) }
+        xhr.onload = () => { xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`)) }
+        xhr.onerror = () => reject(new Error('Network error'))
+        xhr.open('PUT', upload_url)
+        xhr.setRequestHeader('Content-Type', file.type)
+        xhr.send(file)
+      })
+      setPreview(URL.createObjectURL(file))
+      setProgress(null)
+      onUploaded(r2_key)
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === 'feature_locked' || err.status === 402)) {
+        setShowUpgrade(true)
+      } else {
+        setError(err instanceof Error ? err.message : 'Upload failed.')
+      }
+      setProgress(null)
+    }
+  }
+
+  function handleClick() {
+    if (locked) { setShowUpgrade(true); return }
+    fileRef.current?.click()
+  }
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm font-medium text-gray-700">Image</label>
+      <div
+        className={cn(
+          'relative flex min-h-[96px] flex-col items-center justify-center rounded-xl border-2 border-dashed bg-gray-50',
+          locked ? 'cursor-pointer border-gray-200 opacity-60' : 'cursor-pointer border-gray-200 hover:border-blue-400',
+        )}
+        onClick={handleClick}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) void handleFile(f) }}
+      >
+        {preview && !locked ? (
+          <img src={preview} alt="Preview" className="max-h-32 rounded-lg object-cover" />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-gray-400">
+            <ImageIcon size={24} />
+            <p className="text-xs">{locked ? 'Image upload locked' : 'Click or drag an image here'}</p>
+          </div>
+        )}
+        {locked && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-xl">
+            <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
+              <svg className="h-3.5 w-3.5 text-gray-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
+              </svg>
+              <span className="text-xs font-semibold text-gray-600">Upgrade to unlock</span>
+            </div>
+          </div>
+        )}
+        {progress !== null && (
+          <div className="absolute inset-x-4 bottom-2">
+            <div className="h-1.5 overflow-hidden rounded-full bg-gray-200">
+              <div className="h-1.5 rounded-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} data-testid="upload-progress" />
+            </div>
+          </div>
+        )}
       </div>
+      {!locked && <input ref={fileRef} type="file" accept="image/*" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f) }} />}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      <UpgradeModal open={showUpgrade} onClose={() => setShowUpgrade(false)} upgradeMessage={upgradeMessage} />
     </div>
   )
 }
 
-// ── Category panel ─────────────────────────────────────────────────────────────
+// ── Edit Item Drawer — Modifiers sub-tab ──────────────────────────────────────
 
-interface CategoryRowProps {
-  category: MenuCategory
-  selected: boolean
-  isFirst: boolean
-  isLast: boolean
-  onClick: () => void
-  onEdit: () => void
-  onDelete: () => void
-  onToggleActive: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
+function DrawerModifiers({ itemId }: { itemId: string }) {
+  const api = useApi()
+  const qc = useQueryClient()
+
+  const { data: allGroups } = useQuery({
+    queryKey: ['global-modifier-groups'],
+    queryFn: () => api.admin.listGlobalModifierGroups(),
+  })
+
+  const { data: assignedIds, refetch: refetchAssigned } = useQuery({
+    queryKey: ['item-modifier-assignments', itemId],
+    queryFn: () => api.admin.getItemModifierAssignments(itemId),
+    enabled: !!itemId,
+  })
+
+  const groups: ModifierGroup[] = allGroups ?? []
+  const assigned = new Set(assignedIds ?? [])
+
+  async function toggleAssignment(groupId: string) {
+    const next = new Set(assigned)
+    if (next.has(groupId)) next.delete(groupId)
+    else next.add(groupId)
+    await api.admin.setItemModifierAssignments(itemId, [...next])
+    void refetchAssigned()
+    void qc.invalidateQueries({ queryKey: ['items'] })
+  }
+
+  if (groups.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <Layers size={28} className="mx-auto mb-2 text-gray-300" />
+        <p className="text-sm text-gray-500">No global modifier groups yet.</p>
+        <p className="mt-1 text-xs text-gray-400">Create groups in the Modifiers tab first.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Assign Modifier Groups</p>
+
+      {groups.map((group) => (
+        <label key={group.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 hover:border-blue-200">
+          <input
+            type="checkbox"
+            checked={assigned.has(group.id)}
+            onChange={() => void toggleAssignment(group.id)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-blue-500"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-800">{group.name}</span>
+              <span className="rounded-full border border-gray-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                {group.type === 'single' ? 'Single' : 'Multiple'}
+              </span>
+              {group.required && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">Required</span>
+              )}
+            </div>
+            {(group.options ?? []).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {(group.options ?? []).map((opt) => (
+                  <span key={opt.id} className="rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-xs text-gray-500">
+                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatPrice(opt.price_delta)})` : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </label>
+      ))}
+    </div>
+  )
 }
 
-function CategoryRow({ category, selected, isFirst, isLast, onClick, onEdit, onDelete, onToggleActive, onMoveUp, onMoveDown }: CategoryRowProps) {
+// ── Edit Item Drawer ───────────────────────────────────────────────────────────
+
+type DrawerTab = 'details' | 'modifiers' | 'availability'
+
+const DRAWER_TABS: Array<{ id: DrawerTab; label: string; icon: typeof Utensils }> = [
+  { id: 'details',      label: 'Item Details', icon: Utensils },
+  { id: 'modifiers',   label: 'Modifiers',    icon: Layers },
+  { id: 'availability', label: 'Availability', icon: Clock },
+]
+
+function EditItemDrawer({ item, categories, selectedCategoryId, onClose, onSave, featureFlags, upgradeMessage }: {
+  item: MenuItem | null
+  categories: MenuCategory[]
+  selectedCategoryId: string
+  onClose: () => void
+  onSave: (data: Record<string, unknown>) => Promise<void>
+  featureFlags?: import('@wolfchow/types').FeatureFlags | null
+  upgradeMessage?: import('../components/UpgradeModal').UpgradeMessage
+}) {
+  const canPhotos = featureFlags?.menu_photos !== false
+  const canModifiers = featureFlags?.item_modifiers !== false
+  const [activeTab, setActiveTab] = useState<DrawerTab>('details')
+  const [name, setName] = useState(item?.name ?? '')
+  const [description, setDescription] = useState(item?.description ?? '')
+  const [price, setPrice] = useState(item && !item.has_variants ? String(item.price / 100) : '')
+  const [categoryId, setCategoryId] = useState(item?.category_id ?? selectedCategoryId)
+  const [tags, setTags] = useState<string[]>(item?.tags ?? [])
+  const [availability, setAvailability] = useState<AvailabilityState>(item?.availability_state ?? 'available')
+  const [restoreAt, setRestoreAt] = useState(item?.restore_at ?? '')
+  const [hasVariants, setHasVariants] = useState(item?.has_variants ?? false)
+  const [variants, setVariants] = useState<Array<{ name: string; price: number; is_default: boolean; available: boolean }>>(
+    item?.variants?.map((v) => ({ name: v.name, price: v.price, is_default: v.is_default, available: v.available })) ?? []
+  )
+  const [imageKey, setImageKey] = useState<string | null>(item?.image_r2_key ?? null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function toggleTag(tag: string) {
+    setTags((ts) => ts.includes(tag) ? ts.filter((t) => t !== tag) : [...ts, tag])
+  }
+
+  async function submit() {
+    if (!name.trim()) { setError('Name is required.'); return }
+    const priceInt = Math.round(parseFloat(price) * 100)
+    if (!hasVariants && (isNaN(priceInt) || priceInt <= 0)) { setError('Price must be greater than 0.'); return }
+    setSaving(true)
+    try {
+      await onSave({
+        name: name.trim(),
+        description: description || undefined,
+        price: hasVariants ? 0 : priceInt,
+        category_id: categoryId,
+        tags,
+        availability_state: availability,
+        restore_at: availability === 'out_of_stock' && restoreAt ? restoreAt : null,
+        has_variants: hasVariants,
+        image_r2_key: imageKey ?? undefined,
+        ...(hasVariants ? { variants } : {}),
+      })
+      onClose()
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Save failed.')
+      setSaving(false)
+    }
+  }
+
+  const showFooterSave = activeTab === 'details' || activeTab === 'availability'
+
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
-      className={[
-        'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm',
-        selected ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-100',
-      ].join(' ')}
-    >
-      <span className="flex flex-col gap-0.5">
-        <button
-          type="button"
-          aria-label={`Move ${category.name} up`}
-          disabled={isFirst}
-          onClick={(e) => { e.stopPropagation(); onMoveUp() }}
-          className="text-gray-300 hover:text-gray-600 disabled:opacity-0 leading-none text-xs"
-        >▲</button>
-        <button
-          type="button"
-          aria-label={`Move ${category.name} down`}
-          disabled={isLast}
-          onClick={(e) => { e.stopPropagation(); onMoveDown() }}
-          className="text-gray-300 hover:text-gray-600 disabled:opacity-0 leading-none text-xs"
-        >▼</button>
-      </span>
-      <span className="flex-1 truncate font-medium">{category.name}</span>
-      {!category.active && <span className="text-xs text-gray-400">Off</span>}
-      <div className="hidden items-center gap-1 group-hover:flex">
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onToggleActive() }}
-          className="rounded p-0.5 text-xs text-gray-400 hover:text-gray-700"
-          title={category.active ? 'Deactivate' : 'Activate'}
-        >
-          {category.active ? '●' : '○'}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onEdit() }}
-          className="rounded p-0.5 text-xs text-gray-400 hover:text-gray-700"
-          title="Edit"
-        >✎</button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
-          className="rounded p-0.5 text-xs text-gray-400 hover:text-red-500"
-          title="Delete"
-        >✕</button>
+    <>
+      <div className="fixed inset-0 z-30 bg-black/20" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 z-40 flex w-[480px] flex-col bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-5">
+          <h2 className="text-lg font-bold text-gray-900">{item ? 'Edit Item' : 'Add Item'}</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Sub-tabs */}
+        <div className="flex shrink-0 border-b border-gray-100 px-6">
+          {DRAWER_TABS.map(({ id, label, icon: Icon }) => {
+            const isModifiersLocked = id === 'modifiers' && !canModifiers
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={cn(
+                  'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+                  activeTab === id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                )}
+              >
+                <Icon size={14} />
+                {label}
+                {isModifiersLocked && (
+                  <LockIcon upgradeMessage={upgradeMessage} />
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>}
+
+          {activeTab === 'details' && (
+            <div className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+                <input className={FIELD} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+                <textarea className={cn(FIELD, 'resize-none')} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Category</label>
+                <select className={FIELD} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={hasVariants}
+                  onChange={(e) => {
+                    if (!e.target.checked && variants.length > 0) {
+                      if (!window.confirm('Remove all variants and set a single price?')) return
+                      setVariants([])
+                    }
+                    setHasVariants(e.target.checked)
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 accent-blue-500"
+                />
+                This item has multiple sizes / variants
+              </label>
+              {!hasVariants && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Price</label>
+                  <input type="number" min="0.01" step="0.01" className={FIELD} value={price} onChange={(e) => setPrice(e.target.value)} />
+                </div>
+              )}
+              {hasVariants && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">Variants</p>
+                  {variants.map((v, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        placeholder="Name (e.g. Small)"
+                        value={v.name}
+                        onChange={(e) => setVariants((vs) => vs.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
+                      />
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        className="w-24 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        placeholder="Price"
+                        value={v.price > 0 ? String(v.price / 100) : ''}
+                        onChange={(e) => setVariants((vs) => vs.map((x, i) => i === idx ? { ...x, price: Math.round(parseFloat(e.target.value) * 100) || 0 } : x))}
+                      />
+                      <input
+                        type="radio"
+                        name="default-variant"
+                        checked={!!v.is_default}
+                        onChange={() => setVariants((vs) => vs.map((x, i) => ({ ...x, is_default: i === idx })))}
+                        title="Set as default"
+                      />
+                      <button
+                        type="button"
+                        disabled={variants.length <= 1}
+                        onClick={() => setVariants((vs) => vs.filter((_, i) => i !== idx))}
+                        className="text-gray-300 hover:text-red-400 disabled:opacity-30"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setVariants((vs) => [...vs, { name: '', price: 0, is_default: vs.length === 0, available: true }])}
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    + Add variant
+                  </button>
+                </div>
+              )}
+              <div>
+                <p className="mb-2 text-sm font-medium text-gray-700">Dietary tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {DIETARY_TAGS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => toggleTag(value)}
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                        tags.includes(value)
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {item?.id && (
+                <ImageUploadZone
+                  itemId={item.id}
+                  existingKey={item.image_r2_key}
+                  onUploaded={(key) => setImageKey(key)}
+                  locked={!canPhotos}
+                  upgradeMessage={upgradeMessage}
+                />
+              )}
+            </div>
+          )}
+
+          {activeTab === 'modifiers' && (
+            !canModifiers ? (
+              <PlanLocked locked upgradeMessage={upgradeMessage} label="Item modifiers require a higher plan">
+                <DrawerModifiers itemId={item?.id ?? ''} />
+              </PlanLocked>
+            ) : item?.id ? (
+              <DrawerModifiers itemId={item.id} />
+            ) : (
+              <p className="text-sm text-gray-400">Save the item first to manage modifiers.</p>
+            )
+          )}
+
+          {activeTab === 'availability' && (
+            <div className="space-y-4">
+              <p className="text-sm font-medium text-gray-700">Availability status</p>
+              <div className="space-y-2">
+                {AVAIL_OPTIONS.map(({ value, label, dot }) => (
+                  <label
+                    key={value}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-colors',
+                      availability === value ? 'border-blue-200 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                    )}
+                  >
+                    <input type="radio" name="availability" value={value} checked={availability === value} onChange={() => setAvailability(value)} className="sr-only" />
+                    <span className={cn('h-3 w-3 shrink-0 rounded-full', dot)} />
+                    <span className="flex-1 text-sm font-medium text-gray-800">{label}</span>
+                    {availability === value && <ChevronRight size={16} className="text-blue-400" />}
+                  </label>
+                ))}
+              </div>
+              {availability === 'out_of_stock' && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Restore at (optional)</label>
+                  <input type="datetime-local" className={FIELD} value={restoreAt} onChange={(e) => setRestoreAt(e.target.value)} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:border-gray-300">
+            Cancel
+          </button>
+          {showFooterSave && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void submit()}
+              className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : item ? 'Save Changes' : 'Create Item'}
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -152,132 +538,98 @@ function CategoryModal({ category, onClose, onSave }: {
   }
 
   return (
-    <Modal
-      title={category ? 'Edit category' : 'Add category'}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button loading={saving} onClick={() => void submit()}>
-            {category ? 'Save' : 'Create'}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>}
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
+    <>
+      <div className="fixed inset-0 z-30 bg-black/20" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 z-40 w-96 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-base font-bold text-gray-900">{category ? 'Edit Category' : 'Add Category'}</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+        </div>
+        {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="mb-4">
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
           <input
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className={FIELD}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
+            onKeyDown={(e) => e.key === 'Enter' && void submit()}
           />
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-indigo-600" />
+        <label className="mb-5 flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 rounded border-gray-300 accent-blue-500" />
           Active (visible to customers)
         </label>
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-gray-300">Cancel</button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void submit()}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : category ? 'Save' : 'Create'}
+          </button>
+        </div>
       </div>
-    </Modal>
+    </>
   )
 }
 
-// ── Item card ──────────────────────────────────────────────────────────────────
+// ── Delete confirm ─────────────────────────────────────────────────────────────
 
-interface ItemCardProps {
-  item: MenuItem
-  onClick: () => void
-  onQuickToggle: (newState: AvailabilityState) => void
-}
+function DeleteConfirm({ title, body, onClose, onConfirm }: {
+  title: string
+  body: string
+  onClose: () => void
+  onConfirm: () => Promise<void>
+}) {
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-function ItemCard({ item, onClick, onQuickToggle }: ItemCardProps) {
-  const [quickOpen, setQuickOpen] = useState(false)
-  const hasVariants = item.has_variants && item.variants && item.variants.length > 0
-  const minPrice = hasVariants
-    ? Math.min(...(item.variants ?? []).map((v) => v.price))
-    : item.price
+  async function confirm() {
+    setDeleting(true)
+    try { await onConfirm(); onClose() }
+    catch (err) { setError(err instanceof ApiError ? String(err.message) : 'Delete failed.'); setDeleting(false) }
+  }
 
   return (
-    <div className="group cursor-pointer rounded-lg border border-gray-200 bg-white p-3 hover:border-indigo-300 hover:shadow-sm">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => e.key === 'Enter' && onClick()}
-      >
-        {item.image_r2_key && (
-          <div className="mb-2 h-24 w-full overflow-hidden rounded-md bg-gray-100">
-            <img src={`/r2/${item.image_r2_key}`} alt={item.name} className="h-full w-full object-cover" />
-          </div>
-        )}
-        <p className="truncate text-sm font-medium text-gray-900">{item.name}</p>
-        <p className="mt-0.5 text-sm text-gray-600">
-          {hasVariants ? `From ${formatPrice(minPrice)}` : formatPrice(minPrice)}
-        </p>
-        {item.tags.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {item.tags.map((tag) => (
-              <span key={tag} className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                {DIETARY_TAGS.find((t) => t.value === tag)?.label ?? tag}
-              </span>
-            ))}
-          </div>
-        )}
+    <>
+      <div className="fixed inset-0 z-30 bg-black/20" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 z-40 w-96 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-bold text-gray-900">{title}</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+        </div>
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <p className="mb-5 text-sm text-gray-600">{body}</p>
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-gray-300">Cancel</button>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={() => void confirm()}
+            className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
       </div>
-
-      {/* Quick availability toggle */}
-      <div className="relative mt-2">
-        <button
-          type="button"
-          aria-label={`Availability: ${item.availability_state}`}
-          onClick={(e) => { e.stopPropagation(); setQuickOpen((v) => !v) }}
-          className="text-left"
-        >
-          <AvailabilityBadge state={item.availability_state} />
-        </button>
-        {quickOpen && (
-          <div className="absolute left-0 top-full z-10 mt-1 w-36 rounded-md border border-gray-200 bg-white shadow-lg">
-            {AVAILABILITY_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className={[
-                  'flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50',
-                  item.availability_state === opt.value ? 'font-medium text-indigo-700' : 'text-gray-700',
-                ].join(' ')}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onQuickToggle(opt.value)
-                  setQuickOpen(false)
-                }}
-              >
-                <span className={`inline-block h-2 w-2 rounded-full ${opt.color.replace('text-', 'bg-').split(' ')[0]}`} />
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   )
 }
 
-// ── Modifier groups section (inside ItemModal) ─────────────────────────────────
+// ── Modifiers top-level tab ────────────────────────────────────────────────────
 
-interface ModifierGroupsSectionProps {
-  itemId: string
-}
-
-function ModifierGroupsSection({ itemId }: ModifierGroupsSectionProps) {
+function ModifiersTab() {
   const api = useApi()
-  const { data: groups, reload } = useAsync(
-    () => api.admin.listModifierGroups(itemId),
-    [itemId],
-  )
+  const qc = useQueryClient()
 
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const { data: groups, isLoading } = useQuery({
+    queryKey: ['global-modifier-groups'],
+    queryFn: () => api.admin.listGlobalModifierGroups(),
+  })
+
   const [addingGroup, setAddingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupType, setNewGroupType] = useState<'single' | 'multi'>('single')
@@ -289,19 +641,11 @@ function ModifierGroupsSection({ itemId }: ModifierGroupsSectionProps) {
 
   const groupsArr: ModifierGroup[] = groups ?? []
 
-  function toggleExpand(id: string) {
-    setExpanded((s) => {
-      const n = new Set(s)
-      n.has(id) ? n.delete(id) : n.add(id)
-      return n
-    })
-  }
-
   async function createGroup() {
     if (!newGroupName.trim()) return
     setSavingGroup(true)
     try {
-      await api.admin.createModifierGroup(itemId, {
+      await api.admin.createGlobalModifierGroup({
         name: newGroupName.trim(),
         type: newGroupType,
         required: newGroupRequired,
@@ -310,578 +654,205 @@ function ModifierGroupsSection({ itemId }: ModifierGroupsSectionProps) {
       setNewGroupType('single')
       setNewGroupRequired(false)
       setAddingGroup(false)
-      reload()
+      void qc.invalidateQueries({ queryKey: ['global-modifier-groups'] })
     } finally {
       setSavingGroup(false)
     }
   }
 
   async function deleteGroup(groupId: string) {
-    await api.admin.deleteModifierGroup(itemId, groupId)
-    reload()
+    if (!window.confirm('Delete this modifier group? Items assigned to it will lose this modifier.')) return
+    await api.admin.deleteModifierGroup(groupId)
+    void qc.invalidateQueries({ queryKey: ['global-modifier-groups'] })
   }
 
   async function addOption(groupId: string) {
-    const delta = Math.round(parseFloat(newOptionDelta) * 100) || 0
-    await api.admin.createModifierOption(itemId, groupId, {
-      name: newOptionName.trim(),
-      price_delta: delta,
-      available: true,
-    })
+    const trimmed = newOptionName.trim()
+    if (!trimmed) return
+    const delta = parseFloat(newOptionDelta) || 0
+    await api.admin.createModifierOption(groupId, { name: trimmed, price_delta: delta, available: true })
     setAddingOption(null)
     setNewOptionName('')
     setNewOptionDelta('0')
-    reload()
+    void qc.invalidateQueries({ queryKey: ['global-modifier-groups'] })
+  }
+
+  async function deleteOption(optionId: string) {
+    await api.admin.deleteModifierOption(optionId)
+    void qc.invalidateQueries({ queryKey: ['global-modifier-groups'] })
   }
 
   return (
-    <div className="border-t border-gray-200 pt-4">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-medium text-gray-700">Modifier groups</p>
+    <div>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Modifiers</h1>
+          <p className="mt-1 text-sm text-gray-500">Manage modifier groups that can be attached to menu items.</p>
+        </div>
         <button
           type="button"
           onClick={() => setAddingGroup(true)}
-          className="text-xs text-indigo-600 hover:text-indigo-800"
+          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
         >
-          + Add group
+          <Plus size={15} />
+          ADD GROUP
         </button>
       </div>
 
-      {groupsArr.length === 0 && !addingGroup && (
-        <p className="text-xs text-gray-400">No modifier groups yet.</p>
-      )}
-
-      {groupsArr.map((group) => (
-        <div key={group.id} className="mb-2 rounded-md border border-gray-200">
-          <div className="flex items-center gap-2 px-3 py-2">
-            <button
-              type="button"
-              aria-label={expanded.has(group.id) ? 'Collapse' : 'Expand'}
-              onClick={() => toggleExpand(group.id)}
-              className="text-xs text-gray-400"
-            >
-              {expanded.has(group.id) ? '▼' : '▶'}
-            </button>
-            <span className="flex-1 text-sm font-medium text-gray-800">{group.name}</span>
-            {group.required && (
-              <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600" aria-label="Required modifier group">
-                Required
-              </span>
-            )}
-            <span className="text-xs text-gray-400">{group.type === 'single' ? 'Single' : 'Multi'}</span>
-            <button
-              type="button"
-              onClick={() => void deleteGroup(group.id)}
-              className="text-xs text-gray-400 hover:text-red-500"
-              title="Delete group"
-            >✕</button>
+      <div className="space-y-3">
+        {!isLoading && groupsArr.length === 0 && !addingGroup && (
+          <div className="flex h-48 items-center justify-center rounded-2xl border-2 border-dashed border-gray-200">
+            <div className="text-center">
+              <Layers size={32} className="mx-auto mb-2 text-gray-300" />
+              <p className="text-sm font-medium text-gray-500">No modifier groups yet</p>
+              <p className="mt-0.5 text-xs text-gray-400">Create groups like Size, Extras, or Sauces</p>
+            </div>
           </div>
+        )}
 
-          {expanded.has(group.id) && (
-            <div className="border-t border-gray-100 px-3 py-2 space-y-1">
-              {(group.options ?? []).map((opt: ModifierOption) => (
-                <div key={opt.id} className="flex items-center gap-2 text-sm text-gray-700">
-                  <span className="flex-1">{opt.name}</span>
-                  <span className="text-xs text-gray-500">
-                    {opt.price_delta !== 0 ? (opt.price_delta > 0 ? '+' : '') + formatPrice(opt.price_delta) : 'Free'}
+        {groupsArr.map((group) => (
+          <div key={group.id} className="rounded-2xl border border-gray-200 bg-white p-5">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="flex-1 text-base font-bold text-gray-900">{group.name}</span>
+              <span className="rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                {group.type === 'single' ? 'Single' : 'Multiple'}
+              </span>
+              {group.required && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">Required</span>
+              )}
+              <button type="button" onClick={() => void deleteGroup(group.id)} className="ml-1 rounded-lg p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500">
+                <Trash2 size={14} />
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {(group.options ?? []).map((opt) => (
+                <div key={opt.id} className="group/opt flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+                  <span className="text-xs text-gray-600">
+                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatPrice(opt.price_delta)})` : ''}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => void deleteOption(opt.id)}
+                    className="hidden text-gray-300 hover:text-red-400 group-hover/opt:block"
+                  >
+                    <X size={10} />
+                  </button>
                 </div>
               ))}
               {addingOption === group.id ? (
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-1">
                   <input
-                    className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    placeholder="Option name"
+                    className="w-24 rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
+                    placeholder="Name"
                     value={newOptionName}
                     onChange={(e) => setNewOptionName(e.target.value)}
-                    aria-label="New option name"
+                    autoFocus
                   />
                   <input
                     type="number"
                     step="0.01"
-                    className="w-20 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    placeholder="±price"
+                    className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
+                    placeholder="±$"
                     value={newOptionDelta}
                     onChange={(e) => setNewOptionDelta(e.target.value)}
-                    aria-label="Price delta"
                   />
-                  <button
-                    type="button"
-                    onClick={() => void addOption(group.id)}
-                    className="text-xs text-indigo-600 hover:text-indigo-800"
-                  >Save</button>
-                  <button
-                    type="button"
-                    onClick={() => setAddingOption(null)}
-                    className="text-xs text-gray-400"
-                  >Cancel</button>
+                  <button type="button" onClick={() => void addOption(group.id)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">Save</button>
+                  <button type="button" onClick={() => setAddingOption(null)} className="text-xs text-gray-400">Cancel</button>
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => { setAddingOption(group.id); setNewOptionName(''); setNewOptionDelta('0') }}
-                  className="text-xs text-indigo-600 hover:text-indigo-800"
+                  className="rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs font-semibold text-blue-600 hover:border-blue-300 hover:bg-blue-50"
                 >
                   + Add option
                 </button>
               )}
             </div>
-          )}
-        </div>
-      ))}
-
-      {addingGroup && (
-        <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-          <input
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            placeholder="Group name (e.g. Size, Extras)"
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.target.value)}
-            autoFocus
-            aria-label="New modifier group name"
-          />
-          <div className="flex items-center gap-4 text-sm text-gray-700">
-            <label className="flex items-center gap-1.5">
-              <input type="radio" name="new-group-type" checked={newGroupType === 'single'} onChange={() => setNewGroupType('single')} />
-              Single choice
-            </label>
-            <label className="flex items-center gap-1.5">
-              <input type="radio" name="new-group-type" checked={newGroupType === 'multi'} onChange={() => setNewGroupType('multi')} />
-              Multiple choice
-            </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={newGroupRequired} onChange={(e) => setNewGroupRequired(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-indigo-600" />
-            Required
-          </label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={savingGroup || !newGroupName.trim()}
-              onClick={() => void createGroup()}
-              className="rounded bg-indigo-600 px-3 py-1 text-xs text-white hover:bg-indigo-700 disabled:opacity-50"
-            >Add group</button>
-            <button
-              type="button"
-              onClick={() => { setAddingGroup(false); setNewGroupName('') }}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >Cancel</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+        ))}
 
-// ── Image upload zone ──────────────────────────────────────────────────────────
-
-interface ImageUploadZoneProps {
-  itemId: string
-  existingKey: string | null
-  onUploaded: (r2Key: string) => void
-}
-
-function ImageUploadZone({ itemId, existingKey, onUploaded }: ImageUploadZoneProps) {
-  const api = useApi()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [progress, setProgress] = useState<number | null>(null)
-  const [preview, setPreview] = useState<string | null>(existingKey ? `/r2/${existingKey}` : null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleFile(file: File) {
-    if (!file.type.startsWith('image/')) { setError('Please select an image file.'); return }
-    setError(null)
-    setProgress(0)
-    try {
-      const { upload_url, r2_key } = await api.admin.getItemImageUrl(itemId)
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
-        }
-        xhr.onload = () => { xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`)) }
-        xhr.onerror = () => reject(new Error('Network error'))
-        xhr.open('PUT', upload_url)
-        xhr.setRequestHeader('Content-Type', file.type)
-        xhr.send(file)
-      })
-      setPreview(URL.createObjectURL(file))
-      setProgress(null)
-      onUploaded(r2_key)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.')
-      setProgress(null)
-    }
-  }
-
-  return (
-    <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">Image</label>
-      <div
-        className="relative flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:border-indigo-400"
-        onClick={() => fileRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) void handleFile(f) }}
-        aria-label="Image upload zone"
-      >
-        {preview ? (
-          <img src={preview} alt="Preview" className="max-h-32 rounded object-cover" />
-        ) : (
-          <p className="text-xs text-gray-400">Click or drag an image here</p>
-        )}
-        {progress !== null && (
-          <div className="absolute inset-x-4 bottom-2">
-            <div className="h-1.5 overflow-hidden rounded-full bg-gray-200">
-              <div
-                className="h-1.5 rounded-full bg-indigo-500 transition-all"
-                style={{ width: `${progress}%` }}
-                data-testid="upload-progress"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f) }} />
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
-  )
-}
-
-// ── Item modal ─────────────────────────────────────────────────────────────────
-
-interface ItemModalProps {
-  item: MenuItem | null
-  categories: MenuCategory[]
-  selectedCategoryId: string
-  onClose: () => void
-  onSave: (data: Record<string, unknown>) => Promise<void>
-}
-
-function ItemModal({ item, categories, selectedCategoryId, onClose, onSave }: ItemModalProps) {
-  const [name, setName] = useState(item?.name ?? '')
-  const [description, setDescription] = useState(item?.description ?? '')
-  const [price, setPrice] = useState(item && !item.has_variants ? String(item.price / 100) : '')
-  const [categoryId, setCategoryId] = useState(item?.category_id ?? selectedCategoryId)
-  const [tags, setTags] = useState<string[]>(item?.tags ?? [])
-  const [availability, setAvailability] = useState<AvailabilityState>(item?.availability_state ?? 'in_stock')
-  const [restoreAt, setRestoreAt] = useState(item?.restore_at ?? '')
-  const [hasVariants, setHasVariants] = useState(item?.has_variants ?? false)
-  const [variants, setVariants] = useState<Array<{ name: string; price: number; is_default: boolean; available: boolean }>>(
-    item?.variants?.map((v) => ({ name: v.name, price: v.price, is_default: v.is_default, available: v.available })) ?? [],
-  )
-  const [imageKey, setImageKey] = useState<string | null>(item?.image_r2_key ?? null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  function toggleTag(tag: string) {
-    setTags((ts) => ts.includes(tag) ? ts.filter((t) => t !== tag) : [...ts, tag])
-  }
-
-  function toggleVariants(on: boolean) {
-    if (!on && variants.length > 0) {
-      if (!window.confirm('Remove all variants and set a single price?')) return
-      setVariants([])
-    }
-    setHasVariants(on)
-  }
-
-  function addVariant() {
-    setVariants((vs) => [...vs, { name: '', price: 0, is_default: vs.length === 0, available: true }])
-  }
-
-  function removeVariant(idx: number) {
-    if (variants.length <= 1) return
-    setVariants((vs) => vs.filter((_, i) => i !== idx))
-  }
-
-  async function submit() {
-    if (!name.trim()) { setError('Name is required.'); return }
-    const priceInt = Math.round(parseFloat(price) * 100)
-    if (!hasVariants && (isNaN(priceInt) || priceInt <= 0)) { setError('Price must be greater than 0.'); return }
-    setSaving(true)
-    try {
-      await onSave({
-        name: name.trim(),
-        description: description || undefined,
-        price: hasVariants ? 0 : priceInt,
-        category_id: categoryId,
-        tags,
-        availability_state: availability,
-        restore_at: availability === 'out_of_stock' && restoreAt ? restoreAt : null,
-        has_variants: hasVariants,
-        image_r2_key: imageKey ?? undefined,
-        ...(hasVariants ? { variants } : {}),
-      })
-      onClose()
-    } catch (err) {
-      setError(err instanceof ApiError ? String(err.message) : 'Save failed.')
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      title={item ? 'Edit item' : 'Add item'}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button loading={saving} onClick={() => void submit()}>
-            {item ? 'Save' : 'Create'}
-          </Button>
-        </>
-      }
-    >
-      <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-        {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>}
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
-          <input
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-            aria-label="Item name"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
-          <textarea
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Category</label>
-          <select
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            aria-label="Category"
-          >
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Variants toggle */}
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
-          <input
-            type="checkbox"
-            checked={hasVariants}
-            onChange={(e) => toggleVariants(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600"
-          />
-          This item has multiple sizes / variants
-        </label>
-
-        {!hasVariants && (
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Price</label>
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              aria-label="Price"
-            />
-          </div>
-        )}
-
-        {hasVariants && (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-700">Variants</p>
-            {variants.map((v, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input
-                  className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  placeholder="Name (e.g. Small)"
-                  value={v.name}
-                  onChange={(e) => setVariants((vs) => vs.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}
-                  aria-label={`Variant ${idx + 1} name`}
-                />
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  placeholder="Price"
-                  value={v.price > 0 ? String(v.price / 100) : ''}
-                  onChange={(e) => setVariants((vs) => vs.map((x, i) => i === idx ? { ...x, price: Math.round(parseFloat(e.target.value) * 100) || 0 } : x))}
-                  aria-label={`Variant ${idx + 1} price`}
-                />
-                <input
-                  type="radio"
-                  name="default-variant"
-                  checked={!!v.is_default}
-                  onChange={() => setVariants((vs) => vs.map((x, i) => ({ ...x, is_default: i === idx })))}
-                  title="Default"
-                  aria-label={`Set variant ${idx + 1} as default`}
-                />
-                <button
-                  type="button"
-                  disabled={variants.length <= 1}
-                  onClick={() => removeVariant(idx)}
-                  className="text-sm text-red-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
-                  title={variants.length <= 1 ? 'Cannot delete last variant' : 'Delete variant'}
-                  aria-label={variants.length <= 1 ? 'Cannot delete last variant' : `Delete variant ${idx + 1}`}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={addVariant} className="text-sm text-indigo-600 hover:text-indigo-800">
-              + Add variant
-            </button>
-          </div>
-        )}
-
-        {/* Dietary tags */}
-        <div>
-          <p className="mb-2 text-sm font-medium text-gray-700">Dietary tags</p>
-          <div className="flex flex-wrap gap-2">
-            {DIETARY_TAGS.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => toggleTag(value)}
-                className={[
-                  'rounded-full border px-3 py-1 text-xs font-medium',
-                  tags.includes(value)
-                    ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                    : 'border-gray-300 text-gray-600 hover:border-gray-400',
-                ].join(' ')}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Availability */}
-        <div>
-          <p className="mb-2 text-sm font-medium text-gray-700">Availability</p>
-          <div className="flex flex-wrap gap-2">
-            {AVAILABILITY_OPTIONS.map(({ value, label }) => (
-              <label key={value} className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
-                <input
-                  type="radio"
-                  name="availability"
-                  value={value}
-                  checked={availability === value}
-                  onChange={() => setAvailability(value)}
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-          {availability === 'out_of_stock' && (
-            <div className="mt-2">
-              <label className="mb-1 block text-xs text-gray-500">Restore at (optional)</label>
+        {addingGroup && (
+          <div className="space-y-4 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <h3 className="text-sm font-semibold text-gray-800">New modifier group</h3>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Group name</label>
               <input
-                type="datetime-local"
-                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                value={restoreAt}
-                onChange={(e) => setRestoreAt(e.target.value)}
-                data-testid="restore-at-input"
+                className={FIELD}
+                placeholder="e.g. Size, Spice Level, Extras"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                autoFocus
               />
             </div>
-          )}
-        </div>
-
-        {/* Image upload — only for existing items */}
-        {item?.id && (
-          <ImageUploadZone
-            itemId={item.id}
-            existingKey={item.image_r2_key}
-            onUploaded={(key) => setImageKey(key)}
-          />
-        )}
-
-        {/* Modifier groups — only for existing items */}
-        {item?.id && <ModifierGroupsSection itemId={item.id} />}
-      </div>
-    </Modal>
-  )
-}
-
-// ── Delete confirm modal ───────────────────────────────────────────────────────
-
-function DeleteModal({ title, body, onClose, onConfirm, disabled, disabledReason }: {
-  title: string
-  body: string
-  onClose: () => void
-  onConfirm: () => Promise<void>
-  disabled?: boolean
-  disabledReason?: string
-}) {
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function confirm() {
-    setDeleting(true)
-    try {
-      await onConfirm()
-      onClose()
-    } catch (err) {
-      setError(err instanceof ApiError ? String(err.message) : 'Delete failed.')
-      setDeleting(false)
-    }
-  }
-
-  return (
-    <Modal
-      title={title}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="danger" loading={deleting} onClick={() => void confirm()} disabled={disabled}>
-            Delete
-          </Button>
-        </>
-      }
-    >
-      <div>
-        {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>}
-        <p className="text-sm text-gray-600">{body}</p>
-        {disabled && disabledReason && (
-          <p className="mt-2 text-sm text-amber-600">{disabledReason}</p>
+            <div className="flex items-center gap-4 text-sm text-gray-700">
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input type="radio" name="group-type" checked={newGroupType === 'single'} onChange={() => setNewGroupType('single')} />
+                Single choice
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input type="radio" name="group-type" checked={newGroupType === 'multi'} onChange={() => setNewGroupType('multi')} />
+                Multiple choice
+              </label>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={newGroupRequired} onChange={(e) => setNewGroupRequired(e.target.checked)} className="h-4 w-4 rounded border-gray-300 accent-blue-500" />
+              Required
+            </label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={savingGroup || !newGroupName.trim()}
+                onClick={() => void createGroup()}
+                className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                Create Group
+              </button>
+              <button type="button" onClick={() => { setAddingGroup(false); setNewGroupName('') }} className="text-sm text-gray-500 hover:text-gray-700">
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
-    </Modal>
+    </div>
   )
 }
 
 // ── Main Menu page ─────────────────────────────────────────────────────────────
 
+type TopTab = 'builder' | 'modifiers'
+
 export function Menu() {
   const api = useApi()
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
-  const [categoryModal, setCategoryModal] = useState<{ mode: 'add' | 'edit' | 'delete'; category?: MenuCategory } | null>(null)
-  const [itemModal, setItemModal] = useState<{ mode: 'add' | 'edit'; item?: MenuItem } | null>(null)
-  const [itemDeleteTarget, setItemDeleteTarget] = useState<MenuItem | null>(null)
+  const qc = useQueryClient()
+  const { plan, usage, upgradeMessage } = usePlan()
 
-  const { status: catStatus, data: categories, reload: reloadCategories } = useAsync(
-    () => api.admin.listCategories(),
-    [],
-  )
+  const [topTab, setTopTab] = useState<TopTab>('builder')
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+  const [categoryModal, setCategoryModal] = useState<{ mode: 'add' | 'edit'; category?: MenuCategory } | null>(null)
+  const [deleteCat, setDeleteCat] = useState<MenuCategory | null>(null)
+  const [editItem, setEditItem] = useState<{ mode: 'add' | 'edit'; item?: MenuItem } | null>(null)
+
+  const dragCatId = useRef<string | null>(null)
+  const dragOverCatId = useRef<string | null>(null)
+  const dragItemId = useRef<string | null>(null)
+  const dragOverItemId = useRef<string | null>(null)
+
+  const { data: categories, isLoading: catsLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.admin.listCategories(),
+  })
 
   const cats: MenuCategory[] = (categories ?? []) as MenuCategory[]
   const activeCategoryId = selectedCategoryId ?? cats[0]?.id ?? null
+  const activeCategory = cats.find((c) => c.id === activeCategoryId)
 
-  const { status: itemStatus, data: items, reload: reloadItems } = useAsync(
-    () => activeCategoryId ? api.admin.listItems(activeCategoryId) : Promise.resolve([]),
-    [activeCategoryId],
-  )
+  const { data: items, isLoading: itemsLoading } = useQuery({
+    queryKey: ['items', activeCategoryId],
+    queryFn: () => activeCategoryId ? api.admin.listItems(activeCategoryId) : Promise.resolve([]),
+    enabled: !!activeCategoryId,
+  })
 
   const itemsArr: MenuItem[] = (items ?? []) as MenuItem[]
 
@@ -891,177 +862,322 @@ export function Menu() {
     } else {
       await api.admin.createCategory(data)
     }
-    reloadCategories()
-  }, [api, categoryModal, reloadCategories])
+    void qc.invalidateQueries({ queryKey: ['categories'] })
+  }, [api, categoryModal, qc])
 
-  const deleteCategory = useCallback(async () => {
-    if (!categoryModal?.category) return
-    await api.admin.deleteCategory(categoryModal.category.id)
-    reloadCategories()
-    if (selectedCategoryId === categoryModal.category.id) setSelectedCategoryId(null)
-  }, [api, categoryModal, reloadCategories, selectedCategoryId])
-
-  const toggleCategoryActive = useCallback(async (cat: MenuCategory) => {
-    await api.admin.updateCategory(cat.id, { active: !cat.active })
-    reloadCategories()
-  }, [api, reloadCategories])
-
-  const moveCategory = useCallback(async (index: number, direction: 'up' | 'down') => {
-    const next = [...cats]
-    const swap = direction === 'up' ? index - 1 : index + 1
-    ;[next[index], next[swap]] = [next[swap], next[index]]
-    const order = next.map((c, i) => ({ id: c.id, sort_order: i }))
-    await api.admin.reorderCategories(order)
-    reloadCategories()
-  }, [api, cats, reloadCategories])
+  const confirmDeleteCat = useCallback(async () => {
+    if (!deleteCat) return
+    await api.admin.deleteCategory(deleteCat.id)
+    if (selectedCategoryId === deleteCat.id) setSelectedCategoryId(null)
+    void qc.invalidateQueries({ queryKey: ['categories'] })
+  }, [api, deleteCat, selectedCategoryId, qc])
 
   const saveItem = useCallback(async (data: Record<string, unknown>) => {
     if (!activeCategoryId) return
-    if (itemModal?.mode === 'edit' && itemModal.item) {
-      await api.admin.updateItem(itemModal.item.id, data)
+    if (editItem?.mode === 'edit' && editItem.item) {
+      await api.admin.updateItem(editItem.item.id, data)
     } else {
       await api.admin.createItem({ ...data, category_id: activeCategoryId })
     }
-    reloadItems()
-  }, [api, activeCategoryId, itemModal, reloadItems])
+    void qc.invalidateQueries({ queryKey: ['items', activeCategoryId] })
+  }, [api, activeCategoryId, editItem, qc])
 
-  const deleteItem = useCallback(async () => {
-    if (!itemDeleteTarget) return
-    await api.admin.deleteItem(itemDeleteTarget.id)
-    reloadItems()
-  }, [api, itemDeleteTarget, reloadItems])
+  const handleCatDrop = useCallback(async () => {
+    const from = dragCatId.current
+    const to = dragOverCatId.current
+    dragCatId.current = null
+    dragOverCatId.current = null
+    if (!from || !to || from === to) return
+    const reordered = [...cats]
+    const fromIdx = reordered.findIndex((c) => c.id === from)
+    const toIdx = reordered.findIndex((c) => c.id === to)
+    if (fromIdx === -1 || toIdx === -1) return
+    const moved = reordered.splice(fromIdx, 1)[0]
+    if (!moved) return
+    reordered.splice(toIdx, 0, moved)
+    const order = reordered.map((c, i) => ({ id: c.id, sort_order: i }))
+    try {
+      await api.admin.reorderCategories(order)
+      void qc.invalidateQueries({ queryKey: ['categories'] })
+    } catch { /* ignore — next query refresh will correct order */ }
+  }, [api, cats, qc])
 
-  const quickToggleAvailability = useCallback(async (item: MenuItem, newState: AvailabilityState) => {
-    await api.admin.updateItem(item.id, { availability_state: newState })
-    reloadItems()
-  }, [api, reloadItems])
+  const handleItemDrop = useCallback(async () => {
+    const from = dragItemId.current
+    const to = dragOverItemId.current
+    dragItemId.current = null
+    dragOverItemId.current = null
+    if (!from || !to || from === to || !activeCategoryId) return
+    const reordered = [...itemsArr]
+    const fromIdx = reordered.findIndex((i) => i.id === from)
+    const toIdx = reordered.findIndex((i) => i.id === to)
+    if (fromIdx === -1 || toIdx === -1) return
+    const moved = reordered.splice(fromIdx, 1)[0]
+    if (!moved) return
+    reordered.splice(toIdx, 0, moved)
+    const order = reordered.map((item, i) => ({ id: item.id, sort_order: i }))
+    try {
+      await api.admin.reorderItems(order)
+      void qc.invalidateQueries({ queryKey: ['items', activeCategoryId] })
+    } catch { /* ignore */ }
+  }, [api, itemsArr, activeCategoryId, qc])
 
-  if (catStatus === 'loading') {
-    return <div className="p-4 text-sm text-gray-500">Loading menu…</div>
+  if (catsLoading) {
+    return <div className="py-16 text-center text-sm text-gray-400">Loading menu…</div>
   }
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Menu</h1>
+      {/* Page header */}
+      <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <PlanLimitBar label="Items" used={itemsArr.length} cap={150} />
-          <PlanLimitBar label="Categories" used={cats.length} cap={20} />
-        </div>
-      </div>
-
-      <div className="flex gap-6">
-        {/* Category panel */}
-        <div className="w-56 shrink-0">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Categories</p>
+          <h1 className="text-3xl font-bold text-gray-900">Menu Management</h1>
+          <div className="flex rounded-xl border border-gray-200 bg-white p-1">
             <button
               type="button"
-              onClick={() => setCategoryModal({ mode: 'add' })}
-              className="text-xs text-indigo-600 hover:text-indigo-800"
-              aria-label="Add category"
+              onClick={() => setTopTab('builder')}
+              className={cn(
+                'rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors',
+                topTab === 'builder' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'
+              )}
             >
-              + Add
+              Menu Builder
+            </button>
+            <button
+              type="button"
+              onClick={() => setTopTab('modifiers')}
+              className={cn(
+                'rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors',
+                topTab === 'modifiers' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'
+              )}
+            >
+              Modifiers
             </button>
           </div>
-          <div className="space-y-0.5">
-            {cats.length === 0 && (
-              <p className="text-xs text-gray-400">No categories yet.</p>
-            )}
-            {cats.map((cat, idx) => (
-              <CategoryRow
-                key={cat.id}
-                category={cat}
-                selected={activeCategoryId === cat.id}
-                isFirst={idx === 0}
-                isLast={idx === cats.length - 1}
-                onClick={() => setSelectedCategoryId(cat.id)}
-                onEdit={() => setCategoryModal({ mode: 'edit', category: cat })}
-                onDelete={() => setCategoryModal({ mode: 'delete', category: cat })}
-                onToggleActive={() => void toggleCategoryActive(cat)}
-                onMoveUp={() => void moveCategory(idx, 'up')}
-                onMoveDown={() => void moveCategory(idx, 'down')}
-              />
-            ))}
-          </div>
         </div>
-
-        {/* Items grid */}
-        <div className="flex-1">
-          {activeCategoryId ? (
-            <>
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-700">
-                  {cats.find((c) => c.id === activeCategoryId)?.name ?? 'Items'}
-                  <span className="ml-2 text-xs text-gray-400">({itemsArr.length} items)</span>
-                </p>
-                <Button onClick={() => setItemModal({ mode: 'add' })}>+ Add item</Button>
-              </div>
-              {itemStatus === 'loading' ? (
-                <p className="text-sm text-gray-400">Loading items…</p>
-              ) : itemsArr.length === 0 ? (
-                <p className="text-sm text-gray-400">No items in this category yet.</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-4" role="list" aria-label="Menu items">
-                  {itemsArr.map((item) => (
-                    <div key={item.id} role="listitem">
-                      <ItemCard
-                        item={item}
-                        onClick={() => setItemModal({ mode: 'edit', item })}
-                        onQuickToggle={(s) => void quickToggleAvailability(item, s)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setItemDeleteTarget(item)}
-                        className="mt-1 text-xs text-red-400 hover:text-red-600"
-                        aria-label={`Delete ${item.name}`}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="flex h-48 items-center justify-center rounded-lg border-2 border-dashed border-gray-200">
-              <p className="text-sm text-gray-400">Select a category to see its items.</p>
-            </div>
-          )}
+        <div className="flex items-center gap-5">
+          <div className="text-right">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Categories</p>
+            <p className="text-sm font-bold text-gray-800">
+              {usage?.categories ?? cats.length}
+              <span className="font-normal text-gray-400">/{plan?.category_cap ?? 999}</span>
+            </p>
+          </div>
+          <div className="h-7 w-px bg-gray-200" />
+          <div className="text-right">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Items</p>
+            <p className="text-sm font-bold text-gray-800">
+              {usage?.items ?? itemsArr.length}
+              <span className="font-normal text-gray-400">/{plan?.item_cap ?? 999}</span>
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Modals */}
-      {(categoryModal?.mode === 'add' || categoryModal?.mode === 'edit') && (
+      {topTab === 'modifiers' ? (
+        <ModifiersTab />
+      ) : (
+        /* ── Menu Builder ── */
+        <div className="flex gap-5">
+
+          {/* Column 1: Categories */}
+          <div className="w-56 shrink-0">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Categories</span>
+                <button
+                  type="button"
+                  onClick={() => setCategoryModal({ mode: 'add' })}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                  aria-label="Add category"
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
+              <div className="space-y-0.5 p-2">
+                {cats.length === 0 && (
+                  <p className="px-3 py-4 text-center text-xs text-gray-400">No categories yet.</p>
+                )}
+                {cats.map((cat) => (
+                  <div
+                    key={cat.id}
+                    draggable
+                    onDragStart={() => { dragCatId.current = cat.id }}
+                    onDragOver={(e) => { e.preventDefault(); dragOverCatId.current = cat.id }}
+                    onDrop={() => void handleCatDrop()}
+                    className="group relative"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategoryId(cat.id)}
+                      className={cn(
+                        'flex w-full items-start gap-2 rounded-xl px-2.5 py-2.5 text-left transition-colors',
+                        activeCategoryId === cat.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                      )}
+                    >
+                      <GripVertical size={14} className="mt-0.5 shrink-0 cursor-grab text-gray-300 active:cursor-grabbing" />
+                      <div className="min-w-0 flex-1">
+                        <p className={cn(
+                          'truncate text-sm font-semibold leading-tight',
+                          activeCategoryId === cat.id ? 'text-blue-600' : 'text-gray-700'
+                        )}>
+                          {cat.name}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-gray-400">
+                          {activeCategoryId === cat.id
+                            ? `${itemsArr.length} ITEMS`
+                            : cat.active ? '' : 'HIDDEN'}
+                        </p>
+                      </div>
+                    </button>
+                    <div className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 group-hover:flex">
+                      <button type="button" onClick={() => setCategoryModal({ mode: 'edit', category: cat })} className="rounded p-1 text-gray-300 hover:bg-gray-100 hover:text-gray-600">
+                        <Pencil size={12} />
+                      </button>
+                      <button type="button" onClick={() => setDeleteCat(cat)} className="rounded p-1 text-gray-300 hover:bg-gray-100 hover:text-red-500">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Column 2: Items */}
+          <div className="min-w-0 flex-1">
+            {activeCategoryId ? (
+              <>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-gray-900">{activeCategory?.name ?? 'Items'}</h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:border-gray-300"
+                    >
+                      Bulk Availability
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditItem({ mode: 'add' })}
+                      className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-blue-700"
+                    >
+                      <Plus size={14} />
+                      Add Item
+                    </button>
+                  </div>
+                </div>
+
+                {itemsLoading ? (
+                  <p className="text-sm text-gray-400">Loading items…</p>
+                ) : itemsArr.length === 0 ? (
+                  <div className="flex h-48 items-center justify-center rounded-2xl border-2 border-dashed border-gray-200">
+                    <div className="text-center">
+                      <ImageIcon size={28} className="mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm font-medium text-gray-500">No items in this category</p>
+                      <button type="button" onClick={() => setEditItem({ mode: 'add' })} className="mt-1 text-sm font-semibold text-blue-600 hover:text-blue-700">
+                        + Add your first item
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-4 xl:grid-cols-4" role="list">
+                    {itemsArr.map((item) => {
+                      const avail = (AVAIL_OPTIONS.find((o) => o.value === item.availability_state) ?? AVAIL_OPTIONS[0])!
+                      const hasVariants = item.has_variants && item.variants && item.variants.length > 0
+                      const minPrice = hasVariants
+                        ? Math.min(...(item.variants ?? []).map((v) => v.price))
+                        : item.price
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="listitem"
+                          draggable
+                          onDragStart={(e) => { e.stopPropagation(); dragItemId.current = item.id }}
+                          onDragOver={(e) => { e.preventDefault(); dragOverItemId.current = item.id }}
+                          onDrop={(e) => { e.preventDefault(); void handleItemDrop() }}
+                          onClick={() => setEditItem({ mode: 'edit', item })}
+                          className="group overflow-hidden rounded-2xl border border-gray-200 bg-white text-left transition-all hover:border-blue-200 hover:shadow-md"
+                        >
+                          {item.image_r2_key && (
+                            <div className="relative bg-gray-100" style={{ paddingBottom: '65%' }}>
+                              <img
+                                src={`/r2/${item.image_r2_key}`}
+                                alt={item.name}
+                                className="absolute inset-0 h-full w-full object-cover"
+                              />
+                              <span className={cn('absolute left-2 top-2 h-2.5 w-2.5 rounded-full shadow', avail.dot)} />
+                            </div>
+                          )}
+                          <div className="p-3">
+                            <div className="flex items-start gap-2">
+                              {!item.image_r2_key && (
+                                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', avail.dot)} />
+                              )}
+                              <p className="truncate text-sm font-semibold text-gray-900">{item.name}</p>
+                            </div>
+                            <p className="mt-0.5 text-sm font-bold text-gray-700">
+                              {hasVariants ? `From ${formatPrice(minPrice)}` : formatPrice(minPrice)}
+                            </p>
+                            <div className="mt-2">
+                              <AvailabilityBadge state={item.availability_state} />
+                            </div>
+                            {(item.modifier_groups ?? []).length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {(item.modifier_groups ?? []).map((g) => (
+                                  <span key={g.id} className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
+                                    {g.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex h-48 items-center justify-center rounded-2xl border-2 border-dashed border-gray-200">
+                <p className="text-sm text-gray-400">Select a category to see its items.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Category modal */}
+      {categoryModal && (
         <CategoryModal
           category={categoryModal.category ?? null}
           onClose={() => setCategoryModal(null)}
           onSave={saveCategory}
         />
       )}
-      {categoryModal?.mode === 'delete' && categoryModal.category && (
-        <DeleteModal
+
+      {/* Delete category */}
+      {deleteCat && (
+        <DeleteConfirm
           title="Delete category"
-          body={`Delete "${categoryModal.category.name}"? This cannot be undone.`}
-          onClose={() => setCategoryModal(null)}
-          onConfirm={deleteCategory}
+          body={`Delete "${deleteCat.name}"? All items in this category will also be removed. This cannot be undone.`}
+          onClose={() => setDeleteCat(null)}
+          onConfirm={confirmDeleteCat}
         />
       )}
-      {(itemModal?.mode === 'add' || itemModal?.mode === 'edit') && activeCategoryId && (
-        <ItemModal
-          item={itemModal.item ?? null}
+
+      {/* Edit / Add item drawer */}
+      {editItem && activeCategoryId && (
+        <EditItemDrawer
+          item={editItem.item ?? null}
           categories={cats}
           selectedCategoryId={activeCategoryId}
-          onClose={() => setItemModal(null)}
+          onClose={() => setEditItem(null)}
           onSave={saveItem}
-        />
-      )}
-      {itemDeleteTarget && (
-        <DeleteModal
-          title="Delete item"
-          body={`Delete "${itemDeleteTarget.name}"?`}
-          onClose={() => setItemDeleteTarget(null)}
-          onConfirm={deleteItem}
+          featureFlags={plan?.feature_flags}
+          upgradeMessage={upgradeMessage}
         />
       )}
     </div>

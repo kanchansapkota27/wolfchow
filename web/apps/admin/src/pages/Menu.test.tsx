@@ -13,11 +13,15 @@ const mockCreateItem = vi.fn()
 const mockUpdateItem = vi.fn()
 const mockDeleteItem = vi.fn()
 const mockGetItemImageUrl = vi.fn()
-const mockListModifierGroups = vi.fn()
-const mockCreateModifierGroup = vi.fn()
+const mockListGlobalModifierGroups = vi.fn()
+const mockCreateGlobalModifierGroup = vi.fn()
 const mockUpdateModifierGroup = vi.fn()
 const mockDeleteModifierGroup = vi.fn()
+const mockDeleteModifierOption = vi.fn()
 const mockCreateModifierOption = vi.fn()
+const mockGetItemModifierAssignments = vi.fn()
+const mockSetItemModifierAssignments = vi.fn()
+const mockReorderItems = vi.fn()
 
 vi.mock('../lib/api', () => ({
   useApi: () => ({
@@ -32,11 +36,15 @@ vi.mock('../lib/api', () => ({
       updateItem: mockUpdateItem,
       deleteItem: mockDeleteItem,
       getItemImageUrl: mockGetItemImageUrl,
-      listModifierGroups: mockListModifierGroups,
-      createModifierGroup: mockCreateModifierGroup,
+      listGlobalModifierGroups: mockListGlobalModifierGroups,
+      createGlobalModifierGroup: mockCreateGlobalModifierGroup,
       updateModifierGroup: mockUpdateModifierGroup,
       deleteModifierGroup: mockDeleteModifierGroup,
+      deleteModifierOption: mockDeleteModifierOption,
       createModifierOption: mockCreateModifierOption,
+      getItemModifierAssignments: mockGetItemModifierAssignments,
+      setItemModifierAssignments: mockSetItemModifierAssignments,
+      reorderItems: mockReorderItems,
     },
   }),
 }))
@@ -66,13 +74,13 @@ vi.mock('@wolfchow/ui', () => ({
   ),
 }))
 
-const CAT1: MenuCategory = { id: 'cat1', restaurant_id: 'r1', name: 'Starters', sort_order: 0, active: true, availability_state: 'in_stock', created_at: '2026-01-01T00:00:00Z' }
-const CAT2: MenuCategory = { id: 'cat2', restaurant_id: 'r1', name: 'Mains', sort_order: 1, active: true, availability_state: 'in_stock', created_at: '2026-01-01T00:00:00Z' }
+const CAT1: MenuCategory = { id: 'cat1', restaurant_id: 'r1', name: 'Starters', sort_order: 0, active: true, availability_state: 'available', created_at: '2026-01-01T00:00:00Z' }
+const CAT2: MenuCategory = { id: 'cat2', restaurant_id: 'r1', name: 'Mains', sort_order: 1, active: true, availability_state: 'available', created_at: '2026-01-01T00:00:00Z' }
 const ITEM1: MenuItem = {
   id: 'item1', restaurant_id: 'r1', category_id: 'cat1',
   name: 'Bruschetta', description: null, price: 850,
-  availability_state: 'in_stock', restore_at: null, image_r2_key: null,
-  tags: ['vegan'], has_variants: false, variants: [],
+  availability_state: 'available', restore_at: null, image_r2_key: null,
+  tags: ['vegan'], has_variants: false, sort_order: 0, variants: [],
 }
 
 beforeEach(() => {
@@ -81,10 +89,14 @@ beforeEach(() => {
   mockListItems.mockResolvedValue([ITEM1])
   mockReorderCategories.mockResolvedValue({ ok: true })
   mockUpdateItem.mockResolvedValue({ ...ITEM1 })
-  mockListModifierGroups.mockResolvedValue([])
-  mockCreateModifierGroup.mockResolvedValue({ id: 'grp1', name: 'Size', type: 'single', required: false, options: [] })
-  mockCreateModifierOption.mockResolvedValue({ id: 'opt1', name: 'Small', price_delta: 0, available: true })
+  mockListGlobalModifierGroups.mockResolvedValue([])
+  mockCreateGlobalModifierGroup.mockResolvedValue({ id: 'grp1', name: 'Size', item_id: null, type: 'single', required: false, availability_state: 'available', sort_order: 0, options: [] })
+  mockCreateModifierOption.mockResolvedValue({ id: 'opt1', group_id: 'grp1', restaurant_id: 'r1', name: 'Small', price_delta: 0, available: true })
   mockDeleteModifierGroup.mockResolvedValue(undefined)
+  mockDeleteModifierOption.mockResolvedValue(undefined)
+  mockGetItemModifierAssignments.mockResolvedValue([])
+  mockSetItemModifierAssignments.mockResolvedValue({ group_ids: [] })
+  mockReorderItems.mockResolvedValue(undefined)
 })
 
 describe('STORY-058 · Menu management UI', () => {
@@ -215,23 +227,19 @@ describe('STORY-058 · Menu management UI', () => {
     )
   })
 
-  it('modifier groups: add group calls createModifierGroup', async () => {
+  it('ModifiersTab: creating a global group calls createGlobalModifierGroup', async () => {
     render(<Menu />)
     await waitFor(() => screen.getByText('Bruschetta'))
-    // Open edit modal by clicking the item card's role="button" div
-    const cards = screen.getAllByRole('button', { name: undefined })
-    const cardDiv = screen.getByText('Bruschetta').closest('[role="button"]')!
-    fireEvent.click(cardDiv)
-    // Modifier groups section appears (item.id = 'item1' is truthy)
-    await waitFor(() => screen.getByText('Modifier groups'))
-    fireEvent.click(screen.getByText('+ Add group'))
-    const groupNameInput = screen.getByLabelText('New modifier group name')
-    fireEvent.change(groupNameInput, { target: { value: 'Size' } })
-    fireEvent.click(screen.getByText('Add group'))
+    // Switch to Modifiers top tab
+    fireEvent.click(screen.getByText('Modifiers'))
+    await waitFor(() => screen.getByText('ADD GROUP'))
+    fireEvent.click(screen.getByText('ADD GROUP'))
+    const groupNameInput = screen.getByPlaceholderText('e.g. Size, Spice Level, Extras')
+    fireEvent.change(groupNameInput, { target: { value: 'Spice Level' } })
+    fireEvent.click(screen.getByText('Create Group'))
     await waitFor(() =>
-      expect(mockCreateModifierGroup).toHaveBeenCalledWith(
-        'item1',
-        expect.objectContaining({ name: 'Size', type: 'single', required: false }),
+      expect(mockCreateGlobalModifierGroup).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Spice Level', type: 'single', required: false }),
       ),
     )
   })
@@ -252,34 +260,25 @@ describe('STORY-058 · Menu management UI', () => {
     expect((deleteVariantBtn as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('modifier group add option: calls createModifierOption', async () => {
+  it('ModifiersTab: adding an option calls createModifierOption', async () => {
     const GROUP: ModifierGroup = {
-      id: 'grp1', restaurant_id: 'r1', item_id: 'item1',
+      id: 'grp1', restaurant_id: 'r1', item_id: null,
       name: 'Size', type: 'single', required: false,
-      availability_state: 'in_stock', sort_order: 0,
+      availability_state: 'available', sort_order: 0,
       options: [],
     }
-    mockListModifierGroups.mockResolvedValue([GROUP])
+    mockListGlobalModifierGroups.mockResolvedValue([GROUP])
     render(<Menu />)
     await waitFor(() => screen.getByText('Bruschetta'))
-    const cardDiv = screen.getByText('Bruschetta').closest('[role="button"]')!
-    fireEvent.click(cardDiv)
+    // Switch to Modifiers top tab
+    fireEvent.click(screen.getByText('Modifiers'))
     await waitFor(() => screen.getByText('Size'))
-    // Expand the group — use the first ▶ expand button inside the modifier groups section
-    const expandBtns = screen.getAllByLabelText('Expand')
-    fireEvent.click(expandBtns[0])
-    await waitFor(() => screen.getByText('+ Add option'))
     fireEvent.click(screen.getByText('+ Add option'))
-    fireEvent.change(screen.getByLabelText('New option name'), { target: { value: 'Small' } })
-    fireEvent.change(screen.getByLabelText('Price delta'), { target: { value: '0' } })
-    // The add-option form has a plain text "Save" button; the modal footer also has one.
-    // Pick the first non-disabled Save button within the expanded group area.
-    const saveBtns = screen.getAllByRole('button', { name: 'Save' })
-    const optionSaveBtn = saveBtns.find((b) => !(b as HTMLButtonElement).disabled && b.closest('.rounded-md.border'))!
-    fireEvent.click(optionSaveBtn)
+    fireEvent.change(screen.getByPlaceholderText('Name'), { target: { value: 'Small' } })
+    fireEvent.click(screen.getByText('Save'))
     await waitFor(() =>
       expect(mockCreateModifierOption).toHaveBeenCalledWith(
-        'item1', 'grp1',
+        'grp1',
         expect.objectContaining({ name: 'Small' }),
       ),
     )

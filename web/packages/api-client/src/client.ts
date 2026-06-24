@@ -451,6 +451,8 @@ export function createApiClient(config: ApiClientConfig) {
     createInvite: (data: CreateInviteInput) =>
       apiFetch<CreateInviteResult>('/superadmin/invites', { method: 'POST', body: data }),
     revokeInvite: (id: string) =>
+      apiFetch<void>(`/superadmin/invites/${id}/revoke`, { method: 'POST' }),
+    deleteInvite: (id: string) =>
       apiFetch<void>(`/superadmin/invites/${id}`, { method: 'DELETE' }),
     createRestaurant: (data: CreateRestaurantInput) =>
       apiFetch<{ restaurant: Pick<Restaurant, 'id' | 'slug' | 'display_name' | 'business_name' | 'created_at'> }>(
@@ -513,8 +515,8 @@ export function createApiClient(config: ApiClientConfig) {
     listAudit: (query?: RequestOptions['query']) =>
       apiFetch<{ entries: AuditEntry[]; page: number; page_size: number; total: number }>('/superadmin/audit', { query }),
     getPlatformSettings: () =>
-      apiFetch<{ settings: { jwt_expiry_minutes: number; global_rate_limit: number; maintenance_mode: boolean; support_email: string; r2_public_domain: string; webhook_signing_secret: string } }>('/superadmin/settings'),
-    updatePlatformSettings: (data: { jwt_expiry_minutes: number; global_rate_limit: number; maintenance_mode: boolean; support_email: string; r2_public_domain: string }) =>
+      apiFetch<{ settings: { jwt_expiry_minutes: number; global_rate_limit: number; maintenance_mode: boolean; support_email: string; r2_public_domain: string; webhook_signing_secret: string; upgrade_message_title: string; upgrade_message_html: string } }>('/superadmin/settings'),
+    updatePlatformSettings: (data: { jwt_expiry_minutes: number; global_rate_limit: number; maintenance_mode: boolean; support_email: string; r2_public_domain: string; upgrade_message_title: string; upgrade_message_html: string }) =>
       apiFetch<{ ok: boolean }>('/superadmin/settings', { method: 'PATCH', body: data }),
     regenerateWebhookSecret: () =>
       apiFetch<{ webhook_signing_secret: string }>('/superadmin/settings/webhook-secret', { method: 'POST' }),
@@ -595,7 +597,7 @@ export function createApiClient(config: ApiClientConfig) {
     deleteCategory: (id: string) =>
       apiFetch<void>(`/admin/menu/categories/${id}`, { method: 'DELETE' }),
     reorderCategories: (order: Array<{ id: string; sort_order: number }>) =>
-      apiFetch<{ ok: boolean }>('/admin/menu/categories/reorder', { method: 'POST', body: { order } }),
+      apiFetch<{ ok: boolean }>('/admin/menu/categories/reorder', { method: 'POST', body: order }),
     listItems: (categoryId: string) =>
       apiFetch<{ items: MenuItem[] }>(`/admin/menu/items?category_id=${categoryId}`).then((r) => r.items),
     createItem: (data: Record<string, unknown>) =>
@@ -612,16 +614,26 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ variant: ItemVariant }>(`/admin/menu/items/${itemId}/variants/${variantId}`, { method: 'PATCH', body: data }).then((r) => r.variant),
     deleteVariant: (itemId: string, variantId: string) =>
       apiFetch<void>(`/admin/menu/items/${itemId}/variants/${variantId}`, { method: 'DELETE' }),
-    listModifierGroups: (itemId: string) =>
-      apiFetch<{ groups: ModifierGroup[] }>(`/admin/menu/items/${itemId}/modifiers`).then((r) => r.groups),
-    createModifierGroup: (itemId: string, data: Record<string, unknown>) =>
-      apiFetch<{ group: ModifierGroup }>(`/admin/menu/items/${itemId}/modifiers`, { method: 'POST', body: data }).then((r) => r.group),
-    updateModifierGroup: (itemId: string, groupId: string, data: Record<string, unknown>) =>
-      apiFetch<{ group: ModifierGroup }>(`/admin/menu/items/${itemId}/modifiers/${groupId}`, { method: 'PATCH', body: data }).then((r) => r.group),
-    deleteModifierGroup: (itemId: string, groupId: string) =>
-      apiFetch<void>(`/admin/menu/items/${itemId}/modifiers/${groupId}`, { method: 'DELETE' }),
-    createModifierOption: (itemId: string, groupId: string, data: Record<string, unknown>) =>
-      apiFetch<{ option: ModifierOption }>(`/admin/menu/items/${itemId}/modifiers/${groupId}/options`, { method: 'POST', body: data }).then((r) => r.option),
+    listGlobalModifierGroups: () =>
+      apiFetch<{ groups: ModifierGroup[] }>('/admin/menu/modifiers').then((r) => r.groups),
+    createGlobalModifierGroup: (data: Record<string, unknown>) =>
+      apiFetch<ModifierGroup>('/admin/menu/modifiers', { method: 'POST', body: data }),
+    updateModifierGroup: (groupId: string, data: Record<string, unknown>) =>
+      apiFetch<ModifierGroup>(`/admin/menu/modifiers/${groupId}`, { method: 'PATCH', body: data }),
+    deleteModifierGroup: (groupId: string) =>
+      apiFetch<void>(`/admin/menu/modifiers/${groupId}`, { method: 'DELETE' }),
+    createModifierOption: (groupId: string, data: Record<string, unknown>) =>
+      apiFetch<ModifierOption>(`/admin/menu/modifiers/${groupId}/options`, { method: 'POST', body: data }),
+    updateModifierOption: (optionId: string, data: Record<string, unknown>) =>
+      apiFetch<ModifierOption>(`/admin/menu/modifiers/options/${optionId}`, { method: 'PATCH', body: data }),
+    deleteModifierOption: (optionId: string) =>
+      apiFetch<void>(`/admin/menu/modifiers/options/${optionId}`, { method: 'DELETE' }),
+    getItemModifierAssignments: (itemId: string) =>
+      apiFetch<{ group_ids: string[] }>(`/admin/menu/items/${itemId}/modifier-assignments`).then((r) => r.group_ids),
+    setItemModifierAssignments: (itemId: string, groupIds: string[]) =>
+      apiFetch<{ group_ids: string[] }>(`/admin/menu/items/${itemId}/modifier-assignments`, { method: 'PUT', body: { group_ids: groupIds } }),
+    reorderItems: (order: Array<{ id: string; sort_order: number }>) =>
+      apiFetch<void>('/admin/menu/items/reorder', { method: 'POST', body: order }),
     // ── Hours & Scheduling ───────────────────────────────────────────────────
     getHours: () =>
       apiFetch<{ hours: HoursRow[] }>('/admin/hours').then((r) => r.hours),
@@ -636,7 +648,7 @@ export function createApiClient(config: ApiClientConfig) {
     listClosures: (includePast?: boolean) =>
       apiFetch<{ closures: SpecialClosure[] }>('/admin/closures', { query: { include_past: includePast ? 'true' : undefined } }).then((r) => r.closures),
     createClosure: (data: CreateClosureInput) =>
-      apiFetch<{ closure: SpecialClosure }>('/admin/closures', { method: 'POST', body: data }).then((r) => r.closure),
+      apiFetch<SpecialClosure>('/admin/closures', { method: 'POST', body: data }),
     deleteClosure: (id: string) =>
       apiFetch<void>(`/admin/closures/${id}`, { method: 'DELETE' }),
     // ── Staff ────────────────────────────────────────────────────────────────
@@ -722,6 +734,13 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<Notice>(`/admin/notices/${id}`, { method: 'PATCH', body: data }),
     deleteNotice: (id: string) =>
       apiFetch<void>(`/admin/notices/${id}`, { method: 'DELETE' }),
+    // ── Plan & usage ──────────────────────────────────────────────────────────
+    getPlan: () =>
+      apiFetch<{
+        plan: Plan
+        usage: { categories: number; items: number; staff: number }
+        upgrade_message: { title: string; html: string }
+      }>('/admin/plan'),
   }
 
   return { apiFetch, auth, superadmin, admin, menu, orders }
