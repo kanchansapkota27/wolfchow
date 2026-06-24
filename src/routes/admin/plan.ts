@@ -16,13 +16,13 @@ export function registerAdminPlanRoutes(app: Hono<HonoEnv>): void {
       // Parallel count queries for usage
       Promise.all([
         admin
-          .from('categories')
+          .from('menu_categories')
           .select('id', { count: 'exact', head: true })
           .eq('restaurant_id', restaurantId)
           .eq('active', true)
           .then((r) => r.count ?? 0),
         admin
-          .from('items')
+          .from('menu_items')
           .select('id', { count: 'exact', head: true })
           .eq('restaurant_id', restaurantId)
           .eq('active', true)
