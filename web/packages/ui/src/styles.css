@@ -209,6 +209,9 @@
   width: 100%;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
+.wc-modal--lg {
+  max-width: 42rem;
+}
 .wc-modal__title {
   margin: 0 0 1rem;
   font-size: 1.0625rem;

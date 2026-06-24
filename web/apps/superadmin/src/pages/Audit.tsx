@@ -282,6 +282,9 @@ export function Audit() {
                             </td>
                             <td className="px-4 py-3 text-gray-500">
                               {e.user_name ?? <span className="text-gray-400">—</span>}
+                              {e.ip_address && (
+                                <div className="text-xs font-mono text-gray-400">{e.ip_address}</div>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-gray-400">
                               {expanded === e.id
@@ -292,6 +295,11 @@ export function Audit() {
                           {expanded === e.id && (
                             <tr className="border-b border-gray-100 bg-gray-50">
                               <td colSpan={6} className="px-6 py-4">
+                                {e.ip_address && (
+                                  <p className="mb-3 text-xs text-gray-500">
+                                    IP: <span className="font-mono text-gray-700">{e.ip_address}</span>
+                                  </p>
+                                )}
                                 <DiffPanel old_data={e.old_data} new_data={e.new_data} />
                               </td>
                             </tr>

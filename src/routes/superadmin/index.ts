@@ -9,6 +9,7 @@ import { registerRestaurantRoutes, type RestaurantRouteDeps } from './restaurant
 import { registerSmtpRoutes } from './smtp'
 import { registerBillingRoutes } from './billing'
 import { registerAuditRoutes } from './audit'
+import { registerSettingsRoutes } from './settings'
 
 /**
  * Superadmin (and support) route group. Every `/superadmin/*` route sits behind
@@ -45,4 +46,5 @@ export function registerSuperadminRoutes(
   registerSmtpRoutes(app)
   registerBillingRoutes(app)
   registerAuditRoutes(app)
+  registerSettingsRoutes(app)
 }

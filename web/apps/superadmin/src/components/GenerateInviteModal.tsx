@@ -10,12 +10,13 @@ interface GenerateInviteModalProps {
 }
 
 /**
- * Generate-invite form. On success it swaps to a result view showing the
- * invite URL with a copy button; the commission % entered (0–100) is sent as a
- * fraction.
+ * Generate-invite form. Commission comes from the selected plan by default;
+ * an optional override can be set via checkbox. On success it shows the invite
+ * URL with a copy button.
  */
 export function GenerateInviteModal({ open, plans, onClose, onCreate }: GenerateInviteModalProps) {
   const [planId, setPlanId] = useState('')
+  const [overrideCommission, setOverrideCommission] = useState(false)
   const [commissionPct, setCommissionPct] = useState('0')
   const [billingNote, setBillingNote] = useState('')
   const [email, setEmail] = useState('')
@@ -25,9 +26,12 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  const selectedPlan = plans.find((p) => p.id === planId)
+
   useEffect(() => {
     if (open) {
       setPlanId(plans[0]?.id ?? '')
+      setOverrideCommission(false)
       setCommissionPct('0')
       setBillingNote('')
       setEmail('')
@@ -43,17 +47,21 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
       setError('Select a plan')
       return
     }
-    const pct = Number(commissionPct)
-    if (Number.isNaN(pct) || pct < 0 || pct > 100) {
-      setError('Commission must be between 0 and 100')
-      return
+    let commission_rate: number | undefined
+    if (overrideCommission) {
+      const pct = Number(commissionPct)
+      if (Number.isNaN(pct) || pct < 0 || pct > 100) {
+        setError('Override commission must be between 0 and 100')
+        return
+      }
+      commission_rate = pct / 100
     }
     setSaving(true)
     setError(null)
     try {
       const res = await onCreate({
         plan_id: planId,
-        commission_rate: pct / 100,
+        commission_rate,
         billing_note: billingNote.trim() || undefined,
         email: email.trim() || undefined,
         restaurant_name: restaurantName.trim() || undefined,
@@ -109,16 +117,40 @@ export function GenerateInviteModal({ open, plans, onClose, onCreate }: Generate
                 </option>
               ))}
             </select>
+            {selectedPlan && (
+              <span className="text-xs text-gray-400">
+                Plan commission:{' '}
+                {selectedPlan.commission_type === 'fixed'
+                  ? `$${(selectedPlan.commission_value / 100).toFixed(2)}/mo flat`
+                  : `${(selectedPlan.commission_value / 100).toFixed(2)}%`}
+              </span>
+            )}
           </label>
 
-          <Input
-            label="Commission rate %"
-            type="number"
-            min={0}
-            max={100}
-            value={commissionPct}
-            onChange={(e) => setCommissionPct(e.target.value)}
-          />
+          {/* Optional commission override */}
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={overrideCommission}
+                onChange={(e) => setOverrideCommission(e.target.checked)}
+              />
+              <span className="text-gray-700">Override commission for this invite</span>
+            </label>
+            {overrideCommission && (
+              <div className="mt-3">
+                <Input
+                  label="Override commission rate (%)"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={commissionPct}
+                  onChange={(e) => setCommissionPct(e.target.value)}
+                  helperText="Overrides the plan default for this restaurant only."
+                />
+              </div>
+            )}
+          </div>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-gray-500">Billing note</span>

@@ -3,6 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Local dev server port — matches VITE_API_URL in wolfchow/web/apps/superadmin/.env
+[dev]
+port = 8789
+
 # Observability: structured logs (no console.log in app code).
 [observability]
 enabled = true

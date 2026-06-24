@@ -5,6 +5,15 @@
 SUPABASE_URL="http://127.0.0.1:54321"
 SUPABASE_ANON_KEY="your-local-supabase-anon-key"
 
+# --- R2 image uploads (production: wrangler secret put) ---
+# Account ID: Cloudflare dashboard → right sidebar → Account ID
+R2_ACCOUNT_ID="your-cloudflare-account-id"
+# Bucket name must match the bucket created in Cloudflare R2 dashboard
+R2_BUCKET_NAME="restroapi-media"
+# R2 API token: dashboard → R2 → Manage R2 API tokens → Create token (Object Read & Write)
+R2_ACCESS_KEY_ID="your-r2-access-key-id"
+R2_SECRET_ACCESS_KEY="your-r2-secret-access-key"
+
 # --- Secrets (production: wrangler secret put) ---
 SUPABASE_SERVICE_ROLE_KEY="your-local-supabase-service-role-key"
 SUPABASE_JWT_SECRET="your-local-supabase-jwt-secret"

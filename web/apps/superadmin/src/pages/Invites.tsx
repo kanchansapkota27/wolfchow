@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { InviteStatus, InviteSummary } from '@wolfchow/types'
 import { Badge, type BadgeVariant, Button, Modal } from '@wolfchow/ui'
 import { formatDate } from '@wolfchow/utils'
-import { Plus, Filter, Copy } from 'lucide-react'
+import { Plus, Filter, Copy, Trash2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useApi } from '../lib/api'
 import { SectionError } from '../components/SectionError'
@@ -37,7 +37,8 @@ export function Invites() {
   const [search, setSearch] = useState('')
   const [genOpen, setGenOpen] = useState(false)
   const [revoking, setRevoking] = useState<InviteSummary | null>(null)
-  const [revokeBusy, setRevokeBusy] = useState(false)
+  const [deleting, setDeleting] = useState<InviteSummary | null>(null)
+  const [actionBusy, setActionBusy] = useState(false)
 
   const planName = useMemo(() => {
     const map = new Map<string, string>()
@@ -56,13 +57,25 @@ export function Invites() {
 
   async function confirmRevoke() {
     if (!revoking) return
-    setRevokeBusy(true)
+    setActionBusy(true)
     try {
       await api.superadmin.revokeInvite(revoking.id)
       setRevoking(null)
       await queryClient.invalidateQueries({ queryKey: ['invites'] })
     } finally {
-      setRevokeBusy(false)
+      setActionBusy(false)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return
+    setActionBusy(true)
+    try {
+      await api.superadmin.deleteInvite(deleting.id)
+      setDeleting(null)
+      await queryClient.invalidateQueries({ queryKey: ['invites'] })
+    } finally {
+      setActionBusy(false)
     }
   }
 
@@ -129,7 +142,7 @@ export function Invites() {
                   <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Token</th>
                   <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Plan</th>
                   <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Commission</th>
-                  <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Email (Pre-assign)</th>
+                  <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Email</th>
                   <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Status</th>
                   <th className="px-4 py-3 text-xs font-semibold tracking-wider text-gray-500 uppercase">Expires</th>
                   <th className="px-4 py-3" />
@@ -145,6 +158,7 @@ export function Invites() {
                 ) : (
                   filtered.map((inv) => {
                     const badge = STATUS_BADGE[inv.status]
+                    const hasOverride = inv.commission_rate > 0
                     return (
                       <tr key={inv.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="px-4 py-3">
@@ -153,7 +167,13 @@ export function Invites() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-900">{planName(inv.plan_id)}</td>
-                        <td className="px-4 py-3 text-gray-600">{+(inv.commission_rate * 100).toFixed(2)}%</td>
+                        <td className="px-4 py-3">
+                          {hasOverride ? (
+                            <span className="text-amber-600">{+(inv.commission_rate * 100).toFixed(2)}% override</span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">From plan</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-gray-400 italic">{inv.email ?? 'Anyone'}</td>
                         <td className="px-4 py-3">
                           <Badge variant={badge.variant}>{badge.label}</Badge>
@@ -174,6 +194,14 @@ export function Invites() {
                                 Revoke
                               </Button>
                             )}
+                            <button
+                              type="button"
+                              title="Delete invite"
+                              onClick={() => setDeleting(inv)}
+                              className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -195,11 +223,25 @@ export function Invites() {
 
       <Modal open={revoking !== null} onClose={() => setRevoking(null)} title="Revoke invite">
         <div>
-          <p className="text-gray-700">Revoke this invite? The link will stop working immediately.</p>
+          <p className="text-gray-700">Revoke this invite? The link will stop working immediately. The record is kept for audit purposes.</p>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setRevoking(null)}>Cancel</Button>
-            <Button variant="danger" loading={revokeBusy} onClick={() => void confirmRevoke()}>
+            <Button variant="danger" loading={actionBusy} onClick={() => void confirmRevoke()}>
               Revoke
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={deleting !== null} onClose={() => setDeleting(null)} title="Delete invite">
+        <div>
+          <p className="text-gray-700">
+            Permanently delete this invite? This cannot be undone and will remove it from all records.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="danger" loading={actionBusy} onClick={() => void confirmDelete()}>
+              Delete
             </Button>
           </div>
         </div>

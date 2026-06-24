@@ -196,7 +196,13 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
       .order('created_at', { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (search) query = query.or(`display_name.ilike.%${search}%,slug.ilike.%${search}%`)
+    if (search) {
+      // Strip PostgREST filter metacharacters before interpolating into .or()
+      const safeSearch = search.replace(/[%_(),[\]]/g, '').slice(0, 100)
+      if (safeSearch) {
+        query = query.or(`display_name.ilike.%${safeSearch}%,slug.ilike.%${safeSearch}%`)
+      }
+    }
     if (planId) query = query.eq('plan_id', planId)
     if (active === 'true' || active === 'false') query = query.eq('active', active === 'true')
 

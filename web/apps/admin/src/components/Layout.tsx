@@ -1,57 +1,39 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '@wolfchow/auth'
+import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard,
   ShoppingBag,
   UtensilsCrossed,
   Clock,
   Users,
-  CreditCard,
   Bell,
   Tag,
   Megaphone,
-  ArrowLeftRight,
+  Mail,
   Puzzle,
   Settings,
+  LogOut,
   Menu as MenuIcon,
-  X,
-  Flame,
+  Store,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { useApi } from '../lib/api'
+import { useEffect } from 'react'
 
-type NavItem = { to: string; label: string; icon: React.ElementType; end?: boolean }
-
-const NAV_GROUPS: Array<{ items: NavItem[] }> = [
-  {
-    items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: '/orders', label: 'Orders', icon: ShoppingBag },
-    ],
-  },
-  {
-    items: [
-      { to: '/menu', label: 'Menu', icon: UtensilsCrossed },
-      { to: '/hours', label: 'Hours & Scheduling', icon: Clock },
-      { to: '/staff', label: 'Staff', icon: Users },
-    ],
-  },
-  {
-    items: [
-      { to: '/payments', label: 'Payments', icon: CreditCard },
-      { to: '/notifications', label: 'Notifications', icon: Bell },
-      { to: '/promotions', label: 'Promotions', icon: Tag },
-      { to: '/notices', label: 'Notices', icon: Megaphone },
-      { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-    ],
-  },
-  {
-    items: [
-      { to: '/integrations', label: 'Integrations', icon: Puzzle },
-      { to: '/settings', label: 'Settings', icon: Settings },
-    ],
-  },
-]
+const NAV = [
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/orders', label: 'Orders', icon: ShoppingBag },
+  { to: '/menu', label: 'Menu', icon: UtensilsCrossed },
+  { to: '/hours', label: 'Hours', icon: Clock },
+  { to: '/staff', label: 'Staff', icon: Users },
+  { to: '/promotions', label: 'Promotions', icon: Tag },
+  { to: '/notices', label: 'Notices', icon: Megaphone },
+  { to: '/smtp', label: 'SMTP Settings', icon: Mail },
+  { to: '/notifications', label: 'Notifications', icon: Bell },
+  { to: '/integrations', label: 'Integrations', icon: Puzzle },
+  { to: '/settings', label: 'Settings', icon: Settings },
+] as const
 
 function initials(email: string | undefined): string {
   if (!email) return '?'
@@ -63,115 +45,133 @@ function initials(email: string | undefined): string {
 
 export function Layout() {
   const { user, logout } = useAuth()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const api = useApi()
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
 
-  // Close drawer on route change (mobile)
-  useEffect(() => { setSidebarOpen(false) }, [location.pathname])
+  const { data: restaurant } = useQuery({
+    queryKey: ['restaurant'],
+    queryFn: () => api.admin.getRestaurant(),
+    staleTime: 5 * 60_000,
+  })
 
-  // Lock body scroll when mobile drawer is open
+  useEffect(() => { setDrawerOpen(false) }, [location.pathname])
+
   useEffect(() => {
-    document.body.style.overflow = sidebarOpen ? 'hidden' : ''
+    document.body.style.overflow = drawerOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
-  }, [sidebarOpen])
+  }, [drawerOpen])
+
+  const email = user?.email ?? undefined
+
+  const sidebarContent = (
+    <div className="flex h-full w-64 flex-col bg-[#1e2235]">
+      {/* Brand */}
+      <div className="flex items-center gap-3 px-5 py-5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500 text-sm font-bold text-white">
+          R
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">Restro Admin</p>
+          {restaurant?.slug && (
+            <p className="truncate text-[11px] text-gray-400">/{restaurant.slug}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
+        {NAV.map(({ to, label, icon: Icon, ...rest }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={'end' in rest ? rest.end : undefined}
+            onClick={() => setDrawerOpen(false)}
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-400 hover:bg-white/10 hover:text-white',
+              ].join(' ')
+            }
+          >
+            <Icon size={18} />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* User section */}
+      <div className="border-t border-white/10 px-3 py-4">
+        <div className="mb-3 flex items-center gap-3 px-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-600 text-sm font-semibold text-white">
+            {initials(email)}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm text-white" title={email}>{email ?? 'Signed in'}</p>
+            <p className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase">Administrator</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <LogOut size={16} />
+          Logout
+        </button>
+      </div>
+    </div>
+  )
 
   return (
-    <div className="admin-shell">
-      {/* ── Sidebar ── */}
-      <aside className={cn('admin-sidebar', sidebarOpen && 'admin-sidebar--open')}>
-        {/* Brand */}
-        <div className="admin-sidebar__brand">
-          <div className="admin-sidebar__brand-mark" aria-hidden>
-            <Flame size={14} color="white" strokeWidth={2.5} />
-          </div>
-          <div>
-            <div className="admin-sidebar__brand-name">Wolfchow</div>
-            <div className="admin-sidebar__brand-sub">Admin</div>
-          </div>
-          {/* Mobile close */}
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(false)}
-            className="admin-sidebar__close"
-            aria-label="Close navigation"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Nav */}
-        <nav className="admin-nav" aria-label="Main navigation">
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={gi} className="admin-nav__group">
-              {group.items.map((item) => {
-                const Icon = item.icon
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) =>
-                      cn('admin-nav__item', isActive && 'admin-nav__item--active')
-                    }
-                  >
-                    <Icon size={15} className="admin-nav__icon" aria-hidden />
-                    {item.label}
-                  </NavLink>
-                )
-              })}
-            </div>
-          ))}
-        </nav>
-
-        {/* User footer */}
-        <div className="admin-sidebar__footer">
-          <div className="admin-sidebar__avatar" aria-hidden>
-            {initials(user?.email)}
-          </div>
-          <div className="admin-sidebar__user">
-            <div className="admin-sidebar__email" title={user?.email}>
-              {user?.email ?? 'Signed in'}
-            </div>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="admin-sidebar__signout"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
+    <div className="flex h-screen overflow-hidden bg-gray-100">
+      {/* Desktop sidebar — always visible ≥ md */}
+      <aside className="hidden md:flex md:shrink-0">
+        {sidebarContent}
       </aside>
 
-      {/* Mobile overlay backdrop */}
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-      <div
-        className={cn('admin-overlay', sidebarOpen && 'admin-overlay--visible')}
-        onClick={() => setSidebarOpen(false)}
-        aria-hidden
-      />
+      {/* Mobile drawer overlay */}
+      {drawerOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-20 bg-black/50 md:hidden"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <aside className="fixed inset-y-0 left-0 z-30 flex md:hidden">
+            {sidebarContent}
+          </aside>
+        </>
+      )}
 
-      {/* ── Content panel ── */}
-      <div className="admin-content">
-        {/* Mobile top bar */}
-        <div className="admin-topbar">
+      {/* Main area */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Topbar */}
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4">
           <button
             type="button"
-            className="admin-topbar__hamburger"
-            onClick={() => setSidebarOpen(true)}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 md:hidden"
+            onClick={() => setDrawerOpen(true)}
             aria-label="Open navigation"
-            aria-expanded={sidebarOpen}
           >
             <MenuIcon size={20} />
           </button>
-          <span className="admin-topbar__brand">Wolfchow</span>
-        </div>
-
-        {/* Page content */}
-        <main className="admin-main">
-          <div className="admin-main__inner">
-            <Outlet />
+          <span className="text-xs font-semibold tracking-widest text-gray-400 uppercase">
+            Restaurant Operations
+          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-[11px] font-bold text-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              Live
+            </span>
+            <Store size={18} className="text-gray-400" />
           </div>
+        </header>
+
+        {/* Scrollable content */}
+        <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8">
+          <Outlet />
         </main>
       </div>
     </div>

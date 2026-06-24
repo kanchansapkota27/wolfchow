@@ -138,12 +138,11 @@ export function registerInviteRoutes(app: Hono<HonoEnv>): void {
     return c.json({ invites })
   })
 
-  app.delete('/superadmin/invites/:id', async (c) => {
+  // Revoke: soft-mark as used (no restaurant = revoked, not claimed). Only
+  // operates on unused (pending) invites; used/expired invites are immutable.
+  app.post('/superadmin/invites/:id/revoke', async (c) => {
     const id = c.req.param('id')
     const admin = createAdminClient(c.env)
-
-    // Revoke = mark used with no restaurant (distinguishes from a real signup).
-    // Only an unused invite can be revoked.
     const { data, error } = await admin
       .from('invites')
       .update({ used: true, used_at: new Date().toISOString() })
@@ -153,6 +152,16 @@ export function registerInviteRoutes(app: Hono<HonoEnv>): void {
       .maybeSingle()
     if (error) return c.json({ error: 'revoke_failed' }, 500)
     if (!data) return c.json({ error: 'invite_not_found' }, 404)
+    return c.body(null, 204)
+  })
+
+  // Hard-delete: permanently removes the invite row regardless of status.
+  // Used for cleanup — the UI shows this for all invite states.
+  app.delete('/superadmin/invites/:id', async (c) => {
+    const id = c.req.param('id')
+    const admin = createAdminClient(c.env)
+    const { error } = await admin.from('invites').delete().eq('id', id)
+    if (error) return c.json({ error: 'delete_failed' }, 500)
     return c.body(null, 204)
   })
 }

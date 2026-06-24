@@ -53,6 +53,7 @@ export function registerImpersonateRoutes(app: Hono<HonoEnv>): void {
       operation: 'IMPERSONATION_START',
       user_id: caller.sub,
       new_data: { target_restaurant_id: row.id },
+      ip_address: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
     })
 
     return c.json({

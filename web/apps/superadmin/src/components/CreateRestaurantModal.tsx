@@ -21,7 +21,6 @@ interface FormState {
   display_name: string
   slug: string
   timezone: string
-  tzSearch: string
   currency: string
   country: string
   state: string
@@ -36,7 +35,6 @@ function empty(): FormState {
     display_name: '',
     slug: '',
     timezone: 'UTC',
-    tzSearch: '',
     currency: 'USD',
     country: '',
     state: '',
@@ -85,10 +83,6 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
       })
     }
   }
-
-  const filteredTz = TIMEZONES.filter((tz) =>
-    tz.toLowerCase().includes(form.tzSearch.toLowerCase()),
-  ).slice(0, 40)
 
   const subdivisions = getSubdivisions(form.country)
   const selectedPlan = plans.find((p) => p.id === form.plan_id)
@@ -143,9 +137,9 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Create restaurant">
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+    <Modal open={open} onClose={onClose} title="Create restaurant" className="wc-modal--lg">
+      <div className="max-h-[65vh] overflow-y-auto space-y-4 px-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Business name (tax/legal name)"
             value={form.business_name}
@@ -171,29 +165,19 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
           helperText="Lowercase letters, numbers, and hyphens only."
         />
 
-        {/* Timezone — searchable list */}
+        {/* Timezone — native select avoids absolute-positioned dropdown clipping */}
         <div>
-          <label className={LABEL}>Timezone</label>
-          <Input
-            label=""
-            placeholder="Search timezones…"
-            value={form.tzSearch}
-            onChange={field('tzSearch')}
-          />
+          <label htmlFor="modal-timezone" className={LABEL}>Timezone</label>
           <select
-            aria-label="Timezone"
+            id="modal-timezone"
             value={form.timezone}
             onChange={field('timezone')}
-            size={4}
-            className={`mt-1 ${SELECT}`}
+            className={SELECT}
           >
-            {filteredTz.map((tz) => (
+            {TIMEZONES.map((tz) => (
               <option key={tz} value={tz}>{tz}</option>
             ))}
           </select>
-          <p className="mt-0.5 text-xs text-gray-500">
-            Selected: <span className="text-gray-300">{form.timezone}</span>
-          </p>
         </div>
 
         {/* Currency */}
@@ -211,51 +195,53 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
           </select>
         </div>
 
-        {/* Country + State row */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="modal-country" className={LABEL}>Country (optional)</label>
-            <select
-              id="modal-country"
-              value={form.country}
-              onChange={field('country')}
-              className={SELECT}
-            >
-              <option value="">— Select country —</option>
-              {COUNTRIES.map((c) => (
-                <option key={c.name} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="modal-state" className={LABEL}>
-              {subdivisions ? 'State / Province' : 'State / Region'}{' '}
-              <span className="text-gray-500">(optional)</span>
-            </label>
-            {subdivisions ? (
+        {/* Address — country + state/province */}
+        <div>
+          <p className={`${LABEL} font-medium`}>Address <span className="font-normal text-gray-500">(optional)</span></p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="modal-country" className={LABEL}>Country</label>
               <select
-                id="modal-state"
-                value={form.state}
-                onChange={field('state')}
+                id="modal-country"
+                value={form.country}
+                onChange={field('country')}
                 className={SELECT}
               >
-                <option value="">— Select —</option>
-                {subdivisions.map((s) => (
-                  <option key={s.abbr} value={s.name}>{s.name}</option>
+                <option value="">— Select country —</option>
+                {COUNTRIES.map((c) => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
                 ))}
               </select>
-            ) : (
-              <input
-                id="modal-state"
-                type="text"
-                value={form.state}
-                onChange={field('state')}
-                placeholder="Region / state"
-                className={SELECT}
-                autoComplete="address-level1"
-              />
-            )}
+            </div>
+
+            <div>
+              <label htmlFor="modal-state" className={LABEL}>
+                {subdivisions ? 'State / Province' : 'State / Region'}
+              </label>
+              {subdivisions ? (
+                <select
+                  id="modal-state"
+                  value={form.state}
+                  onChange={field('state')}
+                  className={SELECT}
+                >
+                  <option value="">— Select —</option>
+                  {subdivisions.map((s) => (
+                    <option key={s.abbr} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="modal-state"
+                  type="text"
+                  value={form.state}
+                  onChange={field('state')}
+                  placeholder="Region / state"
+                  className={SELECT}
+                  autoComplete="address-level1"
+                />
+              )}
+            </div>
           </div>
         </div>
 
@@ -304,7 +290,7 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
               <p className="text-xs text-gray-500">
                 Overrides the plan default. Applies to monthly billing.
               </p>
-              <div className="flex gap-6">
+              <div className="flex flex-wrap gap-6">
                 {(['percentage', 'fixed'] as const).map((type) => (
                   <label key={type} className="flex items-center gap-2 text-sm">
                     <input
@@ -345,15 +331,15 @@ export function CreateRestaurantModal({ open, plans, onClose, onCreated }: Creat
             {error}
           </p>
         )}
+      </div>
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button loading={busy} onClick={() => void submit()}>
-            Create restaurant
-          </Button>
-        </div>
+      <div className="mt-4 flex justify-end gap-2 border-t border-gray-200 pt-4">
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button loading={busy} onClick={() => void submit()}>
+          Create restaurant
+        </Button>
       </div>
     </Modal>
   )

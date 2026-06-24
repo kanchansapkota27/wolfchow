@@ -9,9 +9,7 @@ import { SectionError } from './SectionError'
 import { InlineEdit } from './InlineEdit'
 import { CreateOwnerModal } from './CreateOwnerModal'
 
-type ApiClient = ReturnType<typeof useApi>
-
-type Tab = 'overview' | 'limits' | 'smtp' | 'admin'
+type Tab = 'overview' | 'limits' | 'smtp'
 
 interface RestaurantDetailProps {
   restaurantId: string
@@ -32,6 +30,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
   const [tab, setTab] = useState<Tab>('overview')
   const [local, setLocal] = useState<Restaurant | null>(null)
   const [confirm, setConfirm] = useState<null | 'suspend' | 'reactivate'>(null)
+  const [pendingPlan, setPendingPlan] = useState<string | null>(null)
   const [createOwnerOpen, setCreateOwnerOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -56,6 +55,17 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
       setConfirm(null)
       await queryClient.invalidateQueries({ queryKey: ['restaurant', restaurantId] })
       onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmPlanChange() {
+    if (!pendingPlan) return
+    setBusy(true)
+    try {
+      await patch({ plan_id: pendingPlan })
+      setPendingPlan(null)
     } finally {
       setBusy(false)
     }
@@ -87,6 +97,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
   }
 
   const r = local
+  const pendingPlanName = plans.find((p) => p.id === pendingPlan)?.name ?? '—'
 
   return (
     <div
@@ -121,7 +132,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
         {status === 'success' && r && (
           <>
             <div className="mb-4 flex gap-2" role="tablist" aria-label="Restaurant detail tabs">
-              {(['overview', 'limits', 'smtp', 'admin'] as Tab[]).map((t) => (
+              {(['overview', 'limits', 'smtp'] as Tab[]).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -133,7 +144,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
                     tab === t ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-100',
                   ].join(' ')}
                 >
-                  {t === 'smtp' ? 'SMTP' : t === 'admin' ? 'Admin user' : t}
+                  {t === 'smtp' ? 'SMTP' : t}
                 </button>
               ))}
             </div>
@@ -151,7 +162,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
                   <select
                     aria-label="Plan"
                     value={r.plan_id ?? ''}
-                    onChange={(e) => void patch({ plan_id: e.target.value })}
+                    onChange={(e) => setPendingPlan(e.target.value)}
                     className="rounded-md border border-gray-200 bg-white px-2 py-1 text-gray-900 focus:border-blue-500 focus:outline-none"
                   >
                     {plans.map((p) => (
@@ -202,10 +213,6 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
               </p>
             )}
 
-            {tab === 'admin' && (
-              <CreateAdminTab restaurantId={restaurantId} api={api as ApiClient} />
-            )}
-
             <div className="mt-6 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
               {r.active ? (
                 <Button variant="danger" onClick={() => setConfirm('suspend')}>
@@ -233,6 +240,7 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
           onClose={() => setCreateOwnerOpen(false)}
         />
 
+        {/* Suspend / reactivate confirmation */}
         <Modal
           open={confirm !== null}
           onClose={() => setConfirm(null)}
@@ -258,6 +266,28 @@ export function RestaurantDetail({ restaurantId, plans, onClose, onChanged }: Re
             </div>
           </div>
         </Modal>
+
+        {/* Plan change confirmation */}
+        <Modal
+          open={pendingPlan !== null}
+          onClose={() => setPendingPlan(null)}
+          title="Change plan"
+        >
+          <div className="text-gray-700">
+            <p>
+              Change <strong>{r?.display_name}</strong> to plan{' '}
+              <strong>{pendingPlanName}</strong>? This will affect billing and feature limits immediately.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setPendingPlan(null)}>
+                Cancel
+              </Button>
+              <Button loading={busy} onClick={() => void confirmPlanChange()}>
+                Change plan
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </aside>
     </div>
   )
@@ -268,72 +298,6 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
     <div className="flex items-center justify-between gap-4">
       <dt className="text-gray-500">{label}</dt>
       <dd className="text-right">{children}</dd>
-    </div>
-  )
-}
-
-function CreateAdminTab({ restaurantId, api }: { restaurantId: string; api: ApiClient }) {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [phone, setPhone] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [created, setCreated] = useState<{ email: string; name: string } | null>(null)
-
-  async function submit() {
-    if (!name.trim() || !email.trim() || password.length < 8) {
-      setError('Name, email and a password of at least 8 characters are required.')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      const user = await api.superadmin.createRestaurantUser(restaurantId, {
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        phone: phone.trim() || undefined,
-      })
-      setCreated({ email: user.email, name: user.name })
-      setName('')
-      setEmail('')
-      setPassword('')
-      setPhone('')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : ''
-      setError(msg.includes('409') || msg.toLowerCase().includes('email') ? 'That email is already in use.' : 'Failed to create user. Try again.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4 text-sm">
-      <p className="text-gray-500">
-        Create a <strong>restaurant_owner</strong> user account for this restaurant. They will be required to change their password on first login.
-      </p>
-
-      {created && (
-        <div role="status" className="rounded-md border border-green-200 bg-green-50 p-3 text-green-800">
-          ✓ Created <strong>{created.name}</strong> ({created.email})
-        </div>
-      )}
-
-      <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
-      <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
-      <Input label="Temporary password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" />
-      <Input label="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" />
-
-      {error && (
-        <p role="alert" className="text-xs text-red-600">{error}</p>
-      )}
-
-      <div className="flex justify-end">
-        <Button onClick={() => void submit()} loading={saving} disabled={!name || !email || password.length < 8}>
-          Create admin user
-        </Button>
-      </div>
     </div>
   )
 }

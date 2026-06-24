@@ -108,7 +108,9 @@ export function registerRestaurantAdminRoutes(
     const restaurantId = jwt.restaurant_id!
 
     const r2Key = `${restaurantId}/logo/${randomId()}.webp`
-    const uploadUrl = await getUploadUrl(c.env, r2Key, 15 * 60)
+    const uploadUrl = c.env.R2_ACCOUNT_ID
+      ? await getUploadUrl(c.env, r2Key, 15 * 60)
+      : `${new URL(c.req.url).origin}/r2/${r2Key}`
 
     return c.json({ upload_url: uploadUrl, r2_key: r2Key }, 201)
   })

@@ -1,224 +1,33 @@
-import { useState, useEffect, useRef } from 'react'
-import { Button } from '@wolfchow/ui'
+import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Eye, Monitor, Smartphone, Globe, Code2, CheckCircle2, Palette, ArrowRight } from 'lucide-react'
+import { Link } from 'react-router'
 import { useApi } from '../lib/api'
-import type { Restaurant, BrandColors } from '@wolfchow/types'
 
-const WIDGET_CDN = 'https://widget.wolfchow.com/widget.js'
+const WIDGET_CDN = 'https://cdn.restroapi.com/widget.js'
 
-const SOCIAL_PLATFORMS = [
-  { key: 'google_business', label: 'Google Business' },
-  { key: 'facebook',        label: 'Facebook' },
-  { key: 'instagram',       label: 'Instagram' },
-  { key: 'tiktok',          label: 'TikTok' },
-  { key: 'yelp',            label: 'Yelp' },
-  { key: 'tripadvisor',     label: 'Tripadvisor' },
-]
+// ── Widget preview mockup ─────────────────────────────────────────────────────
 
-const DELIVERY_PLATFORMS = [
-  { key: 'doordash',  label: 'DoorDash' },
-  { key: 'ubereats',  label: 'Uber Eats' },
-  { key: 'grubhub',   label: 'Grubhub' },
-]
-
-type DarkMode = 'light' | 'dark' | 'auto'
-
-function isValidUrl(s: string): boolean {
-  if (!s) return true
-  try { new URL(s); return true } catch { return false }
-}
-
-function previewSrc(slug: string, colors: BrandColors, dark: DarkMode): string {
-  const params = new URLSearchParams()
-  if (colors.primary)   params.set('primary',   colors.primary)
-  if (colors.secondary) params.set('secondary', colors.secondary)
-  if (colors.accent)    params.set('accent',    colors.accent)
-  if (colors.text)      params.set('text',      colors.text)
-  params.set('dark', dark)
-  return `https://widget.wolfchow.com/preview/${slug}?${params.toString()}`
-}
-
-// ── Embed code card ───────────────────────────────────────────────────────────
-
-function EmbedCard({ slug }: { slug: string }) {
-  const [copied, setCopied] = useState(false)
-  const code = `<script src="${WIDGET_CDN}" data-restaurant="${slug}"></script>`
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
+function WidgetPreviewCard({ displayName }: { displayName: string }) {
   return (
-    <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-3">
-      <h3 className="text-sm font-semibold text-gray-900">Embed code</h3>
-      <pre className="bg-gray-50 rounded-lg p-3 text-xs font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap break-all">{code}</pre>
-      <div className="flex gap-2">
-        <button
-          onClick={handleCopy}
-          className="text-sm text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-md px-3 py-1"
-          aria-label="Copy embed code"
-        >
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
+    <div className="mx-auto w-72 rounded-2xl border border-gray-200 bg-white p-8 shadow-lg">
+      <div className="mb-6 flex justify-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold text-white">
+          {(displayName[0] ?? 'R').toUpperCase()}
+        </div>
       </div>
-    </section>
-  )
-}
-
-// ── Brand colours ─────────────────────────────────────────────────────────────
-
-interface BrandColorsProps {
-  initial: BrandColors
-  onSave: (colors: BrandColors) => void
-}
-
-function BrandColorsSection({ initial, onSave }: BrandColorsProps) {
-  const [colors, setColors] = useState<BrandColors>(initial)
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function handleChange(key: keyof BrandColors, value: string) {
-    const next = { ...colors, [key]: value }
-    setColors(next)
-    if (debounce.current) clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => onSave(next), 300)
-  }
-
-  return (
-    <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
-      <h3 className="text-sm font-semibold text-gray-900">Brand colours</h3>
-      <div className="grid grid-cols-2 gap-4">
-        {(Object.keys({ primary: '', secondary: '', accent: '', text: '' }) as Array<keyof BrandColors>).map((key) => (
-          <label key={key} className="flex items-center gap-3">
-            <input
-              type="color"
-              value={colors[key] ?? '#6366f1'}
-              onChange={(e) => handleChange(key, e.target.value)}
-              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
-              aria-label={`${key} colour`}
-            />
-            <span className="text-sm text-gray-700 capitalize">{key}</span>
-          </label>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ── Dark mode radio ───────────────────────────────────────────────────────────
-
-function DarkModeSection({ value, onChange }: { value: DarkMode; onChange: (v: DarkMode) => void }) {
-  return (
-    <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-3">
-      <h3 className="text-sm font-semibold text-gray-900">Dark mode default</h3>
-      <div className="flex gap-4">
-        {(['light', 'dark', 'auto'] as DarkMode[]).map((mode) => (
-          <label key={mode} className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 capitalize">
-            <input
-              type="radio"
-              value={mode}
-              checked={value === mode}
-              onChange={() => onChange(mode)}
-              className="text-indigo-600"
-              aria-label={`Dark mode ${mode}`}
-            />
-            {mode}
-          </label>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ── Link row (delivery / social) ──────────────────────────────────────────────
-
-interface LinkRowProps {
-  label: string
-  linkKey: string
-  initial: string
-  onSave: (key: string, url: string) => Promise<void>
-}
-
-function LinkRow({ label, linkKey, initial, onSave }: LinkRowProps) {
-  const [value, setValue] = useState(initial)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-
-  async function handleSave() {
-    if (!isValidUrl(value)) { setError('Invalid URL'); return }
-    setError('')
-    setSaving(true)
-    try {
-      await onSave(linkKey, value)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } catch {
-      setError('Failed to save')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="space-y-1">
-      <label className="block text-xs font-medium text-gray-600">{label}</label>
-      <div className="flex gap-2">
-        <input
-          type="url"
-          value={value}
-          onChange={(e) => { setValue(e.target.value); setError('') }}
-          placeholder="https://…"
-          className={`flex-1 border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 ${error ? 'border-red-300 focus:ring-red-400' : 'border-gray-200'}`}
-          aria-label={`${label} URL`}
-        />
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-md px-2 disabled:opacity-40"
-        >
-          {saved ? 'Saved!' : 'Save'}
-        </button>
-      </div>
-      {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
+      <h3 className="mb-1 text-center text-lg font-bold text-gray-900">{displayName}</h3>
+      <p className="mb-6 text-center text-xs text-gray-400">
+        This is a simulated preview of your ordering widget.
+      </p>
+      <button className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white">
+        START ORDER
+      </button>
+      <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-gray-300">
+        <CheckCircle2 size={11} />
+        SECURE CHECKOUT POWERED BY RESTROAPI
+      </p>
     </div>
-  )
-}
-
-// ── Google Maps ───────────────────────────────────────────────────────────────
-
-function GoogleMapsSection() {
-  const [code, setCode] = useState('')
-  const [preview, setPreview] = useState('')
-
-  function handleApply() {
-    setPreview(code)
-  }
-
-  const srcMatch = /<iframe[^>]+src="([^"]+)"/.exec(preview)
-  const iframeSrc = srcMatch?.[1] ?? ''
-
-  return (
-    <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-3">
-      <h3 className="text-sm font-semibold text-gray-900">Google Maps embed</h3>
-      <textarea
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
-        placeholder="Paste your Google Maps <iframe> embed code here"
-        rows={3}
-        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-none"
-        aria-label="Google Maps embed code"
-      />
-      <Button onClick={handleApply} variant="ghost" type="button">Preview</Button>
-      {iframeSrc && (
-        <iframe
-          src={iframeSrc}
-          className="w-full h-48 rounded-lg border border-gray-100"
-          title="Google Maps preview"
-          aria-label="Google Maps preview"
-        />
-      )}
-    </section>
   )
 }
 
@@ -226,93 +35,162 @@ function GoogleMapsSection() {
 
 export function Integrations() {
   const api = useApi()
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [colors, setColors] = useState<BrandColors>({})
-  const [darkMode, setDarkMode] = useState<DarkMode>('auto')
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
+  const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
-    void api.admin.getRestaurant().then((r) => {
-      setRestaurant(r)
-      setColors(r.brand_colors ?? {})
-    }).finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const { status, data: restaurant } = useQuery({
+    queryKey: ['restaurant'],
+    queryFn: () => api.admin.getRestaurant(),
+    staleTime: 5 * 60_000,
+  })
 
-  async function handleSaveColors(c: BrandColors) {
-    setColors(c)
-    await api.admin.saveIntegrations({ brand_colors: c })
+  if (status === 'pending') return <div className="py-16 text-center text-sm text-gray-400">Loading…</div>
+  if (status === 'error' || !restaurant) return <div className="py-16 text-center text-sm text-red-500">Failed to load.</div>
+
+  const embedCode = `<script\n  src="${WIDGET_CDN}"\n  data-restaurant-slug="${restaurant.slug}"\n  async\n></script>\n<restro-widget></restro-widget>`
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(embedCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
-
-  async function handleSaveDelivery(key: string, url: string) {
-    const updated = { ...(restaurant?.delivery_links ?? {}), [key]: url }
-    await api.admin.saveIntegrations({ delivery_links: updated })
-    if (restaurant) setRestaurant({ ...restaurant, delivery_links: updated })
-  }
-
-  async function handleSaveSocial(key: string, url: string) {
-    const updated = { ...(restaurant?.social_links ?? {}), [key]: url }
-    await api.admin.saveIntegrations({ social_links: updated })
-    if (restaurant) setRestaurant({ ...restaurant, social_links: updated })
-  }
-
-  if (loading) return <div className="p-8 text-gray-500">Loading…</div>
-  if (!restaurant) return <div className="p-8 text-gray-500">Failed to load</div>
-
-  const iframeSrc = previewSrc(restaurant.slug, colors, darkMode)
 
   return (
-    <div className="p-8 max-w-3xl space-y-6">
-      <h2 className="text-base font-semibold text-gray-900">Integrations & widget</h2>
-
-      <EmbedCard slug={restaurant.slug} />
-
-      <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Widget preview</h3>
-          <a href={iframeSrc} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:text-indigo-800">
-            Open full preview ↗
-          </a>
+    <div>
+      {/* Page header */}
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Integrations</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Embed the ordering widget on your website and manage connections.
+          </p>
         </div>
-        <iframe
-          src={iframeSrc}
-          title="Widget preview"
-          aria-label="Widget preview"
-          className="w-full h-72 rounded-lg border border-gray-100"
-        />
-      </section>
+        <div className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-4 py-1.5">
+          <span className="h-2 w-2 rounded-full bg-green-500" />
+          <span className="text-xs font-bold tracking-widest text-green-700 uppercase">Widget Status: Active</span>
+        </div>
+      </div>
 
-      <BrandColorsSection initial={colors} onSave={handleSaveColors} />
+      {/* Two-column layout */}
+      <div className="flex gap-6">
+        {/* ── Left: Embed ── */}
+        <div className="min-w-0 flex-1 space-y-5">
+          {/* Embed widget card */}
+          <div className="rounded-2xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <Code2 size={15} className="text-gray-500" />
+                <span className="text-xs font-bold tracking-widest text-gray-700 uppercase">
+                  Embed Ordering Widget
+                </span>
+              </div>
+              <span className="rounded-full border border-gray-200 px-3 py-1 text-[10px] font-bold tracking-wider text-gray-400">
+                V1.0.0
+              </span>
+            </div>
 
-      <DarkModeSection value={darkMode} onChange={setDarkMode} />
+            <div className="px-6 py-5">
+              <p className="mb-4 text-sm text-gray-600">
+                Copy and paste this snippet into your website's HTML before the closing{' '}
+                <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-blue-600">{'</body>'}</code>{' '}
+                tag.
+              </p>
 
-      <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Delivery partners</h3>
-        {DELIVERY_PLATFORMS.map(({ key, label }) => (
-          <LinkRow
-            key={key}
-            label={label}
-            linkKey={key}
-            initial={restaurant.delivery_links[key] ?? ''}
-            onSave={handleSaveDelivery}
-          />
-        ))}
-      </section>
+              {/* Code block */}
+              <div className="relative mb-4 rounded-xl bg-gray-900 p-5">
+                <pre className="overflow-x-auto font-mono text-xs leading-relaxed text-gray-300">
+                  {embedCode}
+                </pre>
+                <button
+                  onClick={() => void handleCopy()}
+                  className="absolute right-3 top-3 rounded-md bg-white/10 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-white/20"
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
 
-      <section className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Social links</h3>
-        {SOCIAL_PLATFORMS.map(({ key, label }) => (
-          <LinkRow
-            key={key}
-            label={label}
-            linkKey={key}
-            initial={restaurant.social_links[key] ?? ''}
-            onSave={handleSaveSocial}
-          />
-        ))}
-      </section>
+              {/* Allowed Domains */}
+              <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100">
+                    <Globe size={15} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Allowed Domains</p>
+                    <p className="text-xs text-gray-500">Restricts widget to specific websites for security.</p>
+                  </div>
+                </div>
+                <button className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-bold tracking-wider text-gray-700 hover:border-gray-300">
+                  CONFIGURE
+                </button>
+              </div>
+            </div>
+          </div>
 
-      <GoogleMapsSection />
+          {/* Theme colors tip */}
+          <Link
+            to="/settings?section=profile"
+            className="flex items-center gap-4 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 transition-colors hover:border-blue-200 hover:bg-blue-100"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
+              <Palette size={18} className="text-blue-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-blue-900">Customize widget theme colors</p>
+              <p className="text-xs text-blue-600">
+                Brand colors, social links, and delivery partner links are managed in{' '}
+                <span className="font-bold">Settings → Restaurant Profile</span>.
+              </p>
+            </div>
+            <ArrowRight size={16} className="shrink-0 text-blue-400" />
+          </Link>
+        </div>
+
+        {/* ── Right: Live preview ── */}
+        <div className="w-96 shrink-0">
+          <div className="sticky top-0 rounded-2xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <Eye size={15} className="text-blue-500" />
+                <span className="text-xs font-bold tracking-widest text-gray-700 uppercase">Live Preview</span>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setPreviewMode('desktop')}
+                  className={`rounded-md p-1.5 transition-colors ${previewMode === 'desktop' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                  aria-label="Desktop preview"
+                >
+                  <Monitor size={15} />
+                </button>
+                <button
+                  onClick={() => setPreviewMode('mobile')}
+                  className={`rounded-md p-1.5 transition-colors ${previewMode === 'mobile' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                  aria-label="Mobile preview"
+                >
+                  <Smartphone size={15} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center bg-gray-50 p-8">
+              <div className={previewMode === 'mobile' ? 'w-64' : 'w-full'}>
+                <WidgetPreviewCard displayName={restaurant.display_name} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-6 border-t border-gray-100 px-5 py-3">
+              <span className="flex items-center gap-1.5 text-xs text-green-600">
+                <CheckCircle2 size={13} />
+                Mobile Optimized
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-green-600">
+                <CheckCircle2 size={13} />
+                WCAG 2.1 Compliant
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -7,13 +7,13 @@ import { Settings } from './pages/Settings'
 import { Hours } from './pages/Hours'
 import { Menu } from './pages/Menu'
 import { Notifications } from './pages/Notifications'
-import { Payments } from './pages/Payments'
 import { Staff } from './pages/Staff'
 import { Promotions } from './pages/Promotions'
 import { Notices } from './pages/Notices'
 import { Transactions } from './pages/Transactions'
 import { Integrations } from './pages/Integrations'
 import { Orders } from './pages/Orders'
+import { SmtpSettings } from './pages/SmtpSettings'
 
 function ProtectedLayout() {
   return (
@@ -37,12 +37,12 @@ export function App() {
         <Route path="menu" element={<Menu />} />
         <Route path="hours" element={<Hours />} />
         <Route path="staff" element={<Staff />} />
-        <Route path="payments" element={<Payments />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="promotions" element={<Promotions />} />
         <Route path="notices" element={<Notices />} />
         <Route path="transactions" element={<Transactions />} />
         <Route path="integrations" element={<Integrations />} />
+        <Route path="smtp" element={<SmtpSettings />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>

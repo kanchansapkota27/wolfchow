@@ -4,9 +4,14 @@ import { BrowserRouter, useNavigate, useSearchParams } from 'react-router'
 import { AuthProvider, type AuthNavigator } from '@wolfchow/auth'
 import { createLocalStorageSession } from '@wolfchow/api-client'
 import { ToastProvider } from '@wolfchow/ui'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ApiProvider, buildApiClient } from './lib/api'
 import { App } from './App'
 import './index.css'
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
+})
 
 function Providers() {
   const navigate = useNavigate()
@@ -25,13 +30,15 @@ function Providers() {
   )
 
   return (
-    <ToastProvider>
-      <ApiProvider client={client}>
-        <AuthProvider client={client} session={session} navigator={authNavigator}>
-          <App />
-        </AuthProvider>
-      </ApiProvider>
-    </ToastProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <ApiProvider client={client}>
+          <AuthProvider client={client} session={session} navigator={authNavigator}>
+            <App />
+          </AuthProvider>
+        </ApiProvider>
+      </ToastProvider>
+    </QueryClientProvider>
   )
 }
 

@@ -3,6 +3,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
 import type { Broadcaster } from '../../services/realtime'
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -79,9 +80,8 @@ export function registerCategoryRoutes(app: Hono<HonoEnv>, deps: CategoryRouteDe
 
     const admin = createAdminClient(c.env)
 
-    // Check category_cap from plan KV
-    const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const plan = await cache.get<Record<string, unknown>>(buildKey('plan', restaurantId))
+    // Check category_cap — resolve plan with DB fallback on KV miss
+    const plan = await resolvePlan(c.env, restaurantId)
     const categoryCap = typeof plan?.category_cap === 'number' ? plan.category_cap : null
 
     if (categoryCap !== null) {

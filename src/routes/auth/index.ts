@@ -83,6 +83,7 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
       operation: 'LOGIN',
       user_id: data.user.id,
       new_data: { email: data.user.email, role },
+      ip_address: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
     })
 
     return c.json({
@@ -162,6 +163,7 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
         operation: 'LOGOUT',
         user_id: typeof logoutClaims.sub === 'string' ? logoutClaims.sub : null,
         new_data: { role: logoutClaims.role ?? null },
+        ip_address: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
       })
     }
 
