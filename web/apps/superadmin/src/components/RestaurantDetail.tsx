@@ -305,7 +305,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 function LimitsTab({ plan }: { plan: Plan | null }) {
   if (!plan) return <p className="text-sm text-gray-400">No plan assigned.</p>
   const caps: Array<[string, number | string]> = [
-    ['Staff', plan.staff_cap],
+    ['Devices', plan.device_cap],
     ['Items', plan.item_cap],
     ['Categories', plan.category_cap],
     ['Modifiers', plan.modifier_cap],

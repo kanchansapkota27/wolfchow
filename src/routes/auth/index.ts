@@ -212,6 +212,17 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
       new_data: { device_id: record.device_id, name: record.name },
     })
 
+    // Update device last_seen_at and capture platform/uuid on first login
+    const deviceUpdate: Record<string, unknown> = { last_seen_at: new Date().toISOString() }
+    if (parsed.data.device_uuid) deviceUpdate.device_uuid = parsed.data.device_uuid
+    if (parsed.data.platform) deviceUpdate.platform = parsed.data.platform
+    void admin
+      .from('devices')
+      .update(deviceUpdate)
+      .eq('id', record.device_id)
+      .eq('restaurant_id', record.restaurant_id)
+      .is('revoked_at', null)
+
     return c.json({
       access_token: accessToken,
       expires_in: DEVICE_TOKEN_TTL_SECONDS,
@@ -247,7 +258,7 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
     // Load and validate invite (join plans so we have plan data for KV)
     const { data: inviteRow } = await admin
       .from('invites')
-      .select('id, used, expires_at, plan_id, plans(id, name, staff_cap, item_cap, category_cap, modifier_cap, smtp_monthly_limit, transaction_history_days, feature_flags, payment_methods_allowed, commission_type, commission_value)')
+      .select('id, used, expires_at, plan_id, plans(id, name, device_cap, item_cap, category_cap, modifier_cap, smtp_monthly_limit, transaction_history_days, feature_flags, payment_methods_allowed, commission_type, commission_value)')
       .eq('token', body.invite_token)
       .maybeSingle()
 

@@ -95,7 +95,7 @@ const flags = {
 function planBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     name: `Test Plan ${randomUUID().slice(0, 8)}`,
-    staff_cap: 5,
+    device_cap: 5,
     item_cap: 100,
     category_cap: 10,
     modifier_cap: 20,
@@ -121,8 +121,8 @@ describe('STORY-006 · plan management', () => {
     expect(res.status).toBe(201)
     const body = (await res.json()) as { plan: { id: string; name: string } }
     createdPlanIds.push(body.plan.id)
-    const row = await admin.from('plans').select('name, staff_cap').eq('id', body.plan.id).single()
-    expect(row.data?.staff_cap).toBe(5)
+    const row = await admin.from('plans').select('name, device_cap').eq('id', body.plan.id).single()
+    expect(row.data?.device_cap).toBe(5)
   })
 
   it('GET /superadmin/plans: array with correct shape', async () => {
@@ -133,10 +133,10 @@ describe('STORY-006 · plan management', () => {
     const sample = body.plans[0]
     expect(sample).toHaveProperty('feature_flags')
     expect(sample).toHaveProperty('payment_methods_allowed')
-    expect(sample).toHaveProperty('staff_cap')
+    expect(sample).toHaveProperty('device_cap')
   })
 
-  it('PATCH staff_cap: DB updated, KV invalidated for all restaurants on plan', async () => {
+  it('PATCH device_cap: DB updated, KV invalidated for all restaurants on plan', async () => {
     const created = (await (await req('POST', '/superadmin/plans', SUPERADMIN, planBody())).json()) as {
       plan: { id: string }
     }
@@ -160,17 +160,17 @@ describe('STORY-006 · plan management', () => {
       const rid = r.data?.id as string
       rids.push(rid)
       createdRestaurantIds.push(rid)
-      kv.store.set(`plan:${rid}`, JSON.stringify({ staff_cap: 5 }))
+      kv.store.set(`plan:${rid}`, JSON.stringify({ device_cap: 5 }))
     }
 
-    const res = await req('PATCH', `/superadmin/plans/${planId}`, SUPERADMIN, { staff_cap: 7 })
+    const res = await req('PATCH', `/superadmin/plans/${planId}`, SUPERADMIN, { device_cap: 7 })
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { plan: { staff_cap: number }; invalidated: number }
-    expect(body.plan.staff_cap).toBe(7)
+    const body = (await res.json()) as { plan: { device_cap: number }; invalidated: number }
+    expect(body.plan.device_cap).toBe(7)
     expect(body.invalidated).toBe(2)
 
-    const row = await admin.from('plans').select('staff_cap').eq('id', planId).single()
-    expect(row.data?.staff_cap).toBe(7)
+    const row = await admin.from('plans').select('device_cap').eq('id', planId).single()
+    expect(row.data?.device_cap).toBe(7)
     for (const rid of rids) {
       expect(kv.deletes).toContain(`plan:${rid}`)
       expect(kv.store.has(`plan:${rid}`)).toBe(false)

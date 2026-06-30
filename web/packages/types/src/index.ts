@@ -61,7 +61,7 @@ export type CommissionType = 'percentage' | 'fixed'
 export interface Plan {
   id: string
   name: string
-  staff_cap: number
+  device_cap: number
   item_cap: number
   category_cap: number
   modifier_cap: number
@@ -90,7 +90,7 @@ export interface Plan {
 /** Settable fields when creating or updating a plan (no id/created_at). */
 export interface PlanInput {
   name: string
-  staff_cap: number
+  device_cap: number
   item_cap: number
   category_cap: number
   modifier_cap: number
@@ -350,6 +350,7 @@ export interface OrderItem {
   order_id: string
   restaurant_id: string
   item_id: string
+  item_name: string | null
   variant_id: string | null
   variant_name: string | null
   quantity: number

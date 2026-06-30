@@ -25,7 +25,7 @@ export const paymentMethodSchema = z.enum(['card', 'pickup', 'delivery'])
 /** Create-plan body. All fields required; caps bounded per spec. */
 export const createPlanSchema = z.object({
   name: z.string().min(1).max(50),
-  staff_cap: z.number().int().min(1).max(1000),
+  device_cap: z.number().int().min(1).max(1000),
   item_cap: z.number().int().min(1).max(10000),
   category_cap: z.number().int().min(1).max(1000),
   modifier_cap: z.number().int().min(1).max(10000),
