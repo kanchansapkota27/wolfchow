@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { CalendarDays, Clock, AlertTriangle, Plus, X } from 'lucide-react'
 import { useApi } from '../lib/api'
+import { ApiError } from '@wolfchow/api-client'
 import type { HoursRow, SchedulingConfig, CreateClosureInput } from '@wolfchow/api-client'
 import type { SpecialClosure } from '@wolfchow/api-client'
 
@@ -292,6 +293,7 @@ export function Hours() {
   })
   const [closures, setClosures] = useState<SpecialClosure[]>([])
   const [slots, setSlots] = useState<string[]>([])
+  const [schedulingLocked, setSchedulingLocked] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingHours, setSavingHours] = useState(false)
   const [hoursSaved, setHoursSaved] = useState(false)
@@ -300,14 +302,30 @@ export function Hours() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    void Promise.all([
-      api.admin.getHours(),
-      api.admin.getScheduling(),
-      api.admin.listClosures(),
-      api.admin.getSchedulingPreview(),
-    ]).then(([h, s, c, sl]) => {
-      setHours(h); setScheduling(s); setClosures(c); setSlots(sl)
-    }).finally(() => setLoading(false))
+    async function load() {
+      const [hoursResult, closuresResult] = await Promise.all([
+        api.admin.getHours(),
+        api.admin.listClosures(),
+      ])
+      setHours(hoursResult)
+      setClosures(closuresResult)
+
+      // Scheduling endpoints are gated by the scheduled_orders_enabled plan flag.
+      // Fetch them independently so a 402 doesn't block hours/closures from loading.
+      try {
+        const [s, sl] = await Promise.all([
+          api.admin.getScheduling(),
+          api.admin.getSchedulingPreview(),
+        ])
+        setScheduling(s)
+        setSlots(sl)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 402) {
+          setSchedulingLocked(true)
+        }
+      }
+    }
+    void load().finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -335,6 +353,7 @@ export function Hours() {
   }
 
   function onSchedulingChange(patch: Partial<SchedulingConfig>) {
+    if (schedulingLocked) return
     const next = { ...scheduling, ...patch }
     setScheduling(next)
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -391,8 +410,8 @@ export function Hours() {
 
       {/* ── Right column: Scheduling Config + Special Closures ── */}
       <div className="w-80 shrink-0 space-y-4">
-        {/* Scheduling Config */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        {/* Scheduling Config — hidden when feature is not in plan */}
+        {!schedulingLocked && <div className="rounded-2xl border border-gray-200 bg-white p-5">
           <div className="mb-5 flex items-center gap-2.5">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-100">
               <Clock size={13} className="text-orange-500" />
@@ -482,7 +501,7 @@ export function Hours() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* Special Closures */}
         <div className="rounded-2xl border border-gray-200 bg-white p-5">

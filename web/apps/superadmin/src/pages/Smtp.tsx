@@ -43,6 +43,7 @@ function SmtpGlobalCard({ config, onSaved }: SmtpGlobalCardProps) {
   const [editing, setEditing] = useState(config === null)
   const [busy, setBusy] = useState(false)
   const [testBusy, setTestBusy] = useState(false)
+  const [testTo, setTestTo] = useState('')
   const [form, setForm] = useState<GlobalFormState>(() =>
     config ? configToForm(config) : emptyGlobalForm(),
   )
@@ -86,10 +87,13 @@ function SmtpGlobalCard({ config, onSaved }: SmtpGlobalCardProps) {
   async function sendTest() {
     setTestBusy(true)
     try {
-      const res = await api.superadmin.testSmtpGlobal()
+      const to = testTo.trim() || undefined
+      const res = await api.superadmin.testSmtpGlobal(to)
       notify('success', `Test email sent to ${res.sent_to}`)
-    } catch {
-      notify('error', 'Test email failed. Check the config and Worker logs.')
+    } catch (err: unknown) {
+      const body = (err as { body?: { detail?: string } })?.body
+      const detail = body?.detail ?? 'Check the config and Worker logs.'
+      notify('error', `Test failed: ${detail}`)
     } finally {
       setTestBusy(false)
     }
@@ -100,9 +104,16 @@ function SmtpGlobalCard({ config, onSaved }: SmtpGlobalCardProps) {
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">Global SMTP</h2>
         {!editing && (
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="email"
+              placeholder="recipient@example.com"
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              className="w-48 rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            />
             <Button variant="ghost" loading={testBusy} onClick={() => void sendTest()}>
-              Send test email
+              Send test
             </Button>
             <Button
               variant="secondary"

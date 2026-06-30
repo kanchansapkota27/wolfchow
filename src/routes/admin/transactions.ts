@@ -29,7 +29,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
     const restaurantId = c.get('jwt').restaurant_id!
 
     const plan = await resolvePlan(c.env, restaurantId)
-    const historyDays = (plan?.history_days as number | undefined) ?? DEFAULT_HISTORY_DAYS
+    const historyDays = (plan?.transaction_history_days as number | undefined) ?? DEFAULT_HISTORY_DAYS
 
     const pageParam = c.req.query('page')
     const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1

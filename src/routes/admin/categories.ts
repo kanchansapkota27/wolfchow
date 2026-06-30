@@ -80,8 +80,14 @@ export function registerCategoryRoutes(app: Hono<HonoEnv>, deps: CategoryRouteDe
 
     const admin = createAdminClient(c.env)
 
-    // Check category_cap — resolve plan with DB fallback on KV miss
+    // Check category_cap and feature flags — resolve plan with DB fallback on KV miss
     const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+
+    if (parsed.data.availability_state === 'scheduled' && !flags?.category_scheduling) {
+      return c.json({ error: 'feature_locked', feature: 'category_scheduling' }, 402)
+    }
+
     const categoryCap = typeof plan?.category_cap === 'number' ? plan.category_cap : null
 
     if (categoryCap !== null) {
@@ -126,6 +132,14 @@ export function registerCategoryRoutes(app: Hono<HonoEnv>, deps: CategoryRouteDe
 
     if (Object.keys(parsed.data).length === 0) {
       return c.json({ error: 'no_updatable_fields' }, 422)
+    }
+
+    if (parsed.data.availability_state === 'scheduled') {
+      const plan = await resolvePlan(c.env, restaurantId)
+      const flags = plan?.feature_flags as Record<string, boolean> | undefined
+      if (!flags?.category_scheduling) {
+        return c.json({ error: 'feature_locked', feature: 'category_scheduling' }, 402)
+      }
     }
 
     const admin = createAdminClient(c.env)

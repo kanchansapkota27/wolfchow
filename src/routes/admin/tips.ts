@@ -90,7 +90,7 @@ export function registerTipsRoutes(app: Hono<HonoEnv>): void {
     if (error || !data) return c.json({ error: 'update_failed' }, 500)
 
     const cache = new KvCache(c.env.SETTINGS_CACHE)
-    await cache.delete(buildKey('settings', restaurantId))
+    await cache.delete(buildKey('settings', `widget:${restaurantId}`))
 
     return c.json(data)
   })
@@ -135,7 +135,7 @@ export function registerTipsRoutes(app: Hono<HonoEnv>): void {
     if (error || !data) return c.json({ error: 'update_failed' }, 500)
 
     const cache = new KvCache(c.env.SETTINGS_CACHE)
-    await cache.delete(buildKey('settings', restaurantId))
+    await cache.delete(buildKey('settings', `widget:${restaurantId}`))
 
     return c.json(data)
   })

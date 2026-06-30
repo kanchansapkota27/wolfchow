@@ -3,6 +3,8 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
+import { resolvePlan } from '../../services/plan'
+import { computeSlots, type HoursRow, type ClosureRow } from '../../services/slots'
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -20,80 +22,6 @@ async function parseBody(req: Request): Promise<unknown> {
   }
 }
 
-// ── Slot preview helpers ───────────────────────────────────────────────────────
-
-interface HoursRow {
-  day_of_week: number
-  open_time: string    // HH:MM
-  close_time: string   // HH:MM
-  active: boolean
-  last_order_offset_minutes: number
-  crosses_midnight: boolean
-}
-
-/** Parse HH:MM into total minutes since midnight. */
-function toMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + m
-}
-
-/**
- * Compute the next 10 available order slots starting from `fromMs` (epoch ms).
- * Slots must fall within active operating hours windows.
- * Advances in `intervalMinutes` steps up to `futureDays` days ahead.
- * Falls back to always-open if no hours rows are provided.
- */
-function computeSlots(
-  fromMs: number,
-  intervalMinutes: number,
-  futureDays: number,
-  hours: HoursRow[],
-): string[] {
-  const byDay = new Map(hours.map((h) => [h.day_of_week, h]))
-  const slots: string[] = []
-
-  // Round `fromMs` up to the next interval boundary (UTC minutes)
-  const fromTotalMins = Math.floor(fromMs / 60000)
-  const remainder = fromTotalMins % intervalMinutes
-  const startMins = remainder === 0 ? fromTotalMins : fromTotalMins + (intervalMinutes - remainder)
-
-  const limitMins = startMins + futureDays * 24 * 60
-
-  for (let candidate = startMins; candidate < limitMins && slots.length < 10; candidate += intervalMinutes) {
-    const candidateMs = candidate * 60000
-    const d = new Date(candidateMs)
-    const dayOfWeek = d.getUTCDay()
-    const minuteOfDay = d.getUTCHours() * 60 + d.getUTCMinutes()
-
-    const row = byDay.get(dayOfWeek)
-
-    if (!row || !hours.length) {
-      // No hours configured → always open
-      slots.push(new Date(candidateMs).toISOString())
-      continue
-    }
-
-    if (!row.active) continue
-
-    const openMins = toMinutes(row.open_time)
-    const rawCloseMins = toMinutes(row.close_time)
-    const lastOrderMins = rawCloseMins - row.last_order_offset_minutes
-
-    if (row.crosses_midnight) {
-      // Window spans two calendar days: open → 1440 OR 0 → lastOrder
-      if (minuteOfDay >= openMins || minuteOfDay < lastOrderMins) {
-        slots.push(new Date(candidateMs).toISOString())
-      }
-    } else {
-      if (minuteOfDay >= openMins && minuteOfDay < lastOrderMins) {
-        slots.push(new Date(candidateMs).toISOString())
-      }
-    }
-  }
-
-  return slots
-}
-
 // ── Routes ─────────────────────────────────────────────────────────────────────
 
 export function registerSchedulingRoutes(app: Hono<HonoEnv>): void {
@@ -102,6 +30,12 @@ export function registerSchedulingRoutes(app: Hono<HonoEnv>): void {
   app.get('/admin/scheduling', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.scheduled_orders_enabled) {
+      return c.json({ error: 'feature_locked', feature: 'scheduled_orders_enabled' }, 402)
+    }
 
     const admin = createAdminClient(c.env)
     const { data, error } = await admin
@@ -120,6 +54,12 @@ export function registerSchedulingRoutes(app: Hono<HonoEnv>): void {
   app.patch('/admin/scheduling', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.scheduled_orders_enabled) {
+      return c.json({ error: 'feature_locked', feature: 'scheduled_orders_enabled' }, 402)
+    }
 
     const parsed = patchSchedulingSchema.safeParse(await parseBody(c.req.raw))
     if (!parsed.success) {
@@ -141,7 +81,10 @@ export function registerSchedulingRoutes(app: Hono<HonoEnv>): void {
     if (error || !data) return c.json({ error: 'update_failed' }, 500)
 
     const cache = new KvCache(c.env.SETTINGS_CACHE)
-    await cache.delete(buildKey('settings', restaurantId))
+    await Promise.all([
+      cache.delete(buildKey('settings', `widget:${restaurantId}`)),
+      cache.delete(buildKey('slots', restaurantId)),
+    ])
 
     return c.json(data)
   })
@@ -152,23 +95,72 @@ export function registerSchedulingRoutes(app: Hono<HonoEnv>): void {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.scheduled_orders_enabled) {
+      return c.json({ error: 'feature_locked', feature: 'scheduled_orders_enabled' }, 402)
+    }
+
     const admin = createAdminClient(c.env)
     const { data: restaurant, error } = await admin
       .from('restaurants')
-      .select('base_prep_minutes, scheduling_interval, future_days_allowed')
+      .select('base_prep_minutes, scheduling_interval, future_days_allowed, timezone')
       .eq('id', restaurantId)
       .single()
 
     if (error || !restaurant) return c.json({ error: 'not_found' }, 404)
 
+    const r = restaurant as Record<string, unknown>
+    const basePrepMinutes = (r.base_prep_minutes as number | null) ?? 20
+    const intervalMinutes = (r.scheduling_interval as number | null) ?? 15
+    const futureDays = (r.future_days_allowed as number | null) ?? 7
+    const timezone = (r.timezone as string | null) || 'UTC'
+
+    // Fetch hours (KV cache or DB)
     const cache = new KvCache(c.env.SETTINGS_CACHE)
-    const hoursRaw = await cache.get<HoursRow[]>(buildKey('hours', restaurantId))
-    const hours = hoursRaw ?? []
+    let hours: HoursRow[] = []
+    const cachedHours = await cache.get<HoursRow[]>(buildKey('hours', restaurantId))
+    if (cachedHours) {
+      hours = cachedHours
+    } else {
+      const { data: hoursData } = await admin
+        .from('operating_hours')
+        .select('day_of_week, open_time, close_time, active, last_order_offset_minutes, crosses_midnight')
+        .eq('restaurant_id', restaurantId)
+      hours = (hoursData ?? []).map((row: Record<string, unknown>) => ({
+        day_of_week: row.day_of_week as number,
+        open_time: (row.open_time as string).slice(0, 5),
+        close_time: (row.close_time as string).slice(0, 5),
+        active: row.active as boolean,
+        last_order_offset_minutes: row.last_order_offset_minutes as number,
+        crosses_midnight: row.crosses_midnight as boolean,
+      }))
+    }
 
-    const r = restaurant as { base_prep_minutes: number; scheduling_interval: number; future_days_allowed: number }
-    const fromMs = Date.now() + r.base_prep_minutes * 60000
-    const slots = computeSlots(fromMs, r.scheduling_interval, r.future_days_allowed || 7, hours)
+    // Fetch upcoming closures
+    const today = new Date().toISOString().slice(0, 10)
+    const { data: closuresData } = await admin
+      .from('special_closures')
+      .select('closure_type, date, partial_open, partial_close, recurring')
+      .eq('restaurant_id', restaurantId)
+      .gte('date', today)
 
-    return c.json({ slots })
+    const closures: ClosureRow[] = (closuresData ?? []).map((row: Record<string, unknown>) => ({
+      closure_type: row.closure_type as string,
+      date: row.date as string,
+      partial_open: row.partial_open as string | null,
+      partial_close: row.partial_close as string | null,
+      recurring: row.recurring as boolean,
+    }))
+
+    const fromMs = Date.now() + basePrepMinutes * 60000
+    const allSlots = computeSlots(
+      fromMs,
+      { base_prep_minutes: basePrepMinutes, interval_minutes: intervalMinutes, future_days: futureDays, timezone },
+      hours,
+      closures,
+    )
+
+    return c.json({ slots: allSlots.slice(0, 10) })
   })
 }
