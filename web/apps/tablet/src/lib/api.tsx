@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
 import { createApiClient, type ApiClient, type SessionStore } from '@wolfchow/api-client'
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8787'
+const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8789'
 
 const ApiContext = createContext<ApiClient | null>(null)
 
