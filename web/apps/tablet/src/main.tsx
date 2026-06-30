@@ -21,7 +21,7 @@ function Providers() {
     [navigate, searchParams],
   )
   const client = useMemo(
-    () => buildApiClient(session, () => navigate('/login')),
+    () => buildApiClient(session, () => navigate('/login?expired=1')),
     [session, navigate],
   )
 

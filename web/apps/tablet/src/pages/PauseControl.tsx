@@ -138,7 +138,7 @@ export function PauseControl() {
     return subscribe('pause_state_changed', (_, payload) => {
       setPause((prev) => ({
         orders_paused: payload.paused as boolean,
-        pause_mode: (payload.mode as string | null) ?? null,
+        pause_mode: (payload.mode as 'timed' | 'manual' | 'rest_of_day' | null) ?? null,
         pause_until: (payload.pause_until as string | null) ?? null,
         pause_reason: (payload.reason as string | null) ?? null,
         pause_scheduled_orders: prev?.pause_scheduled_orders ?? false,

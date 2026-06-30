@@ -1,9 +1,10 @@
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../types'
+import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { EncryptionService } from '../../services/encryption'
 import { StripeService } from '../../services/stripe'
 import type { Broadcaster } from '../../services/realtime'
+import type { NotificationService } from '../../services/notifications'
 
 // ── Active order statuses ─────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ export interface OrderRouteDeps {
   broadcaster?: Broadcaster
   stripeCapture?: (secretKey: string, intentId: string, orderId: string) => Promise<void>
   stripeCancel?: (secretKey: string, intentId: string, orderId: string) => Promise<void>
+  notifier?: (env: Env) => NotificationService
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
@@ -38,7 +40,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     const { data, error } = await admin
       .from('orders')
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .eq('restaurant_id', restaurantId)
       .in('status', ACTIVE_STATUSES)
       .order('created_at', { ascending: true })
@@ -56,7 +58,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     const { data, error } = await admin
       .from('orders')
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .single()
@@ -125,7 +127,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId)
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .single()
 
     if (updateErr || !updated) return c.json({ error: 'update_failed' }, 500)
@@ -136,6 +138,28 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
       { order_id: orderId },
       {} as ExecutionContext,
     )
+
+    if (deps.notifier) {
+      const u = updated as Record<string, unknown>
+      void deps.notifier(c.env).sendOrderAccepted(restaurantId, {
+        id: orderId,
+        tracking_token: u.tracking_token as string,
+        customer_name: u.customer_name as string,
+        customer_email: u.customer_email as string,
+        total: u.total as number,
+        payment_method: u.payment_method as string,
+        items: (u.items as Array<Record<string, unknown>> | undefined)?.map((i) => ({
+          item_name: i.item_name as string | null,
+          variant_name: i.variant_name as string | null,
+          quantity: i.quantity as number,
+          unit_price: i.unit_price as number,
+          modifiers: (i.modifiers as Array<{ name: string; price_delta: number }>) ?? [],
+          notes: i.notes as string | null,
+        })),
+        notes: (u.notes as string | null) ?? null,
+        scheduled_for: (u.scheduled_for as string | null) ?? null,
+      })
+    }
 
     return c.json(updated)
   })
@@ -200,11 +224,10 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
       .update({
         status: 'rejected',
         payment_status: order.payment_method === 'card' ? 'cancelled' : undefined,
-        rejection_reason: reason,
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId)
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .single()
 
     if (updateErr || !updated) return c.json({ error: 'update_failed' }, 500)
@@ -215,6 +238,20 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
       { order_id: orderId },
       {} as ExecutionContext,
     )
+
+    if (deps.notifier) {
+      const u = updated as Record<string, unknown>
+      void deps.notifier(c.env).sendOrderRejected(restaurantId, {
+        id: orderId,
+        tracking_token: u.tracking_token as string,
+        customer_name: u.customer_name as string,
+        customer_email: u.customer_email as string,
+        total: u.total as number,
+        payment_method: u.payment_method as string,
+        notes: (u.notes as string | null) ?? null,
+        scheduled_for: (u.scheduled_for as string | null) ?? null,
+      }, reason)
+    }
 
     return c.json(updated)
   })

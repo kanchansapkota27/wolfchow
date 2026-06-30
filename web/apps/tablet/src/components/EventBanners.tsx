@@ -53,7 +53,7 @@ function BannerItem({ banner, onDismiss }: { banner: Banner; onDismiss: (id: num
 export function EventBanners() {
   const { subscribe } = useRealtime()
   const [banners, setBanners] = useState<Banner[]>([])
-  const addBanner = useRef<(msg: string, kind: BannerKind) => void>()
+  const addBanner = useRef<((msg: string, kind: BannerKind) => void) | undefined>(undefined)
 
   addBanner.current = (message, kind) => {
     const id = nextId++

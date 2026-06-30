@@ -26,7 +26,7 @@ export interface AuthState {
 export interface AuthContextValue extends AuthState {
   hasPermission(permission: Permission): boolean
   signInWithPassword(email: string, password: string): Promise<void>
-  signInWithDeviceToken(deviceToken: string): Promise<void>
+  signInWithDeviceToken(deviceToken: string, options?: { device_uuid?: string; platform?: string }): Promise<void>
   logout(): Promise<void>
   exitImpersonation(): void
   /** Re-derive state from the stored token (e.g. after a background refresh). */
@@ -134,8 +134,8 @@ export function AuthProvider({
   )
 
   const signInWithDeviceToken = useCallback(
-    async (deviceToken: string) => {
-      const result = await client.auth.device(deviceToken)
+    async (deviceToken: string, options?: { device_uuid?: string; platform?: string }) => {
+      const result = await client.auth.device(deviceToken, options)
       storeSession(session, result)
       await deriveAndSet()
       navigator.navigate(roleHome(result.user.role))

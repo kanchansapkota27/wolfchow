@@ -1,7 +1,8 @@
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../types'
+import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import type { Broadcaster } from '../../services/realtime'
+import type { NotificationService } from '../../services/notifications'
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   accepted: ['preparing'],
@@ -19,6 +20,7 @@ async function parseBody(req: Request): Promise<unknown> {
 
 export interface StatusRouteDeps {
   broadcaster?: Broadcaster
+  notifier?: (env: Env) => NotificationService
 }
 
 export function registerStatusRoutes(app: Hono<HonoEnv>, deps: StatusRouteDeps = {}): void {
@@ -63,7 +65,7 @@ export function registerStatusRoutes(app: Hono<HonoEnv>, deps: StatusRouteDeps =
       .from('orders')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('id', orderId)
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .single()
 
     if (updateErr || !updated) return c.json({ error: 'update_failed' }, 500)
@@ -74,6 +76,20 @@ export function registerStatusRoutes(app: Hono<HonoEnv>, deps: StatusRouteDeps =
       { order_id: orderId, previous_status: order.status, new_status: newStatus },
       {} as ExecutionContext,
     )
+
+    if (newStatus === 'ready' && deps.notifier) {
+      const u = updated as Record<string, unknown>
+      void deps.notifier(c.env).sendOrderReady(restaurantId, {
+        id: orderId,
+        tracking_token: u.tracking_token as string,
+        customer_name: u.customer_name as string,
+        customer_email: u.customer_email as string,
+        total: u.total as number,
+        payment_method: u.payment_method as string,
+        notes: (u.notes as string | null) ?? null,
+        scheduled_for: (u.scheduled_for as string | null) ?? null,
+      })
+    }
 
     return c.json(updated)
   })

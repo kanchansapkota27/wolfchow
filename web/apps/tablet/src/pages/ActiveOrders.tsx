@@ -77,7 +77,7 @@ function ActiveOrderCard({ order, completing, onAdvance }: CardProps) {
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-white">${(order.total / 100).toFixed(2)}</p>
+          <p className="text-sm font-bold text-white">${Number(order.total).toFixed(2)}</p>
           <p className="text-xs text-gray-500">{order.payment_method}</p>
         </div>
       </div>
@@ -91,7 +91,7 @@ function ActiveOrderCard({ order, completing, onAdvance }: CardProps) {
             </span>
             <div className="min-w-0">
               <p className="text-sm text-gray-100 leading-tight">
-                {(item as unknown as { name?: string }).name ?? `Item ${i + 1}`}
+                {item.item_name ?? item.variant_name ?? `Item ${i + 1}`}
               </p>
               {item.modifiers.map((m, j) => (
                 <p key={j} className="text-xs text-gray-500">+ {m.name}</p>

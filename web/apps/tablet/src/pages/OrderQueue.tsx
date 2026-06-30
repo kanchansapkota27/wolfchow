@@ -36,7 +36,7 @@ const PAYMENT_BADGE: Record<string, string> = {
 function NewOrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
   const countdown = useCountdown(order.accept_deadline_at)
   const itemsSummary = order.items
-    ?.map((i) => `${i.quantity}× ${(i as unknown as { name?: string }).name ?? '?'}`)
+    ?.map((i) => `${i.quantity}× ${i.item_name ?? i.variant_name ?? '?'}`)
     .join(', ') ?? ''
 
   const isUrgent = order.accept_deadline_at
@@ -64,7 +64,7 @@ function NewOrderCard({ order, onTap }: { order: Order; onTap: () => void }) {
           )}
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-white">${(order.total / 100).toFixed(2)}</p>
+          <p className="text-sm font-bold text-white">${Number(order.total).toFixed(2)}</p>
           {countdown && (
             <p className={['text-xs font-mono mt-0.5', isUrgent ? 'text-red-400' : 'text-amber-400'].join(' ')}>
               {countdown}
