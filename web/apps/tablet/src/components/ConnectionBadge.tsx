@@ -1,19 +1,23 @@
 import { useRealtime, type RealtimeStatus } from '../lib/realtime'
 
-const BADGE: Record<RealtimeStatus, { cls: string; title: string }> = {
-  connected:    { cls: 'bg-green-400',            title: 'Realtime connected' },
-  reconnecting: { cls: 'bg-amber-400 animate-pulse', title: 'Reconnecting…' },
-  disconnected: { cls: 'bg-red-500',              title: 'Realtime disconnected' },
+const STATUS: Record<RealtimeStatus, { dot: string; label: string; labelColor: string }> = {
+  connected:    { dot: '#10b981', label: 'Live',          labelColor: '#10b981' },
+  reconnecting: { dot: '#f59e0b', label: 'Reconnecting…', labelColor: '#f59e0b' },
+  disconnected: { dot: '#ef4444', label: 'Offline',       labelColor: '#ef4444' },
 }
 
 export function ConnectionBadge() {
   const { status } = useRealtime()
-  const { cls, title } = BADGE[status]
+  const { dot, label, labelColor } = STATUS[status]
+  const pulsing = status === 'reconnecting'
+
   return (
-    <span
-      title={title}
-      aria-label={title}
-      className={['h-2.5 w-2.5 rounded-full shrink-0', cls].join(' ')}
-    />
+    <div className="flex items-center gap-1.5">
+      <span
+        className={['h-2.5 w-2.5 rounded-full', pulsing ? 'animate-pulse' : ''].join(' ')}
+        style={{ background: dot }}
+      />
+      <span className="text-xs font-medium" style={{ color: labelColor }}>{label}</span>
+    </div>
   )
 }

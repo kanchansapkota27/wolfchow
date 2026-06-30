@@ -1,46 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRealtime } from '../lib/realtime'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 type BannerKind = 'info' | 'warning' | 'success'
 
-interface Banner {
-  id: number
-  message: string
-  kind: BannerKind
+interface Banner { id: number; message: string; kind: BannerKind }
+
+const KIND: Record<BannerKind, { bg: string; border: string; icon: string }> = {
+  info:    { bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.4)',  icon: 'ℹ️' },
+  warning: { bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.4)', icon: '⚠️' },
+  success: { bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.4)', icon: '✅' },
 }
 
-const KIND_CLS: Record<BannerKind, string> = {
-  info:    'bg-blue-800/90 border-blue-600/60 text-blue-100',
-  warning: 'bg-amber-800/90 border-amber-600/60 text-amber-100',
-  success: 'bg-green-800/90 border-green-600/60 text-green-100',
-}
-
-const AUTO_DISMISS_MS = 4_000
-
+const AUTO_DISMISS_MS = 4_500
 let nextId = 0
 
-// ── Banner item ───────────────────────────────────────────────────────────────
-
-function BannerItem({ banner, onDismiss }: { banner: Banner; onDismiss: (id: number) => void }) {
+function Toast({ banner, onDismiss }: { banner: Banner; onDismiss: (id: number) => void }) {
   useEffect(() => {
     const t = setTimeout(() => onDismiss(banner.id), AUTO_DISMISS_MS)
     return () => clearTimeout(t)
   }, [banner.id, onDismiss])
 
+  const { bg, border, icon } = KIND[banner.kind]
+
   return (
     <div
-      className={[
-        'flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm shadow-lg',
-        KIND_CLS[banner.kind],
-      ].join(' ')}
+      className="kds-toast-in flex items-center gap-3 rounded-2xl px-4 py-3 shadow-2xl"
+      style={{ background: bg, border: `1px solid ${border}`, backdropFilter: 'blur(12px)' }}
     >
-      <span>{banner.message}</span>
+      <span className="text-lg leading-none shrink-0">{icon}</span>
+      <span className="text-sm font-medium text-white">{banner.message}</span>
       <button
         onClick={() => onDismiss(banner.id)}
         aria-label="Dismiss"
-        className="shrink-0 text-xs opacity-60 hover:opacity-100"
+        className="ml-2 shrink-0 text-slate-400 hover:text-white transition-colors"
       >
         ✕
       </button>
@@ -48,7 +40,12 @@ function BannerItem({ banner, onDismiss }: { banner: Banner; onDismiss: (id: num
   )
 }
 
-// ── Provider + host ───────────────────────────────────────────────────────────
+function formatDuration(pauseUntil: string): string {
+  const ms = new Date(pauseUntil).getTime() - Date.now()
+  if (ms <= 0) return 'a moment'
+  const m = Math.ceil(ms / 60_000)
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
 
 export function EventBanners() {
   const { subscribe } = useRealtime()
@@ -57,61 +54,47 @@ export function EventBanners() {
 
   addBanner.current = (message, kind) => {
     const id = nextId++
-    setBanners((prev) => [...prev, { id, message, kind }])
+    setBanners((prev) => [...prev.slice(-3), { id, message, kind }])
   }
 
   const dismiss = useCallback((id: number) => {
     setBanners((prev) => prev.filter((b) => b.id !== id))
   }, [])
 
-  // Pause state changes
   useEffect(() => {
     return subscribe('pause_state_changed', (_, payload) => {
       if (payload.paused) {
-        const mode = payload.mode === 'timed' && payload.pause_until
-          ? `for ${formatDuration(payload.pause_until as string)}`
-          : 'manually'
-        addBanner.current?.(`Orders paused ${mode}`, 'warning')
+        const suffix = payload.mode === 'timed' && payload.pause_until
+          ? ` for ${formatDuration(payload.pause_until as string)}`
+          : ' manually'
+        addBanner.current?.(`Orders paused${suffix}`, 'warning')
       } else {
         addBanner.current?.('Orders resumed — accepting new orders', 'success')
       }
     })
   }, [subscribe])
 
-  // System / closure notices
   useEffect(() => {
     return subscribe('system_notice', (_, payload) => {
-      const msg = (payload.message as string | undefined) ?? 'System notice'
-      addBanner.current?.(msg, 'info')
+      addBanner.current?.((payload.message as string | undefined) ?? 'System notice', 'info')
     })
   }, [subscribe])
 
   useEffect(() => {
     return subscribe('closure_notice', (_, payload) => {
-      const msg = (payload.message as string | undefined) ?? 'Restaurant closing soon'
-      addBanner.current?.(msg, 'warning')
+      addBanner.current?.((payload.message as string | undefined) ?? 'Restaurant closing soon', 'warning')
     })
   }, [subscribe])
 
   if (banners.length === 0) return null
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex flex-col gap-2 p-3">
+    <div className="pointer-events-none fixed bottom-24 right-4 z-50 flex flex-col gap-2" style={{ width: 320 }}>
       {banners.map((b) => (
         <div key={b.id} className="pointer-events-auto">
-          <BannerItem banner={b} onDismiss={dismiss} />
+          <Toast banner={b} onDismiss={dismiss} />
         </div>
       ))}
     </div>
   )
-}
-
-// ── Helper ────────────────────────────────────────────────────────────────────
-
-function formatDuration(pauseUntil: string): string {
-  const ms = new Date(pauseUntil).getTime() - Date.now()
-  if (ms <= 0) return 'a moment'
-  const m = Math.ceil(ms / 60_000)
-  if (m < 60) return `${m} min`
-  return `${Math.floor(m / 60)}h ${m % 60}m`
 }

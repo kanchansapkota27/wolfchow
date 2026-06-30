@@ -12,7 +12,8 @@ function getOrCreateDeviceUuid(): string {
 
 function detectPlatform(): string {
   const ua = navigator.userAgent
-  const standalone = ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone) ||
+  const standalone =
+    ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone) ||
     window.matchMedia('(display-mode: standalone)').matches
 
   let os = 'Unknown'
@@ -62,65 +63,103 @@ export function TabletLogin() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-gray-900">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-600 border-t-green-500" />
-          <p className="text-sm text-gray-400">Starting up…</p>
-        </div>
+      <div className="flex h-full items-center justify-center" style={{ background: '#080d17' }}>
+        <div className="h-12 w-12 animate-spin rounded-full border-4" style={{ borderColor: '#1e293b', borderTopColor: '#f97316' }} />
       </div>
     )
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center bg-gray-900 px-6">
+    <div
+      className="flex h-full flex-col items-center justify-center px-8"
+      style={{ background: '#080d17' }}
+    >
+      {/* Expired banner */}
       {expired && (
-        <div className="mb-6 w-full max-w-sm rounded-xl border border-amber-500/50 bg-amber-900/40 px-4 py-3 text-sm text-amber-200">
-          Session expired — please reconnect the device.
+        <div
+          className="mb-8 w-full max-w-md rounded-2xl px-4 py-3 text-sm font-medium text-center"
+          style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24' }}
+        >
+          ⚠️ Session expired — please reconnect the device
         </div>
       )}
 
-      <div className="w-full max-w-sm">
+      {/* Card */}
+      <div
+        className="w-full max-w-md rounded-3xl p-8"
+        style={{ background: '#0f172a', border: '1px solid #1e293b' }}
+      >
+        {/* Brand */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-600 text-2xl">
+          <div
+            className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl text-4xl"
+            style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)' }}
+          >
             🍽
           </div>
-          <h1 className="text-2xl font-bold text-gray-100">Kitchen Display</h1>
-          <p className="mt-1 text-sm text-gray-400">Connect this device to your restaurant</p>
+          <h1 className="text-2xl font-black text-white">Kitchen Display</h1>
+          <p className="mt-1.5 text-sm" style={{ color: '#64748b' }}>
+            Enter your device token to connect
+          </p>
         </div>
 
+        {/* Error */}
         {error && (
-          <div className="mb-4 rounded-xl border border-red-500/50 bg-red-900/40 px-4 py-3 text-sm text-red-200" role="alert">
-            {error}
+          <div
+            className="mb-5 rounded-2xl px-4 py-3 text-sm font-medium"
+            role="alert"
+            style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' }}
+          >
+            ⚠️ {error}
           </div>
         )}
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
-            <label htmlFor="device-token" className="mb-1.5 block text-sm font-medium text-gray-300">
-              Device token
+            <label
+              htmlFor="device-token"
+              className="mb-2 block text-sm font-semibold"
+              style={{ color: '#94a3b8' }}
+            >
+              Device Token
             </label>
             <textarea
               id="device-token"
-              rows={3}
+              rows={4}
               value={deviceToken}
               onChange={(e) => setDeviceToken(e.target.value)}
               placeholder="Paste the device token from the admin panel…"
               autoComplete="off"
               spellCheck={false}
-              className="w-full resize-none rounded-xl border border-gray-600 bg-gray-800 px-4 py-3 font-mono text-xs text-gray-100 placeholder-gray-500 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/30"
+              className="w-full resize-none rounded-2xl px-4 py-3.5 font-mono text-xs text-white placeholder-slate-600 focus:outline-none transition-colors"
+              style={{
+                background: '#1e293b',
+                border: `1px solid ${error ? '#ef4444' : '#334155'}`,
+              }}
+              onFocus={(e) => (e.target.style.border = '1px solid #f97316')}
+              onBlur={(e) => (e.target.style.border = `1px solid ${error ? '#ef4444' : '#334155'}`)}
             />
           </div>
+
           <button
             type="submit"
             disabled={busy || !deviceToken.trim()}
-            className="w-full rounded-xl bg-green-600 py-4 text-base font-semibold text-white transition-colors hover:bg-green-500 active:bg-green-700 disabled:opacity-40"
+            className="w-full rounded-2xl py-4.5 text-base font-black text-white transition-all disabled:opacity-40 active:scale-98"
+            style={{ background: busy ? '#c2410c' : 'linear-gradient(135deg, #f97316, #ea580c)', paddingTop: '1.125rem', paddingBottom: '1.125rem' }}
           >
-            {busy ? 'Connecting…' : 'Connect Device'}
+            {busy ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Connecting…
+              </span>
+            ) : (
+              '▶ Connect Device'
+            )}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-gray-600">
-          Device tokens are generated from the restaurant admin panel.
+        <p className="mt-6 text-center text-xs" style={{ color: '#334155' }}>
+          Device tokens are generated in the restaurant admin panel under Devices
         </p>
       </div>
     </div>

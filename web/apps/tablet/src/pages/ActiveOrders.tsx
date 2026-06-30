@@ -1,56 +1,74 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Order, OrderStatus } from '@wolfchow/types'
 import { useOrders } from '../lib/useOrders'
 
-// ── Status config ─────────────────────────────────────────────────────────────
-
-const NEXT_STATUS: Partial<Record<OrderStatus, string>> = {
-  accepted: 'preparing',
-  preparing: 'ready',
-  ready: 'completed',
+function shortId(order: Order): string {
+  return order.id.slice(-4).toUpperCase()
 }
 
-const NEXT_LABEL: Partial<Record<OrderStatus, string>> = {
-  accepted: 'Start Preparing',
-  preparing: 'Mark Ready',
-  ready: 'Complete ✓',
+function useElapsed(isoDate: string): { label: string; mins: number } {
+  const [state, setState] = useState({ label: '', mins: 0 })
+  useEffect(() => {
+    function update() {
+      const mins = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000)
+      setState({
+        mins,
+        label: mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`,
+      })
+    }
+    update()
+    const id = setInterval(update, 30_000)
+    return () => clearInterval(id)
+  }, [isoDate])
+  return state
 }
 
-const CARD_STYLE: Record<string, string> = {
-  accepted: 'border-blue-600/60 bg-blue-900/20',
-  preparing: 'border-amber-500/60 bg-amber-900/20',
-  ready: 'border-teal-500/60 bg-teal-900/20',
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const STATUS_CFG: Record<string, {
+  label: string; actionLabel: string; nextStatus: string
+  cardBg: string; cardBorder: string
+  badgeBg: string; badgeColor: string
+  btnBg: string
+}> = {
+  accepted: {
+    label: 'Accepted', actionLabel: 'Start Preparing →', nextStatus: 'preparing',
+    cardBg: 'rgba(59,130,246,0.07)', cardBorder: '#3b82f630',
+    badgeBg: 'rgba(59,130,246,0.2)', badgeColor: '#60a5fa',
+    btnBg: '#1d4ed8',
+  },
+  preparing: {
+    label: 'Preparing', actionLabel: 'Mark Ready →', nextStatus: 'ready',
+    cardBg: 'rgba(99,102,241,0.07)', cardBorder: '#6366f130',
+    badgeBg: 'rgba(99,102,241,0.2)', badgeColor: '#818cf8',
+    btnBg: '#4338ca',
+  },
+  ready: {
+    label: 'Ready ✓', actionLabel: 'Complete ✓', nextStatus: 'completed',
+    cardBg: 'rgba(16,185,129,0.07)', cardBorder: '#10b98130',
+    badgeBg: 'rgba(16,185,129,0.2)', badgeColor: '#34d399',
+    btnBg: '#059669',
+  },
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  accepted: 'bg-blue-800/60 text-blue-200',
-  preparing: 'bg-amber-800/60 text-amber-200',
-  ready: 'bg-teal-800/60 text-teal-200',
-}
+// ── Full Detail Card ──────────────────────────────────────────────────────────
 
-function elapsed(isoDate: string): string {
-  const mins = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m`
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`
-}
-
-// ── Active order card ─────────────────────────────────────────────────────────
-
-interface CardProps {
+interface DetailCardProps {
   order: Order
   completing: boolean
   onAdvance: (orderId: string, nextStatus: string) => void
 }
 
-function ActiveOrderCard({ order, completing, onAdvance }: CardProps) {
+function DetailCard({ order, completing, onAdvance }: DetailCardProps) {
   const [busy, setBusy] = useState(false)
-  const nextStatus = NEXT_STATUS[order.status]
-  const nextLabel = NEXT_LABEL[order.status]
+  const { label: elapsed, mins } = useElapsed(order.updated_at)
+  const cfg = STATUS_CFG[order.status] ?? STATUS_CFG.accepted
+  const nextStatus = cfg.nextStatus
   const itemCount = order.items?.reduce((s, i) => s + i.quantity, 0) ?? 0
+  const isReady = order.status === 'ready'
+  const overdue = isReady && mins >= 10
 
   async function handleAdvance() {
-    if (!nextStatus) return
     setBusy(true)
     try { onAdvance(order.id, nextStatus) } finally { setBusy(false) }
   }
@@ -58,135 +76,169 @@ function ActiveOrderCard({ order, completing, onAdvance }: CardProps) {
   return (
     <div
       className={[
-        'rounded-xl border-2 p-4 space-y-3 transition-all duration-500',
-        CARD_STYLE[order.status] ?? 'border-gray-600/50 bg-gray-800/40',
-        completing ? 'opacity-0 -translate-x-full' : 'opacity-100 translate-x-0',
+        'rounded-2xl border-2 flex flex-col transition-all duration-400',
+        completing ? 'opacity-0 -translate-x-8 scale-95' : 'kds-card-in',
       ].join(' ')}
+      style={{
+        background: overdue ? 'rgba(239,68,68,0.07)' : cfg.cardBg,
+        borderColor: overdue ? '#ef444450' : cfg.cardBorder,
+      }}
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-base font-semibold text-gray-100">{order.customer_name}</p>
-            <span className={['rounded-full px-2 py-0.5 text-xs font-medium', STATUS_BADGE[order.status] ?? 'bg-gray-700 text-gray-300'].join(' ')}>
-              {order.status}
-            </span>
-          </div>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {itemCount} item{itemCount !== 1 ? 's' : ''} · {elapsed(order.updated_at)}
-          </p>
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-base font-black text-white">#{shortId(order)}</span>
+          <span
+            className="rounded-full px-2.5 py-0.5 text-xs font-bold"
+            style={{ background: overdue ? 'rgba(239,68,68,0.2)' : cfg.badgeBg, color: overdue ? '#f87171' : cfg.badgeColor }}
+          >
+            {overdue ? '⚠️ Waiting' : cfg.label}
+          </span>
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-white">${Number(order.total).toFixed(2)}</p>
-          <p className="text-xs text-gray-500">{order.payment_method}</p>
-        </div>
+        <span className="text-sm font-medium" style={{ color: overdue ? '#f87171' : '#64748b' }}>
+          ⏱ {elapsed}
+        </span>
       </div>
 
-      {/* Items */}
-      <div className="space-y-1.5">
+      {/* Customer + total */}
+      <div className="flex items-center justify-between px-4 pb-3">
+        <p className="text-base font-bold text-white">{order.customer_name}</p>
+        <p className="text-sm font-bold text-white">${Number(order.total).toFixed(2)}</p>
+      </div>
+
+      {/* Divider */}
+      <div className="mx-4 border-t" style={{ borderColor: '#1e293b' }} />
+
+      {/* Items — full detail */}
+      <div className="px-4 py-3 space-y-2.5">
         {order.items?.map((item, i) => (
-          <div key={i} className="flex items-start gap-2">
-            <span className="shrink-0 rounded bg-gray-700/70 px-1.5 py-0.5 text-xs font-bold text-gray-200">
+          <div key={i} className="flex items-start gap-2.5">
+            <span
+              className="mt-0.5 shrink-0 rounded-lg px-2 py-0.5 text-sm font-black text-white"
+              style={{ background: '#1e293b' }}
+            >
               {item.quantity}×
             </span>
-            <div className="min-w-0">
-              <p className="text-sm text-gray-100 leading-tight">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-white leading-snug">
                 {item.item_name ?? item.variant_name ?? `Item ${i + 1}`}
               </p>
-              {item.modifiers.map((m, j) => (
-                <p key={j} className="text-xs text-gray-500">+ {m.name}</p>
-              ))}
+              {item.modifiers.length > 0 && (
+                <div className="mt-0.5 space-y-0.5">
+                  {item.modifiers.map((m, j) => (
+                    <p key={j} className="text-xs" style={{ color: '#64748b' }}>↳ {m.name}</p>
+                  ))}
+                </div>
+              )}
               {item.notes && (
-                <p className="text-xs italic text-amber-400">{item.notes}</p>
+                <p className="mt-0.5 text-xs italic font-medium" style={{ color: '#fbbf24' }}>📝 {item.notes}</p>
               )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Notes */}
+      {/* Order notes */}
       {order.notes && (
-        <p className="text-xs italic text-amber-400 border-t border-gray-600/40 pt-2">
-          Note: {order.notes}
-        </p>
+        <div className="mx-4 mb-3 rounded-xl px-3 py-2 text-sm italic" style={{ background: 'rgba(251,191,36,0.1)', color: '#fde68a' }}>
+          📝 {order.notes}
+        </div>
       )}
 
-      {/* Advance button */}
-      {nextLabel && nextStatus && (
+      {/* Divider */}
+      <div className="mx-4 border-t" style={{ borderColor: '#1e293b' }} />
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="text-xs" style={{ color: '#64748b' }}>
+          {itemCount} item{itemCount !== 1 ? 's' : ''} · {order.payment_method}
+        </span>
         <button
           onClick={() => void handleAdvance()}
-          disabled={busy}
-          className={[
-            'w-full rounded-lg py-3 text-sm font-semibold transition-colors disabled:opacity-40',
-            order.status === 'ready'
-              ? 'bg-teal-600 text-white hover:bg-teal-500'
-              : order.status === 'preparing'
-              ? 'bg-amber-600 text-white hover:bg-amber-500'
-              : 'bg-blue-700 text-white hover:bg-blue-600',
-          ].join(' ')}
+          disabled={busy || completing}
+          className="rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-colors disabled:opacity-40"
+          style={{ background: cfg.btnBg }}
         >
-          {busy ? 'Updating…' : nextLabel}
+          {busy ? '…' : cfg.actionLabel}
         </button>
-      )}
+      </div>
     </div>
   )
 }
 
-// ── Main ActiveOrders page ─────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+const ACTIVE_STATUSES: OrderStatus[] = ['accepted', 'preparing', 'ready']
 
 export function ActiveOrders() {
   const { activeOrders, loading, updateStatus } = useOrders()
   const [completing, setCompleting] = useState<Set<string>>(new Set())
 
-  const handleAdvance = useCallback(async (orderId: string, nextStatus: string) => {
+  const visible = activeOrders.filter((o) =>
+    ACTIVE_STATUSES.includes(o.status) && !completing.has(o.id),
+  )
+
+  const handleAdvance = useCallback((orderId: string, nextStatus: string) => {
     if (nextStatus === 'completed') {
       setCompleting((prev) => new Set([...prev, orderId]))
-      setTimeout(async () => {
-        await updateStatus(orderId, 'completed').catch(() => {})
-      }, 500)
+      setTimeout(() => {
+        void updateStatus(orderId, 'completed').catch(() => {})
+        setCompleting((prev) => { const next = new Set(prev); next.delete(orderId); return next })
+      }, 400)
     } else {
-      await updateStatus(orderId, nextStatus)
+      void updateStatus(orderId, nextStatus)
     }
   }, [updateStatus])
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-gray-400 text-sm">
-        Loading…
+      <div className="flex h-full items-center justify-center flex-col gap-3">
+        <div className="h-10 w-10 animate-spin rounded-full border-4" style={{ borderColor: '#1e293b', borderTopColor: '#3b82f6' }} />
+        <p className="text-sm" style={{ color: '#64748b' }}>Loading kitchen…</p>
       </div>
     )
   }
 
-  const visible = activeOrders.filter((o) => o.status !== 'completed' || completing.has(o.id))
+  if (visible.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3">
+        <span className="text-6xl opacity-20">🍳</span>
+        <p className="text-base font-semibold" style={{ color: '#475569' }}>Kitchen is clear</p>
+        <p className="text-sm" style={{ color: '#334155' }}>No orders in progress</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
-        <h2 className="text-sm font-semibold text-gray-200">
-          Active Orders
-          {visible.length > 0 && (
-            <span className="ml-2 rounded-full bg-gray-600 px-2 py-0.5 text-xs text-gray-300 font-bold">
-              {visible.length}
-            </span>
-          )}
-        </h2>
+    <div className="flex h-full flex-col" style={{ background: '#080d17' }}>
+      {/* Header row */}
+      <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: '#1e293b' }}>
+        <h2 className="text-sm font-bold tracking-wide uppercase text-white">Kitchen View</h2>
+        <div className="flex items-center gap-3 text-xs" style={{ color: '#64748b' }}>
+          {(['accepted', 'preparing', 'ready'] as OrderStatus[]).map((s) => {
+            const n = visible.filter((o) => o.status === s).length
+            const cfg = STATUS_CFG[s]
+            return n > 0 ? (
+              <span key={s} className="rounded-full px-2.5 py-1 font-semibold" style={{ background: cfg.badgeBg, color: cfg.badgeColor }}>
+                {n} {cfg.label}
+              </span>
+            ) : null
+          })}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {visible.length === 0 ? (
-          <div className="flex h-32 items-center justify-center text-sm text-gray-500">
-            No active orders
-          </div>
-        ) : (
-          visible.map((order) => (
-            <ActiveOrderCard
+      {/* Cards — 2-column responsive grid */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+          {visible.map((order) => (
+            <DetailCard
               key={order.id}
               order={order}
               completing={completing.has(order.id)}
-              onAdvance={(id, next) => void handleAdvance(id, next)}
+              onAdvance={handleAdvance}
             />
-          ))
-        )}
+          ))}
+        </div>
       </div>
     </div>
   )
