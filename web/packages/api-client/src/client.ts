@@ -74,39 +74,27 @@ export interface PublicSettings {
   font_family: string | null
 }
 
-export type StaffPermission = 'orders:accept_reject' | 'orders:status' | 'inventory:write' | 'orders:pause'
+export type DevicePermission = 'orders:accept_reject' | 'orders:status' | 'inventory:write' | 'orders:pause'
 
-export interface StaffMember {
+export interface Device {
   id: string
   restaurant_id: string
   name: string
-  email: string
-  phone: string | null
-  role: string
-  permissions: StaffPermission[]
-  active: boolean
+  permissions: DevicePermission[]
+  device_uuid: string | null
+  platform: string | null
+  last_seen_at: string | null
   created_at: string
 }
 
-export interface DeviceLogin {
-  id: string
+export interface CreateDeviceInput {
   name: string
-  device_id: string
-  permissions: string[]
-  active: boolean
+  permissions: DevicePermission[]
 }
 
-export interface InviteStaffInput {
-  name: string
-  email: string
-  phone?: string
-  permissions: StaffPermission[]
-}
-
-export interface PatchStaffInput {
+export interface PatchDeviceInput {
   name?: string
-  phone?: string
-  permissions?: StaffPermission[]
+  permissions?: DevicePermission[]
 }
 
 export interface StripeStatus {
@@ -156,7 +144,7 @@ export interface SaveSmtpInput {
   host: string
   port: number
   username: string
-  password: string
+  password?: string  // omit to keep existing encrypted password
   from_email: string
   from_name: string
 }
@@ -429,10 +417,10 @@ export function createApiClient(config: ApiClientConfig) {
         body: { refresh_token },
       }).finally(() => session.clear())
     },
-    device: (device_token: string) =>
+    device: (device_token: string, options?: { device_uuid?: string; platform?: string }) =>
       apiFetch<AuthSession>('/auth/device', {
         method: 'POST',
-        body: { device_token },
+        body: { device_token, ...options },
         skipAuth: true,
       }),
     getInvite: (token: string) =>
@@ -498,8 +486,8 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<{ config: SmtpConfig }>('/superadmin/smtp/global'),
     putSmtpGlobal: (data: SmtpGlobalInput) =>
       apiFetch<{ ok: boolean }>('/superadmin/smtp/global', { method: 'POST', body: data }),
-    testSmtpGlobal: () =>
-      apiFetch<{ ok: boolean; sent_to: string }>('/superadmin/smtp/test', { method: 'POST' }),
+    testSmtpGlobal: (to?: string) =>
+      apiFetch<{ ok: boolean; sent_to: string }>('/superadmin/smtp/test', { method: 'POST', body: to ? { to } : undefined }),
     listSmtpOverrides: () =>
       apiFetch<{ overrides: SmtpOverrideItem[] }>('/superadmin/smtp/overrides'),
     putSmtpOverride: (restaurantId: string, data: SmtpOverrideInput) =>
@@ -549,6 +537,8 @@ export function createApiClient(config: ApiClientConfig) {
         identity: { sub: string; role: string; restaurant_id: string; device_id: string | null; permissions: string[] }
         pause_state: PauseState | null
       }>('/tablet/session'),
+    heartbeat: () =>
+      apiFetch<void>('/tablet/heartbeat', { method: 'POST' }),
     getInventory: () =>
       apiFetch<{
         categories: Array<{ id: string; name: string; availability_state: string; position: number }>
@@ -582,6 +572,10 @@ export function createApiClient(config: ApiClientConfig) {
     // ── Orders ───────────────────────────────────────────────────────────────────
     listActiveOrders: () =>
       apiFetch<{ orders: Order[] }>('/admin/orders/active').then((r) => r.orders),
+    acceptOrder: (orderId: string) =>
+      apiFetch<Order>(`/admin/orders/${orderId}/accept`, { method: 'POST' }),
+    rejectOrder: (orderId: string, reason?: string) =>
+      apiFetch<Order>(`/admin/orders/${orderId}/reject`, { method: 'POST', body: { reason } }),
     // ── Orders pause ─────────────────────────────────────────────────────────────
     getPauseState: () =>
       apiFetch<PauseState>('/admin/orders/pause'),
@@ -655,19 +649,15 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<SpecialClosure>('/admin/closures', { method: 'POST', body: data }),
     deleteClosure: (id: string) =>
       apiFetch<void>(`/admin/closures/${id}`, { method: 'DELETE' }),
-    // ── Staff ────────────────────────────────────────────────────────────────
-    listStaff: () =>
-      apiFetch<{ staff: StaffMember[] }>('/admin/staff').then((r) => r.staff),
-    inviteStaff: (data: InviteStaffInput) =>
-      apiFetch<{ ok: boolean }>('/admin/staff/invite', { method: 'POST', body: data }),
-    updateStaff: (id: string, data: PatchStaffInput) =>
-      apiFetch<{ member: StaffMember }>(`/admin/staff/${id}`, { method: 'PATCH', body: data }).then((r) => r.member),
-    deactivateStaff: (id: string) =>
-      apiFetch<void>(`/admin/staff/${id}`, { method: 'DELETE' }),
-    createDevice: (name: string) =>
-      apiFetch<{ device_token: string; staff: DeviceLogin }>('/admin/staff/device', { method: 'POST', body: { name } }),
+    // ── Devices ──────────────────────────────────────────────────────────────
+    listDevices: () =>
+      apiFetch<{ devices: Device[]; device_cap: number; device_count: number }>('/admin/devices'),
+    createDevice: (data: CreateDeviceInput) =>
+      apiFetch<{ device_token: string; device: Device }>('/admin/devices', { method: 'POST', body: data }),
+    updateDevice: (id: string, data: PatchDeviceInput) =>
+      apiFetch<Device>(`/admin/devices/${id}`, { method: 'PATCH', body: data }),
     revokeDevice: (id: string) =>
-      apiFetch<void>(`/admin/staff/device/${id}`, { method: 'DELETE' }),
+      apiFetch<void>(`/admin/devices/${id}`, { method: 'DELETE' }),
     // ── Payments ─────────────────────────────────────────────────────────────
     getStripeStatus: () =>
       apiFetch<StripeStatus>('/admin/payments/stripe'),
@@ -680,7 +670,7 @@ export function createApiClient(config: ApiClientConfig) {
     patchPaymentMethods: (payment_methods: string[]) =>
       apiFetch<PaymentMethods>('/admin/payments/methods', { method: 'PATCH', body: { payment_methods } }),
     patchPickupNote: (pickup_delivery_note: string | null) =>
-      apiFetch<{ ok: boolean }>('/admin/payments/note', { method: 'PATCH', body: { pickup_delivery_note } }),
+      apiFetch<{ pickup_delivery_note: string | null }>('/admin/payments/note', { method: 'PATCH', body: { pickup_delivery_note } }),
     // ── Tips & Tax ───────────────────────────────────────────────────────────
     getTips: () =>
       apiFetch<TipsConfig>('/admin/tips'),
@@ -702,8 +692,8 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<AdminSmtpStatus>('/admin/smtp', { method: 'POST', body: data }),
     deleteAdminSmtp: () =>
       apiFetch<void>('/admin/smtp', { method: 'DELETE' }),
-    testAdminSmtp: () =>
-      apiFetch<{ sent_to: string }>('/admin/smtp/test', { method: 'POST' }),
+    testAdminSmtp: (to?: string) =>
+      apiFetch<{ sent_to: string }>('/admin/smtp/test', { method: 'POST', body: to ? { to } : undefined }),
     // ── Notifications ────────────────────────────────────────────────────────
     getNotifications: () =>
       apiFetch<{ notifications: NotificationConfig[] }>('/admin/notifications').then((r) => r.notifications),

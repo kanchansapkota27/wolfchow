@@ -934,7 +934,7 @@ function PlanUsageContent({ restaurant }: { restaurant: Restaurant }) {
   const usageItems = [
     { label: 'Categories', used: usage?.categories ?? 0, max: plan?.category_cap ?? 999 },
     { label: 'Items',      used: usage?.items ?? 0,      max: plan?.item_cap ?? 999 },
-    { label: 'Staff',      used: usage?.staff ?? 0,      max: plan?.staff_cap ?? 999 },
+    { label: 'Devices',    used: usage?.devices ?? 0,    max: plan?.device_cap ?? 999 },
   ]
 
   const featureList = plan ? [

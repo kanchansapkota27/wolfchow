@@ -7,18 +7,18 @@ import { Settings } from './pages/Settings'
 import { Hours } from './pages/Hours'
 import { Menu } from './pages/Menu'
 import { Notifications } from './pages/Notifications'
-import { Staff } from './pages/Staff'
 import { Promotions } from './pages/Promotions'
 import { Notices } from './pages/Notices'
 import { Transactions } from './pages/Transactions'
 import { Integrations } from './pages/Integrations'
 import { Orders } from './pages/Orders'
 import { SmtpSettings } from './pages/SmtpSettings'
+import { Devices } from './pages/Devices'
 
 function ProtectedLayout() {
   return (
     <RequireRole
-      roles={['restaurant_owner', 'kitchen']}
+      roles={['restaurant_owner']}
       fallback={<div className="p-8 text-gray-500">Loading…</div>}
     >
       <Layout />
@@ -36,7 +36,7 @@ export function App() {
         <Route path="orders" element={<Orders />} />
         <Route path="menu" element={<Menu />} />
         <Route path="hours" element={<Hours />} />
-        <Route path="staff" element={<Staff />} />
+        <Route path="devices" element={<Devices />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="promotions" element={<Promotions />} />
         <Route path="notices" element={<Notices />} />
