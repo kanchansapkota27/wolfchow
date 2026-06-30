@@ -101,18 +101,23 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     const caller = c.get('jwt')
     const admin = createAdminClient(c.env)
     const user = await admin.from('users').select('email').eq('id', caller.sub).maybeSingle()
-    const email = (user.data as { email: string } | null)?.email
-    if (!email) return c.json({ error: 'caller_email_not_found' }, 400)
+    const callerEmail = (user.data as { email: string } | null)?.email
+    if (!callerEmail) return c.json({ error: 'caller_email_not_found' }, 400)
+
+    // Optional custom recipient in body — falls back to caller's own email
+    const body = await readJson(c) as { to?: string } | null
+    const toEmail = (typeof body?.to === 'string' && body.to.includes('@')) ? body.to : callerEmail
 
     const transport = deps.transport?.(c.env)
     const svc = transport ? new SmtpService(c.env, transport) : new SmtpService(c.env)
     try {
-      await svc.sendGlobalTest(email, 'RestroAPI SMTP test', '<p>Your global SMTP configuration works.</p>')
+      await svc.sendGlobalTest(toEmail, 'RestroAPI SMTP test', '<p>Your global SMTP configuration works.</p>')
     } catch (err) {
       if (err instanceof NoSmtpConfigError) return c.json({ error: 'no_global_config' }, 400)
-      return c.json({ error: 'email_transport_not_configured' }, 503)
+      const detail = err instanceof Error ? err.message : 'send_failed'
+      return c.json({ error: 'send_failed', detail }, 422)
     }
-    return c.json({ ok: true, sent_to: email })
+    return c.json({ ok: true, sent_to: toEmail })
   })
 
   app.post('/superadmin/smtp/restaurants/:id', async (c) => {

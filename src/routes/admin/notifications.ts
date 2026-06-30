@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
+import { resolvePlan } from '../../services/plan'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,12 @@ export function registerNotificationRoutes(app: Hono<HonoEnv>, deps: Notificatio
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.email_notifications) {
+      return c.json({ error: 'feature_locked', feature: 'email_notifications' }, 402)
+    }
+
     const admin = createAdminClient(c.env)
     const { data, error } = await admin
       .from('notification_config')
@@ -101,6 +108,12 @@ export function registerNotificationRoutes(app: Hono<HonoEnv>, deps: Notificatio
   app.put('/admin/notifications', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.email_notifications) {
+      return c.json({ error: 'feature_locked', feature: 'email_notifications' }, 402)
+    }
 
     const parsed = putNotificationsSchema.safeParse(await parseBody(c.req.raw))
     if (!parsed.success) {
@@ -145,6 +158,12 @@ export function registerNotificationRoutes(app: Hono<HonoEnv>, deps: Notificatio
 
     if (!(ALL_STATUSES as readonly string[]).includes(status)) {
       return c.json({ error: 'invalid_status' }, 422)
+    }
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.email_notifications) {
+      return c.json({ error: 'feature_locked', feature: 'email_notifications' }, 402)
     }
 
     const admin = createAdminClient(c.env)

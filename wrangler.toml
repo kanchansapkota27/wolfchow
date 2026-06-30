@@ -15,6 +15,9 @@ enabled = true
 [vars]
 SUPABASE_URL = "http://127.0.0.1:54321"
 SUPABASE_ANON_KEY = "replace-with-local-supabase-anon-key"
+# Base URL of the widget app — used to build tracking links in order emails.
+# Set to your production widget origin in the Cloudflare dashboard.
+WIDGET_BASE_URL = "http://localhost:5174"
 
 # --- KV namespaces ---
 # Create each with: wrangler kv namespace create <NAME>
