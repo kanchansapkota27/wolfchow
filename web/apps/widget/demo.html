@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Widget Demo — RestroAPI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f1f5f9;
+      color: #111827;
+      min-height: 100vh;
+    }
+
+    /* ── Top bar ───────────────────────────────────────────────────── */
+    .topbar {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 0.875rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .topbar-brand { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+    .topbar-badge {
+      font-size: 0.6875rem;
+      padding: 0.2rem 0.625rem;
+      border-radius: 9999px;
+      background: #1e40af;
+      color: #bfdbfe;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 380px 1fr;
+      gap: 0;
+      min-height: calc(100vh - 3rem);
+    }
+
+    /* ── Left panel — controls ─────────────────────────────────────── */
+    .panel {
+      padding: 1.75rem 1.5rem;
+      overflow-y: auto;
+    }
+    .panel-title {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 1.25rem;
+    }
+
+    .field { margin-bottom: 1rem; }
+    .field label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.375rem;
+    }
+    .field input[type="text"],
+    .field input[type="url"],
+    .field select {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1.5px solid #e2e8f0;
+      font-size: 0.875rem;
+      font-family: inherit;
+      background: #fff;
+      color: #111827;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field input[type="text"]:focus,
+    .field input[type="url"]:focus,
+    .field select:focus { border-color: #3b82f6; }
+
+    /* Segmented source toggle */
+    .source-toggle {
+      display: flex;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      border: 1.5px solid #e2e8f0;
+    }
+    .source-toggle label {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.4rem 0;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #64748b;
+      background: #fff;
+      transition: background 0.12s, color 0.12s;
+      user-select: none;
+    }
+    .source-toggle input[type="radio"] { display: none; }
+    .source-toggle input[type="radio"]:checked + span {
+      background: #1e40af;
+      color: #fff;
+    }
+    .source-toggle label:has(input:checked) {
+      background: #1e40af;
+      color: #fff;
+    }
+
+    /* Theme panel */
+    .theme-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .color-field label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 0.3rem;
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .color-row input[type="color"] {
+      width: 2rem;
+      height: 2rem;
+      border: none;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      padding: 0;
+      background: none;
+      flex-shrink: 0;
+    }
+    .color-row input[type="text"] {
+      flex: 1;
+      padding: 0.35rem 0.5rem;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-family: monospace;
+      background: #fff;
+      color: #111827;
+      outline: none;
+    }
+    .color-row input[type="text"]:focus { border-color: #3b82f6; }
+
+    .theme-note {
+      font-size: 0.75rem;
+      color: #64748b;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      line-height: 1.5;
+      margin-bottom: 0.75rem;
+    }
+    .theme-note strong { color: #374151; }
+
+    .btn {
+      display: inline-block;
+      padding: 0.5rem 1.125rem;
+      border-radius: 0.5rem;
+      border: none;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #f1f5f9; color: #374151; border: 1.5px solid #e2e8f0; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8125rem; }
+
+    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+
+    /* ── Widget column ─────────────────────────────────────────────── */
+    .widget-col {
+      background: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 0;
+      border-left: 1px solid #cbd5e1;
+      border-right: 1px solid #cbd5e1;
+    }
+    .device-shell {
+      width: 375px;
+      height: 667px;
+      border-radius: 2.5rem;
+      background: #fff;
+      box-shadow:
+        0 0 0 10px #1e293b,
+        0 0 0 12px #334155,
+        0 30px 60px rgba(0,0,0,0.35);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .device-notch {
+      height: 1.75rem;
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .device-notch-pill {
+      width: 5rem;
+      height: 0.375rem;
+      border-radius: 9999px;
+      background: #0f172a;
+    }
+    .widget-frame {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── Right panel — status / code ───────────────────────────────── */
+    .status-section { margin-bottom: 1.5rem; }
+    .status-section h3 {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 0.75rem;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+    }
+    .status-dot {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 9999px;
+    }
+    .status-ok { background: #dcfce7; color: #15803d; }
+    .status-ok .status-dot { background: #16a34a; }
+    .status-warn { background: #fef3c7; color: #92400e; }
+    .status-warn .status-dot { background: #f59e0b; }
+    .status-err { background: #fee2e2; color: #991b1b; }
+    .status-err .status-dot { background: #dc2626; }
+
+    .code-block {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 1rem 1.125rem;
+      border-radius: 0.75rem;
+      font-family: 'Menlo', 'Consolas', monospace;
+      font-size: 0.75rem;
+      line-height: 1.65;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .code-block .tok-key { color: #7dd3fc; }
+    .code-block .tok-str { color: #86efac; }
+    .code-block .tok-attr { color: #fca5a5; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 1.25rem 0;
+    }
+
+    .hint {
+      font-size: 0.8125rem;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .hint code {
+      font-family: monospace;
+      background: #f1f5f9;
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      color: #374151;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .widget-col {
+        order: -1;
+        border: none;
+        border-bottom: 1px solid #cbd5e1;
+        padding: 1.5rem 0;
+      }
+      .device-shell {
+        width: 340px;
+        height: 580px;
+        border-radius: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-brand">RestroAPI · Widget Demo</span>
+  <span class="topbar-badge">LOCAL DEV</span>
+</div>
+
+<div class="layout">
+
+  <!-- ── Left panel ──────────────────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-title">Configuration</div>
+
+    <div class="field">
+      <label for="slug">Restaurant Slug</label>
+      <input id="slug" type="text" value="wolfchow" placeholder="e.g. my-restaurant" />
+    </div>
+
+    <div class="field">
+      <label for="apiBase">API Base URL</label>
+      <input id="apiBase" type="url" value="http://localhost:8789" />
+    </div>
+
+    <div class="field">
+      <label style="margin-bottom:0.5rem">Script Source</label>
+      <div class="source-toggle">
+        <label>
+          <input type="radio" name="scriptSource" value="built" id="srcBuilt" checked />
+          <span>Built (dist/embed.js)</span>
+        </label>
+        <label>
+          <input type="radio" name="scriptSource" value="dev" id="srcDev" />
+          <span>Dev server (:5176)</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="reloadWidget()">Load Widget</button>
+      <button class="btn btn-secondary" onclick="clearWidget()">Clear</button>
+    </div>
+
+    <hr class="divider" />
+    <div class="panel-title">Theme Override</div>
+
+    <div class="theme-note">
+      <strong>Plan-gated:</strong> Brand colours are only applied when the restaurant's plan has
+      <code>custom_brand_color</code> enabled. Use the controls below to test any theme regardless of plan.
+      Values here override what the API returns.
+    </div>
+
+    <div class="theme-grid">
+      <div class="color-field">
+        <label>Primary</label>
+        <div class="color-row">
+          <input type="color" id="colorPrimary" value="#2563eb" oninput="syncColor('primary',this.value)" />
+          <input type="text"  id="colorPrimaryText" value="#2563eb" oninput="syncColorText('primary',this.value)" />
+        </div>
+      </div>
+      <div class="color-field">
+        <label>Secondary</label>
+        <div class="color-row">
+          <input type="color" id="colorSecondary" value="#1e40af" oninput="syncColor('secondary',this.value)" />
+          <input type="text"  id="colorSecondaryText" value="#1e40af" oninput="syncColorText('secondary',this.value)" />
+        </div>
+      </div>
+      <div class="color-field">
+        <label>Accent</label>
+        <div class="color-row">
+          <input type="color" id="colorAccent" value="#3b82f6" oninput="syncColor('accent',this.value)" />
+          <input type="text"  id="colorAccentText" value="#3b82f6" oninput="syncColorText('accent',this.value)" />
+        </div>
+      </div>
+      <div class="color-field">
+        <label>Text</label>
+        <div class="color-row">
+          <input type="color" id="colorText" value="#111827" oninput="syncColor('text',this.value)" />
+          <input type="text"  id="colorTextText" value="#111827" oninput="syncColorText('text',this.value)" />
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:0.75rem">
+      <button class="btn btn-secondary btn-sm" onclick="applyTheme()">Apply theme</button>
+      <button class="btn btn-secondary btn-sm" onclick="resetTheme()">Reset</button>
+    </div>
+
+    <div class="field" style="margin-top:0.75rem">
+      <label for="fontFamily">Font family</label>
+      <input id="fontFamily" type="text" placeholder="e.g. Georgia, serif" />
+    </div>
+
+    <hr class="divider" />
+    <div class="panel-title">Device Presets</div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="setDevice(375,667)">iPhone SE</button>
+      <button class="btn btn-secondary" onclick="setDevice(390,844)">iPhone 14</button>
+      <button class="btn btn-secondary" onclick="setDevice(360,740)">Android M</button>
+      <button class="btn btn-secondary" onclick="setDevice(820,1180,'tablet')">iPad</button>
+    </div>
+
+    <hr class="divider" />
+    <div class="panel-title">Quick Test Flows</div>
+    <div class="btn-row" style="flex-direction:column; align-items:flex-start; gap:0.625rem">
+      <p class="hint">1. Start the worker on <code>:8789</code>, enter your slug, click <strong>Load Widget</strong></p>
+      <p class="hint">2. Browse the menu → add items to cart</p>
+      <p class="hint">3. At checkout use email <code>test@example.com</code></p>
+      <p class="hint">4. For card payments use Stripe test card <code>4242 4242 4242 4242</code></p>
+      <p class="hint">5. After placing, click <strong>Track My Order</strong> (needs <code>order_tracking_page</code> feature flag)</p>
+    </div>
+  </div>
+
+  <!-- ── Widget column ────────────────────────────────────────── -->
+  <div class="widget-col">
+    <div class="device-shell" id="deviceShell">
+      <div class="device-notch"><div class="device-notch-pill"></div></div>
+      <div class="widget-frame" id="widgetFrame">
+        <div id="restroapi-widget"
+          data-restaurant="wolfchow"
+          data-api-base="http://localhost:8789"
+          style="height:100%; width:100%; background:#fff; display:flex; align-items:center; justify-content:center;">
+          <span style="font-size:0.8125rem; color:#9ca3af;">Loading widget…</span>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top:1rem; font-size:0.75rem; color:#64748b; text-align:center;">
+      Rendered inside Shadow DOM · <span id="deviceLabel">375 × 667</span>
+    </p>
+  </div>
+
+  <!-- ── Right panel ──────────────────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-title">Server Status</div>
+
+    <div class="status-section">
+      <h3>Worker API</h3>
+      <div id="workerStatus" class="status-pill status-warn">
+        <div class="status-dot"></div>Checking…
+      </div>
+    </div>
+
+    <div class="status-section">
+      <h3>Widget Dev Server</h3>
+      <div id="widgetStatus" class="status-pill status-warn">
+        <div class="status-dot"></div>Checking…
+      </div>
+    </div>
+
+    <hr class="divider" />
+    <div class="panel-title">Embed Code</div>
+    <div class="code-block" id="embedCode">
+<span class="tok-attr">&lt;!-- Load widget --&gt;</span>
+<span class="tok-key">&lt;script</span> <span class="tok-attr">src</span>=<span class="tok-str">"<span id="codeScriptSrc">./dist/embed.js</span>"</span><span class="tok-key">&gt;&lt;/script&gt;</span>
+
+<span class="tok-attr">&lt;!-- Host element --&gt;</span>
+<span class="tok-key">&lt;div</span> <span class="tok-attr">id</span>=<span class="tok-str">"restroapi-widget"</span>
+     <span class="tok-attr">data-restaurant</span>=<span class="tok-str">"<span id="codeSlug">wolfchow</span>"</span>
+     <span class="tok-attr">style</span>=<span class="tok-str">"height:600px"</span><span class="tok-key">&gt;&lt;/div&gt;</span></div>
+
+    <hr class="divider" />
+    <div class="panel-title">Active CSS Vars</div>
+    <div id="cssVarDisplay" style="
+      background: #0f172a;
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      font-family: monospace;
+      font-size: 0.6875rem;
+      line-height: 1.7;
+      color: #94a3b8;
+      margin-bottom: 1rem;
+    ">–</div>
+
+    <hr class="divider" />
+    <div class="panel-title">Network Log</div>
+    <div id="networkLog" style="
+      background: #0f172a;
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      font-family: monospace;
+      font-size: 0.6875rem;
+      line-height: 1.6;
+      color: #94a3b8;
+      max-height: 200px;
+      overflow-y: auto;
+    ">Waiting for requests…</div>
+  </div>
+
+</div>
+
+<script>
+  // ── Constants ────────────────────────────────────────────────────────────
+  const THEME_VARS = {
+    primary:   '--brand-primary',
+    secondary: '--brand-secondary',
+    accent:    '--brand-accent',
+    text:      '--brand-text',
+  }
+
+  // ── Auto-load widget on page ready ───────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => reloadWidget())
+
+  // ── Status checks ─────────────────────────────────────────────────────────
+  async function checkStatus(url, elementId) {
+    const el = document.getElementById(elementId)
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
+      if (res.ok || res.status < 500) {
+        el.className = 'status-pill status-ok'
+        el.innerHTML = '<div class="status-dot"></div>Online'
+      } else throw new Error(res.status)
+    } catch {
+      el.className = 'status-pill status-err'
+      el.innerHTML = '<div class="status-dot"></div>Offline'
+    }
+  }
+
+  function runChecks() {
+    const apiBase = document.getElementById('apiBase').value.trim() || 'http://localhost:8789'
+    checkStatus(`${apiBase}/health`, 'workerStatus')
+    checkStatus('http://localhost:5176/', 'widgetStatus')
+  }
+
+  runChecks()
+  setInterval(runChecks, 10000)
+
+  // ── Network log ───────────────────────────────────────────────────────────
+  const origFetch = window.fetch
+  const log = document.getElementById('networkLog')
+  window.fetch = async function(input, init) {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url.includes('localhost')) {
+      const method = init?.method ?? 'GET'
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      appendLog(`${ts} → ${method} ${url.replace(/^https?:\/\/[^/]+/, '')}`)
+    }
+    const res = await origFetch.apply(this, arguments)
+    if (url.includes('localhost')) {
+      const color = res.status < 300 ? '#86efac' : res.status < 400 ? '#fde68a' : '#fca5a5'
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      // Clone so the body stream is not consumed before the caller reads it
+      const clone = res.clone()
+      const path = url.replace(/^https?:\/\/[^/]+/, '')
+      if (res.status >= 400) {
+        clone.json().then(body => {
+          const err = body?.error ?? JSON.stringify(body)
+          appendLog(`${ts} ← <span style="color:${color}">${res.status}</span> ${path} — <span style="color:${color}">${err}</span>`)
+        }).catch(() => {
+          appendLog(`${ts} ← <span style="color:${color}">${res.status}</span> ${path}`)
+        })
+      } else {
+        appendLog(`${ts} ← <span style="color:${color}">${res.status}</span> ${path}`)
+      }
+    }
+    return res
+  }
+
+  function appendLog(html) {
+    const p = document.createElement('p')
+    p.style.margin = 0
+    p.innerHTML = html
+    if (log.firstChild?.textContent === 'Waiting for requests…') log.innerHTML = ''
+    log.appendChild(p)
+    log.scrollTop = log.scrollHeight
+  }
+
+  // ── Device resize ────────────────────────────────────────────────────────
+  function setDevice(w, h, type) {
+    const shell = document.getElementById('deviceShell')
+    const label = document.getElementById('deviceLabel')
+    shell.style.width = w + 'px'
+    shell.style.height = h + 'px'
+    shell.style.borderRadius = type === 'tablet' ? '1.5rem' : '2.5rem'
+    label.textContent = `${w} × ${h}`
+  }
+
+  // ── Theme helpers ────────────────────────────────────────────────────────
+  function getHost() {
+    return document.getElementById('restroapi-widget')
+  }
+
+  function syncColor(key, value) {
+    document.getElementById('color' + cap(key) + 'Text').value = value
+    applyTheme()
+  }
+
+  function syncColorText(key, value) {
+    if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+      document.getElementById('color' + cap(key)).value = value
+      applyTheme()
+    }
+  }
+
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1) }
+
+  function applyTheme() {
+    const host = getHost()
+    if (!host) return
+    for (const [key, cssVar] of Object.entries(THEME_VARS)) {
+      const val = document.getElementById('color' + cap(key) + 'Text').value.trim()
+      if (val) host.style.setProperty(cssVar, val)
+    }
+    const font = document.getElementById('fontFamily').value.trim()
+    if (font) host.style.setProperty('--font-family', font)
+    else host.style.removeProperty('--font-family')
+    updateCssVarDisplay()
+  }
+
+  function resetTheme() {
+    const defaults = { primary: '#2563eb', secondary: '#1e40af', accent: '#3b82f6', text: '#111827' }
+    for (const [key, val] of Object.entries(defaults)) {
+      document.getElementById('color' + cap(key)).value = val
+      document.getElementById('color' + cap(key) + 'Text').value = val
+    }
+    document.getElementById('fontFamily').value = ''
+    applyTheme()
+  }
+
+  function updateCssVarDisplay() {
+    const host = getHost()
+    if (!host) return
+    const lines = Object.entries(THEME_VARS).map(([key, cssVar]) => {
+      const val = host.style.getPropertyValue(cssVar) || '(not set)'
+      return `<span style="color:#7dd3fc">${cssVar}</span>: <span style="color:#86efac">${val}</span>`
+    })
+    const font = host.style.getPropertyValue('--font-family')
+    if (font) lines.push(`<span style="color:#7dd3fc">--font-family</span>: <span style="color:#86efac">${font}</span>`)
+    document.getElementById('cssVarDisplay').innerHTML = lines.join('\n')
+  }
+
+  // ── Widget reload ────────────────────────────────────────────────────────
+  function reloadWidget() {
+    const slug = document.getElementById('slug').value.trim() || 'wolfchow'
+    const apiBase = document.getElementById('apiBase').value.trim() || 'http://localhost:8789'
+    const useBuilt = document.getElementById('srcBuilt').checked
+
+    document.getElementById('codeSlug').textContent = slug
+
+    const scriptSrc = useBuilt
+      ? './dist/embed.js'
+      : `http://localhost:5176/src/main.tsx`
+    document.getElementById('codeScriptSrc').textContent = scriptSrc
+
+    // Recreate host element to clear shadow DOM state
+    const frame = document.getElementById('widgetFrame')
+    frame.innerHTML = ''
+    const host = document.createElement('div')
+    host.id = 'restroapi-widget'
+    host.dataset.restaurant = slug
+    host.dataset.apiBase = apiBase
+    host.style.cssText = 'height:100%;width:100%;background:#fff;'
+    frame.appendChild(host)
+
+    // Apply any active theme overrides immediately on the new host
+    for (const [key, cssVar] of Object.entries(THEME_VARS)) {
+      const val = document.getElementById('color' + cap(key) + 'Text').value.trim()
+      if (val) host.style.setProperty(cssVar, val)
+    }
+    const font = document.getElementById('fontFamily').value.trim()
+    if (font) host.style.setProperty('--font-family', font)
+
+    updateCssVarDisplay()
+
+    // Remove old scripts and re-inject
+    document.getElementById('widgetScript')?.remove()
+    document.getElementById('widgetPreamble')?.remove()
+
+    if (useBuilt) {
+      // IIFE build — plain script, no type=module needed
+      const script = document.createElement('script')
+      script.id = 'widgetScript'
+      script.src = `./dist/embed.js?t=${Date.now()}`
+      document.head.appendChild(script)
+    } else {
+      // Vite dev server — must inject the React Refresh preamble first so that
+      // @vitejs/plugin-react's preamble check in each component passes.
+      // Vite normally does this automatically when it serves the HTML; since our
+      // demo page is served by a different server we do it manually.
+      const preamble = document.createElement('script')
+      preamble.id = 'widgetPreamble'
+      preamble.type = 'module'
+      preamble.textContent = [
+        `import RefreshRuntime from "http://localhost:5176/@react-refresh"`,
+        `RefreshRuntime.injectIntoGlobalHook(window)`,
+        `window.$RefreshReg$ = () => {}`,
+        `window.$RefreshSig$ = () => (type) => type`,
+        `window.__vite_plugin_react_preamble_installed__ = true`,
+      ].join('\n')
+      document.head.appendChild(preamble)
+
+      // The main module must load after the preamble module has executed.
+      // Use a tiny inline module that awaits nothing — ES modules in the same
+      // page execute in order of insertion, so appending after the preamble
+      // guarantees it runs second.
+      const script = document.createElement('script')
+      script.id = 'widgetScript'
+      script.type = 'module'
+      script.src = `http://localhost:5176/src/main.tsx?t=${Date.now()}`
+      document.head.appendChild(script)
+    }
+
+    appendLog(`[demo] Loading ${useBuilt ? 'built' : 'dev'} widget — slug="${slug}" api="${apiBase}"`)
+    runChecks()
+  }
+
+  function clearWidget() {
+    const frame = document.getElementById('widgetFrame')
+    frame.innerHTML = '<p style="padding:2rem;color:#9ca3af;text-align:center;font-size:0.875rem;">Widget cleared. Enter a slug and click Load Widget.</p>'
+    const old = document.getElementById('widgetScript')
+    if (old) old.remove()
+    document.getElementById('cssVarDisplay').textContent = '–'
+  }
+
+  // ── Sync slug input → embed code ─────────────────────────────────────────
+  document.getElementById('slug').addEventListener('input', (e) => {
+    document.getElementById('codeSlug').textContent = e.target.value || 'wolfchow'
+  })
+
+  // Update embed code script src when source toggle changes.
+  // Also reload the page so stale dev-server module cache doesn't bleed into the
+  // IIFE build and trigger the preamble / process.env errors.
+  document.querySelectorAll('input[name="scriptSource"]').forEach(r => {
+    r.addEventListener('change', () => {
+      const isBuilt = document.getElementById('srcBuilt').checked
+      document.getElementById('codeScriptSrc').textContent = isBuilt
+        ? './dist/embed.js'
+        : 'http://localhost:5176/src/main.tsx'
+      // Reload to avoid module-cache bleed between built ↔ dev modes
+      const url = new URL(window.location.href)
+      url.searchParams.set('src', isBuilt ? 'built' : 'dev')
+      url.searchParams.set('slug', document.getElementById('slug').value)
+      url.searchParams.set('api', document.getElementById('apiBase').value)
+      window.location.href = url.toString()
+    })
+  })
+
+  // Restore state from URL params after a source-mode reload
+  ;(function restoreFromUrl() {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('src') === 'dev') document.getElementById('srcDev').checked = true
+    if (p.get('slug')) document.getElementById('slug').value = p.get('slug')
+    if (p.get('api'))  document.getElementById('apiBase').value = p.get('api')
+  })()
+</script>
+
+</body>
+</html>

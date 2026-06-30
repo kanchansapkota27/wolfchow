@@ -1,8 +1,8 @@
-import type { PublicSettings } from '@wolfchow/api-client'
+import type { WidgetSettings } from './types'
 
 export const WIDGET_HOST_ID = 'restroapi-widget'
 
-export function injectCssVars(host: HTMLElement, settings: PublicSettings): void {
+export function injectCssVars(host: HTMLElement, settings: WidgetSettings): void {
   const colors = settings.brand_colors
   if (colors?.primary)   host.style.setProperty('--brand-primary',   colors.primary)
   if (colors?.secondary) host.style.setProperty('--brand-secondary', colors.secondary)
