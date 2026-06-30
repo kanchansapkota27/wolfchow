@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { useApi } from '../lib/api'
 import { useRealtime } from '../lib/realtime'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 interface InventoryItem {
   id: string
   name: string
@@ -19,13 +17,13 @@ interface InventoryCategory {
   position: number
 }
 
-// ── Availability config ───────────────────────────────────────────────────────
+// ── State config ──────────────────────────────────────────────────────────────
 
-const STATE_BADGE: Record<string, { label: string; cls: string }> = {
-  available:    { label: 'In Stock',      cls: 'bg-green-800/60 text-green-300' },
-  out_of_stock: { label: 'Out of Stock',  cls: 'bg-red-800/60 text-red-300' },
-  unavailable:  { label: 'Unavailable',   cls: 'bg-gray-700 text-gray-400' },
-  scheduled:    { label: 'Scheduled',     cls: 'bg-blue-800/60 text-blue-300' },
+const STATE_CFG: Record<string, { label: string; bg: string; color: string; border: string }> = {
+  available:    { label: 'In Stock',     bg: 'rgba(16,185,129,0.15)', color: '#34d399', border: 'rgba(16,185,129,0.3)' },
+  out_of_stock: { label: 'Out of Stock', bg: 'rgba(239,68,68,0.15)',  color: '#f87171', border: 'rgba(239,68,68,0.3)' },
+  unavailable:  { label: 'Unavailable',  bg: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: 'rgba(100,116,139,0.3)' },
+  scheduled:    { label: 'Scheduled',    bg: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: 'rgba(59,130,246,0.3)' },
 }
 
 const TIMED_OPTIONS: Array<{ label: string; minutesFromNow: number | null }> = [
@@ -36,16 +34,13 @@ const TIMED_OPTIONS: Array<{ label: string; minutesFromNow: number | null }> = [
 ]
 
 function restOfDayIso(): string {
-  const d = new Date()
-  d.setHours(23, 59, 0, 0)
-  return d.toISOString()
+  const d = new Date(); d.setHours(23, 59, 0, 0); return d.toISOString()
+}
+function minutesIso(m: number): string {
+  return new Date(Date.now() + m * 60_000).toISOString()
 }
 
-function minutesIso(minutes: number): string {
-  return new Date(Date.now() + minutes * 60_000).toISOString()
-}
-
-// ── Live countdown ────────────────────────────────────────────────────────────
+// ── Countdown ─────────────────────────────────────────────────────────────────
 
 function useRestoreCountdown(restoreAt: string | null): string | null {
   const [label, setLabel] = useState<string | null>(null)
@@ -69,27 +64,33 @@ function useRestoreCountdown(restoreAt: string | null): string | null {
 
 function ItemRow({ item, onTap }: { item: InventoryItem; onTap: () => void }) {
   const countdown = useRestoreCountdown(item.restore_at)
-  const badge = STATE_BADGE[item.availability_state] ?? { label: item.availability_state, cls: 'bg-gray-700 text-gray-400' }
+  const cfg = STATE_CFG[item.availability_state] ?? STATE_CFG.unavailable
 
   return (
     <button
       onClick={onTap}
-      className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-700/30 transition-colors"
+      className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors"
+      style={{ borderBottom: '1px solid #1e293b' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = '#1e293b')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = '')}
     >
-      <span className="text-sm text-gray-100">{item.name}</span>
-      <div className="flex items-center gap-2">
+      <span className="text-sm font-medium text-white">{item.name}</span>
+      <div className="flex items-center gap-2.5 shrink-0">
         {countdown && (
-          <span className="text-xs text-amber-400">{countdown}</span>
+          <span className="text-xs font-medium" style={{ color: '#f59e0b' }}>⏱ {countdown}</span>
         )}
-        <span className={['rounded-full px-2 py-0.5 text-xs font-medium', badge.cls].join(' ')}>
-          {badge.label}
+        <span
+          className="rounded-full px-2.5 py-1 text-xs font-semibold"
+          style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}
+        >
+          {cfg.label}
         </span>
       </div>
     </button>
   )
 }
 
-// ── Availability bottom sheet ─────────────────────────────────────────────────
+// ── Availability sheet ────────────────────────────────────────────────────────
 
 interface SheetProps {
   name: string
@@ -108,63 +109,77 @@ function AvailabilitySheet({ name, currentState, onSelect, onClose }: SheetProps
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/60" onClick={onClose} aria-hidden="true" />
+      <div
+        className="fixed inset-0 z-40"
+        style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Set availability"
-        className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-gray-800 p-6 shadow-2xl"
+        className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl p-6 shadow-2xl"
+        style={{ background: '#0f172a', borderTop: '1px solid #1e293b' }}
       >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-600" />
-        <p className="mb-4 text-base font-semibold text-gray-100">{name}</p>
+        <div className="mx-auto mb-5 h-1 w-12 rounded-full" style={{ background: '#334155' }} />
+        <p className="mb-5 text-lg font-bold text-white">{name}</p>
 
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {/* In stock */}
           <button
             onClick={() => void pick('available', null)}
             disabled={busy}
-            className={[
-              'w-full rounded-xl py-3.5 text-sm font-medium transition-colors disabled:opacity-40',
+            className="w-full rounded-2xl py-4 text-sm font-bold transition-colors disabled:opacity-40"
+            style={
               currentState === 'available'
-                ? 'bg-green-700 text-white'
-                : 'bg-gray-700 text-gray-200 hover:bg-gray-600',
-            ].join(' ')}
+                ? { background: '#065f46', color: '#34d399', border: '1px solid #10b981' }
+                : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+            }
           >
             ✓ In Stock
           </button>
 
-          {/* Out of stock - permanent */}
+          {/* Out of stock — permanent */}
           <button
             onClick={() => void pick('out_of_stock', null)}
             disabled={busy}
-            className={[
-              'w-full rounded-xl py-3.5 text-sm font-medium transition-colors disabled:opacity-40',
+            className="w-full rounded-2xl py-4 text-sm font-bold transition-colors disabled:opacity-40"
+            style={
               currentState === 'out_of_stock'
-                ? 'bg-red-700 text-white'
-                : 'bg-gray-700 text-gray-200 hover:bg-gray-600',
-            ].join(' ')}
+                ? { background: '#7f1d1d', color: '#f87171', border: '1px solid #ef4444' }
+                : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+            }
           >
             ✕ Out of Stock
           </button>
 
-          {/* Timed out-of-stock options */}
-          {TIMED_OPTIONS.map(({ label, minutesFromNow }) => (
-            <button
-              key={label}
-              onClick={() => void pick('out_of_stock', minutesFromNow === null ? restOfDayIso() : minutesIso(minutesFromNow))}
-              disabled={busy}
-              className="w-full rounded-xl bg-gray-700 py-3 text-sm text-gray-200 hover:bg-gray-600 disabled:opacity-40"
-            >
-              Out of Stock — {label}
-            </button>
-          ))}
+          {/* Timed out-of-stock */}
+          <div className="pt-1">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#475569' }}>
+              Out of stock until…
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {TIMED_OPTIONS.map(({ label, minutesFromNow }) => (
+                <button
+                  key={label}
+                  onClick={() => void pick('out_of_stock', minutesFromNow === null ? restOfDayIso() : minutesIso(minutesFromNow))}
+                  disabled={busy}
+                  className="rounded-2xl py-3 text-sm font-medium transition-colors disabled:opacity-40"
+                  style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </>
   )
 }
 
-// ── Main Inventory page ───────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export function Inventory() {
   const api = useApi()
@@ -183,7 +198,6 @@ export function Inventory() {
     }).catch(() => setLoading(false))
   }, [api])
 
-  // Keep in sync with Realtime menu_availability_changed events
   useEffect(() => {
     return subscribe('menu_availability_changed', (_, payload) => {
       if (payload.item_id) {
@@ -210,8 +224,9 @@ export function Inventory() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-gray-400 text-sm">
-        Loading inventory…
+      <div className="flex h-full items-center justify-center flex-col gap-3" style={{ background: '#080d17' }}>
+        <div className="h-10 w-10 animate-spin rounded-full border-4" style={{ borderColor: '#1e293b', borderTopColor: '#f97316' }} />
+        <p className="text-sm" style={{ color: '#64748b' }}>Loading inventory…</p>
       </div>
     )
   }
@@ -224,54 +239,64 @@ export function Inventory() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-gray-700 px-4 py-3">
-        <h2 className="text-sm font-semibold text-gray-200">Inventory</h2>
+    <div className="flex h-full flex-col" style={{ background: '#080d17' }}>
+      {/* Page header */}
+      <div className="shrink-0 border-b px-4 py-3" style={{ borderColor: '#1e293b' }}>
+        <p className="text-sm font-bold text-white">Inventory</p>
+        <p className="text-xs mt-0.5" style={{ color: '#475569' }}>
+          {items.length} item{items.length !== 1 ? 's' : ''} across {categories.length} categor{categories.length !== 1 ? 'ies' : 'y'}
+        </p>
       </div>
 
+      {/* List */}
       <div className="flex-1 overflow-y-auto">
-        {categories.map((cat) => {
-          const catItems = itemsByCategory.get(cat.id) ?? []
-          const catBadge = STATE_BADGE[cat.availability_state] ?? { label: cat.availability_state, cls: 'bg-gray-700 text-gray-400' }
-
-          return (
-            <div key={cat.id} className="border-b border-gray-700/60">
-              {/* Category header */}
-              <div className="flex items-center justify-between bg-gray-800/60 px-4 py-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  {cat.name}
-                </span>
-                <span className={['rounded-full px-2 py-0.5 text-xs font-medium', catBadge.cls].join(' ')}>
-                  {catBadge.label}
-                </span>
-              </div>
-
-              {/* Items */}
-              {catItems.length === 0 ? (
-                <p className="px-4 py-3 text-xs text-gray-500">No items</p>
-              ) : (
-                <div className="divide-y divide-gray-700/40">
-                  {catItems.map((item) => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      onTap={() => setSelectedItem(item)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-
-        {categories.length === 0 && (
-          <div className="flex h-32 items-center justify-center text-sm text-gray-500">
-            No inventory items
+        {categories.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center gap-2">
+            <span className="text-4xl opacity-20">📦</span>
+            <p className="text-sm" style={{ color: '#475569' }}>No inventory items</p>
           </div>
+        ) : (
+          categories
+            .slice()
+            .sort((a, b) => a.position - b.position)
+            .map((cat) => {
+              const catItems = itemsByCategory.get(cat.id) ?? []
+              const catCfg = STATE_CFG[cat.availability_state] ?? STATE_CFG.unavailable
+
+              return (
+                <div key={cat.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                  {/* Category header */}
+                  <div
+                    className="flex items-center justify-between px-4 py-2.5"
+                    style={{ background: '#0f172a' }}
+                  >
+                    <span
+                      className="text-xs font-black uppercase tracking-widest"
+                      style={{ color: '#475569' }}
+                    >
+                      {cat.name}
+                    </span>
+                    <span
+                      className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                      style={{ background: catCfg.bg, color: catCfg.color, border: `1px solid ${catCfg.border}` }}
+                    >
+                      {catCfg.label}
+                    </span>
+                  </div>
+
+                  {catItems.length === 0 ? (
+                    <p className="px-4 py-3 text-xs" style={{ color: '#334155' }}>No items</p>
+                  ) : (
+                    catItems.map((item) => (
+                      <ItemRow key={item.id} item={item} onTap={() => setSelectedItem(item)} />
+                    ))
+                  )}
+                </div>
+              )
+            })
         )}
       </div>
 
-      {/* Availability sheet */}
       {selectedItem && (
         <AvailabilitySheet
           name={selectedItem.name}
