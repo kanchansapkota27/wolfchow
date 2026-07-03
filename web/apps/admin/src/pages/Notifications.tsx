@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { Button } from '@wolfchow/ui'
 import { useApi } from '../lib/api'
+import { usePlan } from '../lib/usePlan'
 import type { AdminSmtpStatus, SaveSmtpInput, NotificationConfig, TriggerStatus } from '@wolfchow/api-client'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -297,6 +298,8 @@ function PreviewModal({ status, onClose, onSend }: PreviewModalProps) {
 
 export function Notifications() {
   const api = useApi()
+  const { plan, isLoading: planLoading } = usePlan()
+  const emailEnabled = (plan?.feature_flags as Record<string, boolean> | undefined)?.email_notifications ?? false
   const [smtp, setSmtp] = useState<AdminSmtpStatus | null>(null)
   const [configs, setConfigs] = useState<NotificationConfig[]>([])
   const [loading, setLoading] = useState(true)
@@ -339,7 +342,18 @@ export function Notifications() {
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-500">Loading…</div>
+  if (loading || planLoading) return <div className="p-8 text-gray-500">Loading…</div>
+
+  if (!emailEnabled) {
+    return (
+      <div className="p-8 max-w-4xl">
+        <div className="rounded-xl border border-gray-100 bg-white p-8 text-center">
+          <p className="text-sm font-medium text-gray-900">Email notifications are not available on your current plan.</p>
+          <p className="mt-1 text-sm text-gray-500">Upgrade your plan to configure email notifications and SMTP settings.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-8 max-w-4xl space-y-8">

@@ -29,7 +29,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
     const restaurantId = c.get('jwt').restaurant_id!
 
     const plan = await resolvePlan(c.env, restaurantId)
-    const historyDays = (plan?.history_days as number | undefined) ?? DEFAULT_HISTORY_DAYS
+    const historyDays = (plan?.transaction_history_days as number | undefined) ?? DEFAULT_HISTORY_DAYS
 
     const pageParam = c.req.query('page')
     const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1
@@ -67,7 +67,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
 
     const { data, error } = await admin
       .from('orders')
-      .select('*')
+      .select('id, status, total, subtotal, tax_amount, tip_amount, promo_discount, stripe_intent_id, created_at, customer_name, customer_email, customer_phone, refund_id, refunded_at, payment_method, notes, scheduled_for')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .single()
@@ -91,7 +91,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
 
     const { data: order } = await admin
       .from('orders')
-      .select('id, status, total_cents, payment_intent_id, refund_id, payment_method')
+      .select('id, status, total, stripe_intent_id, refund_id, payment_method')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .single()
@@ -100,17 +100,17 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
 
     const o = order as {
       status: string
-      payment_intent_id: string | null
+      stripe_intent_id: string | null
       refund_id: string | null
       payment_method: string
-      total_cents: number
+      total: number
     }
 
     if (o.refund_id) return c.json({ error: 'already_refunded' }, 409)
     if (!['completed', 'missed', 'rejected'].includes(o.status)) {
       return c.json({ error: 'order_not_refundable', status: o.status }, 422)
     }
-    if (!o.payment_intent_id) {
+    if (!o.stripe_intent_id) {
       return c.json({ error: 'no_payment_intent' }, 422)
     }
 
@@ -149,7 +149,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
 
     let refund: { id: string }
     try {
-      refund = await doRefund(openKey, o.payment_intent_id, parsed.data.amount_cents)
+      refund = await doRefund(openKey, o.stripe_intent_id!, parsed.data.amount_cents)
     } catch (err) {
       return c.json({ error: 'refund_failed', detail: (err as Error).message }, 502)
     }
@@ -158,10 +158,11 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
       .from('orders')
       .update({ status: 'refunded', refund_id: refund.id, refunded_at: new Date().toISOString() })
       .eq('id', orderId)
-      .select()
+      .is('refund_id', null)
+      .select('id, status, refund_id, refunded_at, total, payment_method')
       .single()
 
-    if (updateErr || !updated) return c.json({ error: 'status_update_failed' }, 500)
+    if (updateErr || !updated) return c.json({ error: 'already_refunded' }, 409)
 
     return c.json(updated)
   })

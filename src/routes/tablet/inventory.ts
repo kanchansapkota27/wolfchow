@@ -33,19 +33,24 @@ export function registerInventoryRoutes(app: Hono<HonoEnv>, deps: InventoryRoute
 
     const [categoriesRes, itemsRes] = await Promise.all([
       admin
-        .from('categories')
-        .select('id, name, availability_state, position')
+        .from('menu_categories')
+        .select('id, name, availability_state, sort_order')
         .eq('restaurant_id', restaurantId)
-        .order('position'),
+        .order('sort_order', { ascending: true }),
       admin
         .from('menu_items')
         .select('id, name, category_id, availability_state, restore_at')
         .eq('restaurant_id', restaurantId)
-        .order('position'),
+        .order('sort_order', { ascending: true }),
     ])
 
+    // Map sort_order → position so the frontend type stays stable
+    const categories = (categoriesRes.data ?? []).map(
+      ({ sort_order, ...rest }) => ({ ...rest, position: sort_order }),
+    )
+
     return c.json({
-      categories: categoriesRes.data ?? [],
+      categories,
       items: itemsRes.data ?? [],
     })
   })
@@ -82,7 +87,6 @@ export function registerInventoryRoutes(app: Hono<HonoEnv>, deps: InventoryRoute
       .update({
         availability_state: parsed.data.availability_state,
         restore_at: parsed.data.restore_at ?? null,
-        updated_at: new Date().toISOString(),
       })
       .eq('id', itemId)
       .select('id, name, availability_state, restore_at')
@@ -123,7 +127,7 @@ export function registerInventoryRoutes(app: Hono<HonoEnv>, deps: InventoryRoute
     const admin = createAdminClient(c.env)
 
     const { data: existing } = await admin
-      .from('categories')
+      .from('menu_categories')
       .select('id, restaurant_id')
       .eq('id', categoryId)
       .single()
@@ -131,14 +135,12 @@ export function registerInventoryRoutes(app: Hono<HonoEnv>, deps: InventoryRoute
     if (existing.restaurant_id !== restaurantId) return c.json({ error: 'forbidden' }, 403)
 
     const { data, error } = await admin
-      .from('categories')
+      .from('menu_categories')
       .update({
         availability_state: parsed.data.availability_state,
-        restore_at: parsed.data.restore_at ?? null,
-        updated_at: new Date().toISOString(),
       })
       .eq('id', categoryId)
-      .select('id, name, availability_state, restore_at')
+      .select('id, name, availability_state')
       .single()
 
     if (error || !data) return c.json({ error: 'update_failed' }, 500)

@@ -180,5 +180,8 @@ export function registerHoursRoutes(app: Hono<HonoEnv>): void {
 
 async function invalidateHoursCache(env: HonoEnv['Bindings'], restaurantId: string): Promise<void> {
   const cache = new KvCache(env.SETTINGS_CACHE)
-  await cache.delete(buildKey('hours', restaurantId))
+  await Promise.all([
+    cache.delete(buildKey('hours', restaurantId)),
+    cache.delete(buildKey('slots', restaurantId)),
+  ])
 }

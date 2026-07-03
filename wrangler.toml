@@ -15,6 +15,9 @@ enabled = true
 [vars]
 SUPABASE_URL = "http://127.0.0.1:54321"
 SUPABASE_ANON_KEY = "replace-with-local-supabase-anon-key"
+# Base URL of the widget app — used to build tracking links in order emails.
+# Set to your production widget origin in the Cloudflare dashboard.
+WIDGET_BASE_URL = "http://localhost:5174"
 
 # --- KV namespaces ---
 # Create each with: wrangler kv namespace create <NAME>
@@ -43,6 +46,11 @@ id = "device_tokens_placeholder"
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "restroapi-media"
+
+# --- Cron Triggers ---
+# Runs every minute to restore timed-out inventory and auto-reject stale orders.
+[triggers]
+crons = ["* * * * *"]
 
 # --- Workers Rate Limiting API ---
 # Per-binding sliding window; namespace_id is an arbitrary unique int.

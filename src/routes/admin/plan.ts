@@ -28,11 +28,10 @@ export function registerAdminPlanRoutes(app: Hono<HonoEnv>): void {
           .eq('active', true)
           .then((r) => r.count ?? 0),
         admin
-          .from('users')
+          .from('devices')
           .select('id', { count: 'exact', head: true })
           .eq('restaurant_id', restaurantId)
-          .eq('role', 'kitchen')
-          .eq('active', true)
+          .is('revoked_at', null)
           .then((r) => r.count ?? 0),
         // Global modifier groups only (item_id IS NULL)
         admin
@@ -56,13 +55,13 @@ export function registerAdminPlanRoutes(app: Hono<HonoEnv>): void {
       return c.json({ error: 'no_plan' }, 404)
     }
 
-    const [categories, items, staff, modifiers] = usageCounts
+    const [categories, items, devices, modifiers] = usageCounts
 
     const ps = platformSettings as { upgrade_message_title?: string; upgrade_message_html?: string } | null
 
     return c.json({
       plan,
-      usage: { categories, items, staff, modifiers },
+      usage: { categories, items, devices, modifiers },
       upgrade_message: {
         title: ps?.upgrade_message_title ?? 'Upgrade your plan',
         html: ps?.upgrade_message_html ?? '<p>Contact your administrator to upgrade.</p>',

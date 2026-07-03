@@ -1,9 +1,11 @@
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../types'
+import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { EncryptionService } from '../../services/encryption'
 import { StripeService } from '../../services/stripe'
 import type { Broadcaster } from '../../services/realtime'
+import type { NotificationService } from '../../services/notifications'
+import { resolvePlan } from '../../services/plan'
 
 // ── Active order statuses ─────────────────────────────────────────────────────
 
@@ -25,6 +27,7 @@ export interface OrderRouteDeps {
   broadcaster?: Broadcaster
   stripeCapture?: (secretKey: string, intentId: string, orderId: string) => Promise<void>
   stripeCancel?: (secretKey: string, intentId: string, orderId: string) => Promise<void>
+  notifier?: (env: Env) => NotificationService
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
@@ -38,7 +41,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     const { data, error } = await admin
       .from('orders')
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .eq('restaurant_id', restaurantId)
       .in('status', ACTIVE_STATUSES)
       .order('created_at', { ascending: true })
@@ -56,7 +59,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     const { data, error } = await admin
       .from('orders')
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .single()
@@ -125,7 +128,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId)
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .single()
 
     if (updateErr || !updated) return c.json({ error: 'update_failed' }, 500)
@@ -136,6 +139,28 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
       { order_id: orderId },
       {} as ExecutionContext,
     )
+
+    if (deps.notifier) {
+      const u = updated as Record<string, unknown>
+      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderAccepted(restaurantId, {
+        id: orderId,
+        tracking_token: u.tracking_token as string,
+        customer_name: u.customer_name as string,
+        customer_email: u.customer_email as string,
+        total: u.total as number,
+        payment_method: u.payment_method as string,
+        items: (u.items as Array<Record<string, unknown>> | undefined)?.map((i) => ({
+          item_name: i.item_name as string | null,
+          variant_name: i.variant_name as string | null,
+          quantity: i.quantity as number,
+          unit_price: i.unit_price as number,
+          modifiers: (i.modifiers as Array<{ name: string; price_delta: number }>) ?? [],
+          notes: i.notes as string | null,
+        })),
+        notes: (u.notes as string | null) ?? null,
+        scheduled_for: (u.scheduled_for as string | null) ?? null,
+      }))
+    }
 
     return c.json(updated)
   })
@@ -200,11 +225,10 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
       .update({
         status: 'rejected',
         payment_status: order.payment_method === 'card' ? 'cancelled' : undefined,
-        rejection_reason: reason,
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId)
-      .select('*, items:order_items(*, modifiers:order_item_modifiers(*))')
+      .select('*, items:order_items(*)')
       .single()
 
     if (updateErr || !updated) return c.json({ error: 'update_failed' }, 500)
@@ -216,6 +240,57 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
       {} as ExecutionContext,
     )
 
+    if (deps.notifier) {
+      const u = updated as Record<string, unknown>
+      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderRejected(restaurantId, {
+        id: orderId,
+        tracking_token: u.tracking_token as string,
+        customer_name: u.customer_name as string,
+        customer_email: u.customer_email as string,
+        total: u.total as number,
+        payment_method: u.payment_method as string,
+        notes: (u.notes as string | null) ?? null,
+        scheduled_for: (u.scheduled_for as string | null) ?? null,
+      }, reason))
+    }
+
     return c.json(updated)
+  })
+
+  // ── GET /tablet/orders/history ────────────────────────────────────────────
+  // Returns completed/rejected orders newest-first, paginated by plan history window.
+
+  app.get('/tablet/orders/history', async (c) => {
+    const restaurantId = c.get('jwt').restaurant_id!
+    const admin = createAdminClient(c.env)
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const historyDays = (plan?.transaction_history_days as number | null) ?? 30
+    const since = new Date(Date.now() - historyDays * 86_400_000).toISOString()
+
+    const pageParam = c.req.query('page')
+    const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1
+    const pageSize = 20
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
+    const { data, error, count } = await admin
+      .from('orders')
+      .select('id, status, total, payment_method, customer_name, created_at, updated_at, items:order_items(item_name, variant_name, quantity)', { count: 'exact' })
+      .eq('restaurant_id', restaurantId)
+      .in('status', ['completed', 'rejected', 'missed'])
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (error) return c.json({ error: 'fetch_failed' }, 500)
+
+    return c.json({
+      orders: data ?? [],
+      total: count ?? 0,
+      page,
+      page_size: pageSize,
+      history_days: historyDays,
+    })
   })
 }

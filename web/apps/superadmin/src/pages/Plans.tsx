@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Plan, PlanInput } from '@wolfchow/types'
 import { Button, Modal } from '@wolfchow/ui'
-import { Pencil, Trash2, Plus, Users, ShoppingBag, List, Layers, Mail, Clock } from 'lucide-react'
+import { Pencil, Trash2, Plus, Tablet, ShoppingBag, List, Layers, Mail, Clock } from 'lucide-react'
 import { useApi } from '../lib/api'
 import { SectionError } from '../components/SectionError'
 import { PlanFormModal } from '../components/PlanFormModal'
@@ -141,7 +141,7 @@ function PlanCard({ plan, onEdit, onDelete }: { plan: Plan; onEdit: () => void; 
 
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
         {[
-          { icon: Users, label: 'STAFF CAP', value: capValue(plan.staff_cap) },
+          { icon: Tablet, label: 'DEVICE CAP', value: capValue(plan.device_cap) },
           { icon: ShoppingBag, label: 'ITEM CAP', value: capValue(plan.item_cap) },
           { icon: List, label: 'CATEGORY CAP', value: capValue(plan.category_cap) },
           { icon: Layers, label: 'MODIFIER CAP', value: capValue(plan.modifier_cap) },

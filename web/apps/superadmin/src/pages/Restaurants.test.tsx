@@ -29,7 +29,7 @@ function plan(): Plan {
   return {
     id: 'plan-1',
     name: 'Starter',
-    staff_cap: 3,
+    device_cap: 3,
     item_cap: 50,
     category_cap: 10,
     modifier_cap: 20,

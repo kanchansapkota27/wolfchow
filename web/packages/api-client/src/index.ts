@@ -9,12 +9,11 @@ export type {
   HoursRow,
   SchedulingConfig,
   CreateClosureInput,
-  // Staff
-  StaffPermission,
-  StaffMember,
-  DeviceLogin,
-  InviteStaffInput,
-  PatchStaffInput,
+  // Devices
+  DevicePermission,
+  Device,
+  CreateDeviceInput,
+  PatchDeviceInput,
   // Payments
   StripeStatus,
   PaymentMethods,

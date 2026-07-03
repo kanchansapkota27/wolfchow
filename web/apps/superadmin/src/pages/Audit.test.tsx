@@ -18,6 +18,7 @@ function entry(over: Partial<AuditEntry> = {}): AuditEntry {
     new_data: { name: 'Burger Deluxe', price: 12 },
     user_id: 'user-1',
     user_name: 'Alice',
+    ip_address: null,
     created_at: '2026-06-01T12:00:00Z',
     ...over,
   }

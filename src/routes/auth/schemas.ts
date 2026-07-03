@@ -15,6 +15,8 @@ export const logoutSchema = z.object({
 
 export const deviceSchema = z.object({
   device_token: z.string().min(1),
+  device_uuid: z.string().uuid().optional(),
+  platform: z.string().max(200).optional(),
 })
 
 export const signupSchema = z.object({

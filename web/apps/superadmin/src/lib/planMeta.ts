@@ -34,7 +34,7 @@ function emptyFlags(): FeatureFlags {
 export function emptyPlanInput(): PlanInput {
   return {
     name: '',
-    staff_cap: 5,
+    device_cap: 3,
     item_cap: 50,
     category_cap: 10,
     modifier_cap: 20,
@@ -52,7 +52,7 @@ export function emptyPlanInput(): PlanInput {
 export function planToInput(plan: Plan): PlanInput {
   return {
     name: plan.name,
-    staff_cap: plan.staff_cap,
+    device_cap: plan.device_cap,
     item_cap: plan.item_cap,
     category_cap: plan.category_cap,
     modifier_cap: plan.modifier_cap,

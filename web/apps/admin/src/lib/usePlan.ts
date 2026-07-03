@@ -4,7 +4,7 @@ import { useApi } from './api'
 
 export interface PlanData {
   plan: Plan
-  usage: { categories: number; items: number; staff: number; modifiers: number }
+  usage: { categories: number; items: number; devices: number; modifiers: number }
   upgrade_message: { title: string; html: string }
 }
 

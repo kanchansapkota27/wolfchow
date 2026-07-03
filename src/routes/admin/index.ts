@@ -10,7 +10,6 @@ import { registerHoursRoutes } from './hours'
 import { registerClosureRoutes } from './closures'
 import { registerSchedulingRoutes } from './scheduling'
 import { registerPauseRoutes, type PauseRouteDeps } from './pause'
-import { registerStaffRoutes } from './staff'
 import { registerPaymentRoutes, type PaymentRouteDeps } from './payments'
 import { registerSmtpRoutes, type SmtpRouteDeps } from './smtp'
 import { registerNotificationRoutes, type NotificationRouteDeps } from './notifications'
@@ -19,10 +18,12 @@ import { registerAutomationRoutes } from './automation'
 import { registerPromotionsRoutes } from './promotions'
 import { registerNoticesRoutes, type NoticesRouteDeps } from './notices'
 import { registerTransactionRoutes, type TransactionRouteDeps } from './transactions'
-import { registerAdminOrderRoutes } from './orders'
+import { registerAdminOrderRoutes, type AdminOrderRouteDeps } from './orders'
 import { registerAdminPlanRoutes } from './plan'
+import { registerDeviceRoutes } from './devices'
+import { registerEmailLogRoutes } from './email-log'
 
-export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps, SmtpRouteDeps, NotificationRouteDeps, NoticesRouteDeps, TransactionRouteDeps {}
+export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps, SmtpRouteDeps, NotificationRouteDeps, NoticesRouteDeps, TransactionRouteDeps, AdminOrderRouteDeps {}
 
 /**
  * Restaurant admin route group. Every `/admin/*` route sits behind:
@@ -36,7 +37,7 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   app.use(
     '/admin/*',
     jwtMiddleware,
-    requireRole('restaurant_owner', 'kitchen'),
+    requireRole('restaurant_owner'),
     requireRestaurant(),
   )
 
@@ -48,7 +49,6 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerClosureRoutes(app)
   registerSchedulingRoutes(app)
   registerPauseRoutes(app, deps)
-  registerStaffRoutes(app)
   registerPaymentRoutes(app, deps)
   registerSmtpRoutes(app, deps)
   registerNotificationRoutes(app, deps)
@@ -57,6 +57,8 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerPromotionsRoutes(app)
   registerNoticesRoutes(app, deps)
   registerTransactionRoutes(app, deps)
-  registerAdminOrderRoutes(app)
+  registerAdminOrderRoutes(app, deps)
   registerAdminPlanRoutes(app)
+  registerDeviceRoutes(app)
+  registerEmailLogRoutes(app)
 }

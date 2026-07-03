@@ -364,7 +364,7 @@ function TaxSection({ config, onChange, validationError }: TaxSectionProps) {
 
 // ── Automation Section ────────────────────────────────────────────────────────
 
-const REJECT_MINUTES = [5, 10, 15, 20, 30]
+const REJECT_MINUTES = [2, 3, 5, 7, 10, 15]
 
 interface AutomationSectionProps {
   config: AutomationConfig

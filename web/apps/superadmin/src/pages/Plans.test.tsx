@@ -19,7 +19,7 @@ function flags(): FeatureFlags {
 
 function makePlan(over: Partial<Plan> = {}): Plan {
   return {
-    id: 'plan-1', name: 'Starter', staff_cap: 3, item_cap: 50, category_cap: 10,
+    id: 'plan-1', name: 'Starter', device_cap: 3, item_cap: 50, category_cap: 10,
     modifier_cap: 20, smtp_monthly_limit: 500, transaction_history_days: 30,
     feature_flags: flags(), payment_methods_allowed: ['card'],
     commission_type: 'percentage', commission_value: 500, is_public: false,

@@ -138,6 +138,25 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
     return c.body(null, 204)
   })
 
+  // ── GET /admin/payments/methods ───────────────────────────────────────────
+
+  app.get('/admin/payments/methods', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+
+    const admin = createAdminClient(c.env)
+    const { data } = await admin
+      .from('payment_config')
+      .select('payment_methods_enabled, pickup_delivery_note')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+
+    return c.json({
+      payment_methods: (data as Record<string, unknown> | null)?.payment_methods_enabled ?? [],
+      pickup_delivery_note: (data as Record<string, unknown> | null)?.pickup_delivery_note ?? null,
+    })
+  })
+
   // ── PATCH /admin/payments/methods ──────────────────────────────────────────
 
   app.patch('/admin/payments/methods', async (c) => {
@@ -167,20 +186,21 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
       .upsert(
         {
           restaurant_id: restaurantId,
-          payment_methods,
+          payment_methods_enabled: payment_methods,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'restaurant_id' },
       )
-      .select('payment_methods, updated_at')
+      .select('payment_methods_enabled, pickup_delivery_note')
       .single()
 
     if (error || !data) return c.json({ error: 'update_failed' }, 500)
 
     const settingsCache = new KvCache(c.env.SETTINGS_CACHE)
-    await settingsCache.delete(buildKey('settings', restaurantId))
+    await settingsCache.delete(buildKey('settings', `widget:${restaurantId}`))
 
-    return c.json(data)
+    const d = data as Record<string, unknown>
+    return c.json({ payment_methods: d.payment_methods_enabled, pickup_delivery_note: d.pickup_delivery_note ?? null })
   })
 
   // ── PATCH /admin/payments/note ─────────────────────────────────────────────
@@ -196,13 +216,22 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
 
     const admin = createAdminClient(c.env)
     const { data, error } = await admin
-      .from('restaurants')
-      .update({ pickup_delivery_note: parsed.data.pickup_delivery_note })
-      .eq('id', restaurantId)
+      .from('payment_config')
+      .upsert(
+        {
+          restaurant_id: restaurantId,
+          pickup_delivery_note: parsed.data.pickup_delivery_note,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'restaurant_id' },
+      )
       .select('pickup_delivery_note')
       .single()
 
     if (error || !data) return c.json({ error: 'update_failed' }, 500)
+
+    const settingsCache = new KvCache(c.env.SETTINGS_CACHE)
+    await settingsCache.delete(buildKey('settings', `widget:${restaurantId}`))
 
     return c.json(data)
   })

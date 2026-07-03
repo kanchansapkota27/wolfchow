@@ -41,7 +41,7 @@ const EXPIRES_PAST = new Date(Date.now() - 1000).toISOString()
 const fakePlan = {
   id: PLAN_ID,
   name: 'Starter',
-  staff_cap: 5,
+  device_cap: 5,
   item_cap: 50,
   category_cap: 10,
   modifier_cap: 20,

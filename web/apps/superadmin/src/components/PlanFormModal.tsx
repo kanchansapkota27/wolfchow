@@ -12,7 +12,7 @@ interface PlanFormModalProps {
 }
 
 const CAPS: Array<{ key: keyof PlanInput; label: string }> = [
-  { key: 'staff_cap', label: 'Staff cap' },
+  { key: 'device_cap', label: 'Device cap' },
   { key: 'item_cap', label: 'Item cap' },
   { key: 'category_cap', label: 'Category cap' },
   { key: 'modifier_cap', label: 'Modifier cap' },

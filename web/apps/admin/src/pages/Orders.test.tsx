@@ -72,6 +72,7 @@ const ITEM: OrderItem & { name: string } = {
   order_id: 'order-1',
   restaurant_id: 'rest-1',
   item_id: 'menu-item-1',
+  item_name: 'Margherita Pizza',
   variant_id: null,
   variant_name: null,
   name: 'Margherita Pizza',

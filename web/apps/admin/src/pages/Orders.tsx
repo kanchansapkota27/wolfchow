@@ -154,7 +154,7 @@ function OrderCard({ order, onAccept, onReject }: OrderCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [accepting, setAccepting] = useState(false)
   const [rejecting, setRejecting] = useState(false)
-  const itemsSummary = order.items?.map((i) => `${i.quantity}× ${(i as unknown as { name?: string }).name ?? i.item_id}`).join(', ') ?? '—'
+  const itemsSummary = order.items?.map((i) => `${i.quantity}× ${i.item_name ?? i.variant_name ?? i.item_id}`).join(', ') ?? '—'
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-4 space-y-3">
@@ -173,8 +173,7 @@ function OrderCard({ order, onAccept, onReject }: OrderCardProps) {
           <p className="text-xs text-gray-500">{itemsSummary}</p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-sm font-semibold text-gray-900">${order.total.toFixed(2)}</p>
-          {order.tip_amount > 0 && <p className="text-xs text-gray-500">tip ${order.tip_amount.toFixed(2)}</p>}
+          <p className="text-sm font-semibold text-gray-900">${Number(order.total).toFixed(2)}</p>
           <p className="mt-1 text-xs text-gray-400">{elapsedLabel(order.created_at)}</p>
         </div>
       </div>
@@ -194,30 +193,73 @@ function OrderCard({ order, onAccept, onReject }: OrderCardProps) {
         )}
       </div>
       {expanded && (
-        <div className="space-y-2 border-t border-gray-50 pt-3">
-          <div className="space-y-1 text-xs text-gray-500">
+        <div className="space-y-3 border-t border-gray-100 pt-3">
+
+          {/* Contact & order notes */}
+          <div className="space-y-0.5 text-xs text-gray-500">
             <p>{order.customer_email}{order.customer_phone ? ` · ${order.customer_phone}` : ''}</p>
-            {order.notes && <p className="italic">Note: {order.notes}</p>}
+            {order.notes && <p className="italic text-gray-400">Note: {order.notes}</p>}
           </div>
-          <div className="space-y-1">
-            {order.items?.map((item, i) => {
-              const name = (item as unknown as { name?: string }).name ?? item.item_id
+
+          {/* Items */}
+          <div className="space-y-2">
+            {(order.items ?? []).map((item, i) => {
+              const itemName = item.item_name ?? item.variant_name ?? item.item_id
+              const displayName = item.variant_name && item.variant_name !== item.item_name
+                ? `${itemName} — ${item.variant_name}`
+                : itemName
+              const mods = Array.isArray(item.modifiers) ? item.modifiers : []
               return (
                 <div key={i} className="text-sm">
-                  <span className="font-medium">{item.quantity}× {name}</span>
-                  <span className="text-gray-500"> ${(item.unit_price * item.quantity / 100).toFixed(2)}</span>
-                  {item.modifiers.length > 0 && (
-                    <div className="space-y-0.5 pl-4 text-xs text-gray-500">
-                      {item.modifiers.map((m, j) => (
-                        <div key={j}>+ {m.name}{m.price_delta !== 0 ? ` ($${(m.price_delta / 100).toFixed(2)})` : ''}</div>
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-800">{item.quantity}× {displayName}</span>
+                    <span className="text-gray-500">${Number(item.unit_price * item.quantity).toFixed(2)}</span>
+                  </div>
+                  {mods.length > 0 && (
+                    <div className="pl-3 mt-0.5 space-y-0.5">
+                      {mods.map((m, j) => (
+                        <div key={j} className="text-xs text-gray-400">
+                          + {m.name}{Number(m.price_delta) !== 0 ? ` (+$${Number(m.price_delta).toFixed(2)})` : ''}
+                        </div>
                       ))}
                     </div>
                   )}
-                  {item.notes && <div className="pl-4 text-xs italic text-gray-400">{item.notes}</div>}
+                  {item.notes && <p className="pl-3 mt-0.5 text-xs italic text-gray-400">{item.notes}</p>}
                 </div>
               )
             })}
           </div>
+
+          {/* Price breakdown */}
+          <div className="border-t border-gray-50 pt-2 space-y-1 text-xs text-gray-500">
+            <div className="flex justify-between">
+              <span>Subtotal</span>
+              <span>${Number(order.subtotal).toFixed(2)}</span>
+            </div>
+            {Number(order.promo_discount) > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Discount</span>
+                <span>-${Number(order.promo_discount).toFixed(2)}</span>
+              </div>
+            )}
+            {Number(order.tax_amount) > 0 && (
+              <div className="flex justify-between">
+                <span>Tax {order.tax_rate > 0 ? `(${order.tax_rate}%)` : ''}{order.tax_inclusive ? ' incl.' : ''}</span>
+                <span>${Number(order.tax_amount).toFixed(2)}</span>
+              </div>
+            )}
+            {Number(order.tip_amount) > 0 && (
+              <div className="flex justify-between">
+                <span>Tip</span>
+                <span>${Number(order.tip_amount).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-semibold text-gray-800 border-t border-gray-100 pt-1 mt-1">
+              <span>Total</span>
+              <span>${Number(order.total).toFixed(2)}</span>
+            </div>
+          </div>
+
         </div>
       )}
     </div>
@@ -283,12 +325,12 @@ export function Orders() {
   }, [view])
 
   async function handleAccept(id: string) {
-    const updated = await api.orders.acceptOrder(id)
+    const updated = await api.admin.acceptOrder(id)
     setActiveOrders((prev) => prev.map((o) => o.id === id ? updated : o))
   }
 
   async function handleReject(id: string) {
-    const updated = await api.orders.rejectOrder(id)
+    const updated = await api.admin.rejectOrder(id)
     setActiveOrders((prev) => prev.filter((o) => o.id !== id))
     setHistoryOrders((prev) => [updated, ...prev])
   }

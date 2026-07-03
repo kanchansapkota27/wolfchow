@@ -68,6 +68,13 @@ export interface Env {
    * independently). Not a secret — fine in `wrangler.toml [vars]`.
    */
   SIGNUP_BASE_URL?: string
+
+  /**
+   * Base URL of the widget / customer-facing app. Used to build order tracking
+   * links in transactional emails. e.g. `https://order.yourrestaurant.com`.
+   * When unset, emails omit the tracking link. Not a secret.
+   */
+  WIDGET_BASE_URL?: string
 }
 
 /**

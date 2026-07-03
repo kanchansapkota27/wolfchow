@@ -103,29 +103,43 @@ export class SmtpService {
   }
 
   async send(opts: SendOptions): Promise<SmtpSource> {
-    const resolved = await this.resolveCredentials(opts.restaurant_id)
+    let resolved: ResolvedCredentials | null = null
+    try {
+      resolved = await this.resolveCredentials(opts.restaurant_id)
 
-    // Own SMTP is unlimited; fallback paths honour the plan's monthly limit.
-    if (resolved.source !== 'own' && resolved.monthly_limit !== null) {
-      await this.checkAndIncrementLimit(opts.restaurant_id, resolved.monthly_limit)
+      // Own SMTP is unlimited; fallback paths honour the plan's monthly limit.
+      if (resolved.source !== 'own' && resolved.monthly_limit !== null) {
+        await this.checkAndIncrementLimit(opts.restaurant_id, resolved.monthly_limit)
+      }
+
+      await this.transport.send({
+        credentials: {
+          host: resolved.host,
+          port: resolved.port,
+          username: resolved.username,
+          password: resolved.password,
+          from_email: resolved.from_email,
+          from_name: resolved.from_name,
+        },
+        to: opts.to,
+        subject: opts.subject,
+        html: opts.html,
+      })
+
+      await this.logEmail(opts.restaurant_id, opts.to, opts.subject, resolved.source)
+      return resolved.source
+    } catch (err) {
+      // Log every failure so admins can diagnose delivery issues via /admin/email-log
+      const reason = err instanceof Error ? err.message : 'unknown_error'
+      await this.logEmail(
+        opts.restaurant_id,
+        opts.to,
+        opts.subject,
+        resolved?.source ?? null,
+        reason,
+      ).catch(() => {})
+      throw err
     }
-
-    await this.transport.send({
-      credentials: {
-        host: resolved.host,
-        port: resolved.port,
-        username: resolved.username,
-        password: resolved.password,
-        from_email: resolved.from_email,
-        from_name: resolved.from_name,
-      },
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-    })
-
-    await this.logEmail(opts.restaurant_id, opts.to, opts.subject, resolved.source)
-    return resolved.source
   }
 
   /**
@@ -230,13 +244,16 @@ export class SmtpService {
     restaurantId: string,
     to: string,
     subject: string,
-    source: SmtpSource,
+    source: SmtpSource | null,
+    failureReason?: string,
   ): Promise<void> {
     await this.admin.from('email_log').insert({
       restaurant_id: restaurantId,
       to_address: to,
       subject,
       smtp_source: source,
+      status: failureReason ? 'failed' : 'sent',
+      failure_reason: failureReason ?? null,
     })
   }
 }

@@ -128,6 +128,12 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
     const restaurantId = jwt.restaurant_id!
     const groupId = c.req.param('group_id')
 
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.item_modifiers) {
+      return c.json({ error: 'feature_locked', feature: 'item_modifiers' }, 402)
+    }
+
     const parsed = patchGroupSchema.safeParse(await parseBody(c.req.raw))
     if (!parsed.success) {
       return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
@@ -160,6 +166,12 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
     const restaurantId = jwt.restaurant_id!
     const groupId = c.req.param('group_id')
 
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.item_modifiers) {
+      return c.json({ error: 'feature_locked', feature: 'item_modifiers' }, 402)
+    }
+
     const admin = createAdminClient(c.env)
 
     const { error } = await admin
@@ -181,6 +193,12 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
     const groupId = c.req.param('group_id')
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.item_modifiers) {
+      return c.json({ error: 'feature_locked', feature: 'item_modifiers' }, 402)
+    }
 
     const parsed = createOptionSchema.safeParse(await parseBody(c.req.raw))
     if (!parsed.success) {
@@ -219,6 +237,12 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
     const optionId = c.req.param('option_id')
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.item_modifiers) {
+      return c.json({ error: 'feature_locked', feature: 'item_modifiers' }, 402)
+    }
 
     const parsed = patchOptionSchema.safeParse(await parseBody(c.req.raw))
     if (!parsed.success) {
@@ -265,6 +289,12 @@ export function registerModifierRoutes(app: Hono<HonoEnv>, deps: ModifierRouteDe
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
     const optionId = c.req.param('option_id')
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.item_modifiers) {
+      return c.json({ error: 'feature_locked', feature: 'item_modifiers' }, 402)
+    }
 
     const admin = createAdminClient(c.env)
 

@@ -83,7 +83,7 @@ export function registerClosureRoutes(app: Hono<HonoEnv>): void {
 
     if (error || !data) return c.json({ error: 'create_failed' }, 500)
 
-    await invalidateHoursCache(c.env, restaurantId)
+    await invalidateClosureCache(c.env, restaurantId)
 
     const today = new Date().toISOString().slice(0, 10)
     const isPast = date < today
@@ -94,9 +94,32 @@ export function registerClosureRoutes(app: Hono<HonoEnv>): void {
     }
     return response
   })
+
+  // ── DELETE /admin/closures/:id ─────────────────────────────────────────────
+
+  app.delete('/admin/closures/:id', async (c) => {
+    const jwt = c.get('jwt')
+    const restaurantId = jwt.restaurant_id!
+    const id = c.req.param('id')
+
+    const admin = createAdminClient(c.env)
+    const { error } = await admin
+      .from('special_closures')
+      .delete()
+      .eq('id', id)
+      .eq('restaurant_id', restaurantId)
+
+    if (error) return c.json({ error: 'delete_failed' }, 500)
+
+    await invalidateClosureCache(c.env, restaurantId)
+    return c.body(null, 204)
+  })
 }
 
-async function invalidateHoursCache(env: HonoEnv['Bindings'], restaurantId: string): Promise<void> {
+async function invalidateClosureCache(env: HonoEnv['Bindings'], restaurantId: string): Promise<void> {
   const cache = new KvCache(env.SETTINGS_CACHE)
-  await cache.delete(buildKey('hours', restaurantId))
+  await Promise.all([
+    cache.delete(buildKey('hours', restaurantId)),
+    cache.delete(buildKey('slots', restaurantId)),
+  ])
 }

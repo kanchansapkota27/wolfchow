@@ -58,7 +58,20 @@ export const jwtMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
     return c.json({ error: 'token_expired' }, 401)
   }
 
-  c.set('jwt', toClaims(payload))
+  const claims = toClaims(payload)
+
+  // For tablet device tokens, check the KV index is still present (revocation check).
+  // DELETE /admin/devices/:id removes device_index:{restaurantId}:{deviceId} from KV,
+  // so a revoked device's JWT is rejected within the KV propagation delay (~1s).
+  if (claims.role === 'tablet_device' && claims.device_id && claims.restaurant_id) {
+    const indexKey = `device_index:${claims.restaurant_id}:${claims.device_id}`
+    const tokenRef = await c.env.DEVICE_TOKENS.get(indexKey)
+    if (!tokenRef) {
+      return c.json({ error: 'device_revoked' }, 401)
+    }
+  }
+
+  c.set('jwt', claims)
   await next()
 })
 

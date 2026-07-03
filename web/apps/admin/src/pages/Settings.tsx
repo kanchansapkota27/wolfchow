@@ -910,7 +910,7 @@ function AutomationContent() {
               </div>
               <input
                 type="range"
-                min={5} max={60} step={5}
+                min={2} max={15} step={1}
                 value={automation.auto_reject_minutes}
                 onChange={(e) => setAutomation((a) => ({ ...a, auto_reject_minutes: Number(e.target.value) }))}
                 className="w-full accent-blue-600"
@@ -934,7 +934,7 @@ function PlanUsageContent({ restaurant }: { restaurant: Restaurant }) {
   const usageItems = [
     { label: 'Categories', used: usage?.categories ?? 0, max: plan?.category_cap ?? 999 },
     { label: 'Items',      used: usage?.items ?? 0,      max: plan?.item_cap ?? 999 },
-    { label: 'Staff',      used: usage?.staff ?? 0,      max: plan?.staff_cap ?? 999 },
+    { label: 'Devices',    used: usage?.devices ?? 0,    max: plan?.device_cap ?? 999 },
   ]
 
   const featureList = plan ? [

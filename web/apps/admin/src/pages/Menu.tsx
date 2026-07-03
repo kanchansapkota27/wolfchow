@@ -700,7 +700,7 @@ function ModifiersTab() {
   async function addOption(groupId: string) {
     const trimmed = newOptionName.trim()
     if (!trimmed) return
-    const delta = parseFloat(newOptionDelta) || 0
+    const delta = Math.round((parseFloat(newOptionDelta) || 0) * 100)
     await api.admin.createModifierOption(groupId, { name: trimmed, price_delta: delta, available: true })
     setAddingOption(null)
     setNewOptionName('')

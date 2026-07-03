@@ -3,8 +3,6 @@ import type { PauseState } from '@wolfchow/api-client'
 import { useApi } from '../lib/api'
 import { useRealtime } from '../lib/realtime'
 
-// ── Countdown display ─────────────────────────────────────────────────────────
-
 function usePauseCountdown(pauseUntil: string | null): string | null {
   const [label, setLabel] = useState<string | null>(null)
   useEffect(() => {
@@ -24,92 +22,87 @@ function usePauseCountdown(pauseUntil: string | null): string | null {
   return label
 }
 
-// ── Pause touch cards ─────────────────────────────────────────────────────────
+// ── Pause options ─────────────────────────────────────────────────────────────
 
-const PAUSE_OPTIONS: Array<{ label: string; sub: string; mode: 'timed' | 'manual'; minutes?: number }> = [
-  { label: '15 min',  sub: 'Back in 15 minutes',  mode: 'timed', minutes: 15 },
-  { label: '30 min',  sub: 'Back in 30 minutes',  mode: 'timed', minutes: 30 },
-  { label: '1 hour',  sub: 'Back in 1 hour',       mode: 'timed', minutes: 60 },
-  { label: 'Manual',  sub: 'Until you resume',      mode: 'manual' },
+const PAUSE_OPTIONS: Array<{ label: string; sub: string; mode: 'timed' | 'manual'; minutes?: number; icon: string }> = [
+  { label: '15 min', sub: 'Back in 15 minutes', mode: 'timed',  minutes: 15, icon: 'timer' },
+  { label: '30 min', sub: 'Back in 30 minutes', mode: 'timed',  minutes: 30, icon: 'timer' },
+  { label: '1 hour', sub: 'Back in an hour',    mode: 'timed',  minutes: 60, icon: 'schedule' },
+  { label: 'Manual', sub: 'Until you resume',   mode: 'manual',              icon: 'pan_tool' },
 ]
 
-interface TouchCardProps {
-  label: string
-  sub: string
-  busy: boolean
-  onClick: () => void
-}
+// ── Paused fullscreen state ───────────────────────────────────────────────────
 
-function TouchCard({ label, sub, busy, onClick }: TouchCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={busy}
-      className="flex flex-col items-center justify-center rounded-2xl border-2 border-amber-500/40 bg-amber-900/20 p-6 text-center transition-colors hover:bg-amber-900/40 disabled:opacity-40 active:scale-95"
-    >
-      <p className="text-2xl font-bold text-amber-300">{label}</p>
-      <p className="mt-1 text-xs text-amber-400/80">{sub}</p>
-    </button>
-  )
-}
-
-// ── Paused indicator ──────────────────────────────────────────────────────────
-
-interface PausedViewProps {
-  pause: PauseState
-  onResume: () => void
-  resuming: boolean
-}
-
-function PausedView({ pause, onResume, resuming }: PausedViewProps) {
+function PausedView({ pause, onResume, resuming }: { pause: PauseState; onResume: () => void; resuming: boolean }) {
   const countdown = usePauseCountdown(pause.pause_until)
   const [confirming, setConfirming] = useState(false)
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-8 text-center">
-      {/* Status indicator */}
-      <div className="flex h-24 w-24 items-center justify-center rounded-full bg-amber-500/20 border-4 border-amber-500/60">
-        <span className="text-4xl">⏸</span>
+    <div className="flex h-full flex-col items-center justify-center gap-8 p-8 text-center" style={{ background: 'rgba(255,183,120,0.03)' }}>
+      <div
+        className="flex h-32 w-32 items-center justify-center rounded-full"
+        style={{ background: 'rgba(255,183,120,0.1)', border: '3px solid rgba(255,183,120,0.3)' }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 56, color: 'var(--md-tertiary)', fontVariationSettings: "'FILL' 1" }}>pause_circle</span>
       </div>
 
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold text-amber-300">Orders Paused</h2>
+      <div className="space-y-3">
+        <p
+          className="font-black"
+          style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 32, color: 'var(--md-tertiary)' }}
+        >
+          Orders Paused
+        </p>
         {pause.pause_mode === 'timed' && countdown && (
-          <p className="text-4xl font-mono font-semibold text-white">{countdown}</p>
+          <p
+            className="tabular-nums font-black"
+            style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 48, color: 'var(--md-on-surface)' }}
+          >
+            {countdown}
+          </p>
         )}
         {pause.pause_mode === 'manual' && (
-          <p className="text-sm text-amber-400/80">Paused until manually resumed</p>
+          <p className="text-sm font-medium" style={{ color: 'var(--md-outline)' }}>Until manually resumed</p>
         )}
         {pause.pause_reason && (
-          <p className="text-sm text-gray-400 italic">"{pause.pause_reason}"</p>
+          <p className="text-sm italic" style={{ color: 'var(--md-on-surface-var)' }}>"{pause.pause_reason}"</p>
         )}
       </div>
 
-      {/* Resume button / confirmation */}
       {!confirming ? (
         <button
           onClick={() => setConfirming(true)}
           disabled={resuming}
-          className="mt-4 rounded-2xl bg-green-700 px-10 py-4 text-lg font-semibold text-white hover:bg-green-600 disabled:opacity-40 transition-colors"
+          className="rounded-xl font-black transition-all active:scale-95 disabled:opacity-40"
+          style={{
+            padding: '16px 48px',
+            background: 'var(--md-secondary-c)',
+            color: 'var(--md-on-secondary-c)',
+            fontFamily: "'JetBrains Mono',monospace",
+            fontSize: 14,
+            letterSpacing: '0.05em',
+          }}
         >
-          Resume Orders
+          RESUME ORDERS
         </button>
       ) : (
-        <div className="mt-4 space-y-3 w-full max-w-xs">
-          <p className="text-sm text-gray-300">Resume accepting orders now?</p>
+        <div className="space-y-4 w-full max-w-xs">
+          <p className="text-base font-semibold" style={{ color: 'var(--md-on-surface)' }}>Resume accepting orders now?</p>
           <div className="flex gap-3">
             <button
               onClick={() => setConfirming(false)}
-              className="flex-1 rounded-xl border border-gray-600 py-3 text-sm text-gray-400 hover:bg-gray-700"
+              className="flex-1 rounded-xl py-4 text-sm font-bold transition-colors"
+              style={{ border: '1px solid var(--md-outline-var)', color: 'var(--md-on-surface-var)', background: 'var(--md-surface-c)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.04em', fontSize: 12 }}
             >
-              Cancel
+              CANCEL
             </button>
             <button
               onClick={onResume}
               disabled={resuming}
-              className="flex-1 rounded-xl bg-green-700 py-3 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-40"
+              className="flex-1 rounded-xl py-4 font-black transition-all active:scale-95 disabled:opacity-40"
+              style={{ background: 'var(--md-secondary-c)', color: 'var(--md-on-secondary-c)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.04em', fontSize: 12 }}
             >
-              {resuming ? 'Resuming…' : 'Yes, Resume'}
+              {resuming ? 'RESUMING…' : 'YES, RESUME'}
             </button>
           </div>
         </div>
@@ -118,7 +111,7 @@ function PausedView({ pause, onResume, resuming }: PausedViewProps) {
   )
 }
 
-// ── Main PauseControl page ────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export function PauseControl() {
   const api = useApi()
@@ -138,7 +131,7 @@ export function PauseControl() {
     return subscribe('pause_state_changed', (_, payload) => {
       setPause((prev) => ({
         orders_paused: payload.paused as boolean,
-        pause_mode: (payload.mode as string | null) ?? null,
+        pause_mode: (payload.mode as 'timed' | 'manual' | 'rest_of_day' | null) ?? null,
         pause_until: (payload.pause_until as string | null) ?? null,
         pause_reason: (payload.reason as string | null) ?? null,
         pause_scheduled_orders: prev?.pause_scheduled_orders ?? false,
@@ -148,56 +141,86 @@ export function PauseControl() {
 
   const handlePause = useCallback(async (mode: 'timed' | 'manual', minutes?: number) => {
     setBusy(true)
-    try {
-      const state = await api.orders.tabletPauseOrders({ mode, duration_minutes: minutes })
-      setPause(state)
-    } finally {
-      setBusy(false)
-    }
+    try { setPause(await api.orders.tabletPauseOrders({ mode, duration_minutes: minutes })) }
+    finally { setBusy(false) }
   }, [api])
 
   const handleResume = useCallback(async () => {
     setBusy(true)
-    try {
-      const state = await api.orders.tabletUnpauseOrders()
-      setPause(state)
-    } finally {
-      setBusy(false)
-    }
+    try { setPause(await api.orders.tabletUnpauseOrders()) }
+    finally { setBusy(false) }
   }, [api])
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-gray-400 text-sm">
-        Loading…
+      <div className="flex h-full items-center justify-center" style={{ background: 'var(--md-bg)' }}>
+        <div
+          className="h-10 w-10 animate-spin rounded-full border-4"
+          style={{ borderColor: 'var(--md-surface-ch)', borderTopColor: 'var(--md-tertiary)' }}
+        />
       </div>
     )
   }
 
-  // Paused state — full-screen indicator
   if (pause?.orders_paused) {
     return <PausedView pause={pause} onResume={() => void handleResume()} resuming={busy} />
   }
 
-  // Not paused — show 4 touch cards
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-gray-700 px-4 py-3">
-        <h2 className="text-sm font-semibold text-gray-200">Pause Orders</h2>
-        <p className="mt-0.5 text-xs text-gray-500">Currently accepting orders</p>
+    <div className="flex h-full flex-col" style={{ background: 'var(--md-bg)' }}>
+      <div className="border-b px-6 py-4" style={{ borderColor: 'var(--md-outline-var)' }}>
+        <p
+          className="font-bold"
+          style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 20, color: 'var(--md-on-surface)' }}
+        >
+          Pause Orders
+        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="w-2.5 h-2.5 rounded-full pulse-dot" style={{ background: 'var(--md-secondary)' }} />
+          <p
+            className="font-bold"
+            style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--md-secondary)', letterSpacing: '0.05em' }}
+          >
+            CURRENTLY ACCEPTING ORDERS
+          </p>
+        </div>
       </div>
 
-      <div className="flex-1 p-4">
-        <p className="mb-4 text-center text-xs text-gray-400">How long do you want to pause?</p>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center p-8 gap-8">
+        <div className="text-center">
+          <p className="font-bold" style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 22, color: 'var(--md-on-surface)' }}>
+            How long do you need?
+          </p>
+          <p className="text-sm mt-1.5" style={{ color: 'var(--md-outline)' }}>
+            New orders will be paused for this duration
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
           {PAUSE_OPTIONS.map((opt) => (
-            <TouchCard
+            <button
               key={opt.label}
-              label={opt.label}
-              sub={opt.sub}
-              busy={busy}
               onClick={() => void handlePause(opt.mode, opt.minutes)}
-            />
+              disabled={busy}
+              className="flex flex-col items-center justify-center rounded-2xl py-8 px-4 text-center transition-all active:scale-95 disabled:opacity-40"
+              style={{
+                background: 'rgba(255,183,120,0.06)',
+                border: '2px solid rgba(255,183,120,0.2)',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.border = '2px solid rgba(255,183,120,0.5)')}
+              onMouseLeave={(e) => (e.currentTarget.style.border = '2px solid rgba(255,183,120,0.2)')}
+            >
+              <span className="material-symbols-outlined mb-3" style={{ fontSize: 32, color: 'var(--md-tertiary)', fontVariationSettings: "'FILL' 1" }}>
+                {opt.icon}
+              </span>
+              <p
+                className="font-black"
+                style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 22, color: 'var(--md-tertiary)' }}
+              >
+                {opt.label}
+              </p>
+              <p className="text-xs mt-1.5" style={{ color: 'var(--md-on-tertiary-c)' }}>{opt.sub}</p>
+            </button>
           ))}
         </div>
       </div>

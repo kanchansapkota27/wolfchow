@@ -67,6 +67,13 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
 
   app.get('/admin/promotions', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.promotions_enabled) {
+      return c.json({ error: 'feature_locked', feature: 'promotions_enabled' }, 402)
+    }
+
     const admin = createAdminClient(c.env)
     const { data, error } = await admin
       .from('promotions')
@@ -92,7 +99,8 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
 
     // Check promotions_enabled feature flag
     const plan = await resolvePlan(c.env, restaurantId)
-    if (!plan?.promotions_enabled) {
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.promotions_enabled) {
       return c.json({ error: 'feature_locked', feature: 'promotions_enabled' }, 402)
     }
 
@@ -136,6 +144,12 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
     const restaurantId = c.get('jwt').restaurant_id!
     const id = c.req.param('id')
 
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.promotions_enabled) {
+      return c.json({ error: 'feature_locked', feature: 'promotions_enabled' }, 402)
+    }
+
     const parsed = patchPromoSchema.safeParse(await parseBody(c.req.raw))
     if (!parsed.success) {
       return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
@@ -161,6 +175,13 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
   app.patch('/admin/promotions/:id/toggle', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
     const id = c.req.param('id')
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.promotions_enabled) {
+      return c.json({ error: 'feature_locked', feature: 'promotions_enabled' }, 402)
+    }
+
     const admin = createAdminClient(c.env)
 
     const { data: current } = await admin
@@ -191,6 +212,13 @@ export function registerPromotionsRoutes(app: Hono<HonoEnv>): void {
   app.delete('/admin/promotions/:id', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
     const id = c.req.param('id')
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const flags = plan?.feature_flags as Record<string, boolean> | undefined
+    if (!flags?.promotions_enabled) {
+      return c.json({ error: 'feature_locked', feature: 'promotions_enabled' }, 402)
+    }
+
     const admin = createAdminClient(c.env)
 
     const { data: promo } = await admin

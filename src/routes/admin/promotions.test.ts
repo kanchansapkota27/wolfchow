@@ -67,7 +67,7 @@ const VALID_PROMO = {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockKv.get.mockResolvedValue({ promotions_enabled: true })
+  mockKv.get.mockResolvedValue({ feature_flags: { promotions_enabled: true } })
   mockKv.delete.mockResolvedValue(undefined)
 })
 
@@ -126,7 +126,7 @@ describe('STORY-027 · Promotions management', () => {
   })
 
   it('plan without promotions_enabled: 402', async () => {
-    mockKv.get.mockResolvedValue({ promotions_enabled: false })
+    mockKv.get.mockResolvedValue({ feature_flags: { promotions_enabled: false } })
 
     const token = await ownerToken()
     const res = await app.request('/admin/promotions', {

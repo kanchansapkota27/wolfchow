@@ -6,7 +6,7 @@ import { registerPlanRoutes } from './plans'
 import { registerInviteRoutes } from './invites'
 import { registerImpersonateRoutes } from './impersonate'
 import { registerRestaurantRoutes, type RestaurantRouteDeps } from './restaurants'
-import { registerSmtpRoutes } from './smtp'
+import { registerSmtpRoutes, type SmtpRouteDeps } from './smtp'
 import { registerBillingRoutes } from './billing'
 import { registerAuditRoutes } from './audit'
 import { registerSettingsRoutes } from './settings'
@@ -21,9 +21,11 @@ import { registerSettingsRoutes } from './settings'
  * `deps` forwards injectable dependencies (e.g. a fake Realtime broadcaster) to
  * the resource routers for testing.
  */
+export interface SuperadminDeps extends RestaurantRouteDeps, SmtpRouteDeps {}
+
 export function registerSuperadminRoutes(
   app: Hono<HonoEnv>,
-  deps: RestaurantRouteDeps = {},
+  deps: SuperadminDeps = {},
 ): void {
   app.use('/superadmin/*', jwtMiddleware, requireRole('superadmin', 'support'), requireMFA())
 
@@ -43,7 +45,7 @@ export function registerSuperadminRoutes(
   registerInviteRoutes(app)
   registerImpersonateRoutes(app)
   registerRestaurantRoutes(app, deps)
-  registerSmtpRoutes(app)
+  registerSmtpRoutes(app, deps)
   registerBillingRoutes(app)
   registerAuditRoutes(app)
   registerSettingsRoutes(app)

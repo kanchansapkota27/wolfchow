@@ -9,7 +9,7 @@ import { PageHeader } from '../components/PageHeader'
 function toMessage(err: unknown): string {
   if (err instanceof ApiError) return `${err.status}: ${err.message}`
   if (err instanceof TypeError && err.message.includes('fetch'))
-    return 'Cannot reach API — is the Worker running on localhost:8787?'
+    return 'Cannot reach API — is the Worker running on localhost:8789?'
   if (err instanceof Error) return err.message
   return 'Failed to load'
 }
