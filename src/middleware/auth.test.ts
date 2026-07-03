@@ -162,6 +162,7 @@ async function makeEs256Token(
   return `${header}.${payload}.${bytesToB64url(new Uint8Array(sig))}`
 }
 
+// ES256 env: no SUPABASE_JWT_SECRET → middleware uses JWKS path.
 describe('STORY-003 · JWT middleware — ES256', () => {
   it('valid ES256 token: accepted, claims attached', async () => {
     const { privateKey, publicKey } = (await crypto.subtle.generateKey(
@@ -184,7 +185,8 @@ describe('STORY-003 · JWT middleware — ES256', () => {
     )
 
     const app = makeApp()
-    const env = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://supa-ec1.test' } as unknown as Env
+    // No SUPABASE_JWT_SECRET → env signals ES256 mode
+    const env = { SUPABASE_URL: 'http://supa-ec1.test' } as unknown as Env
     const res = await app.request('/me', auth(token), env)
 
     expect(res.status).toBe(200)
@@ -194,7 +196,6 @@ describe('STORY-003 · JWT middleware — ES256', () => {
   })
 
   it('ES256 token, wrong key (tampered): 401 token_invalid', async () => {
-    // Sign with key-A, but publish key-B in the JWKS.
     const { privateKey: keyA } = (await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
       true,
@@ -216,7 +217,7 @@ describe('STORY-003 · JWT middleware — ES256', () => {
     const token = await makeEs256Token({ sub: 'u', role: 'superadmin' }, keyA, kid)
 
     const app = makeApp()
-    const env = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://supa-ec2.test' } as unknown as Env
+    const env = { SUPABASE_URL: 'http://supa-ec2.test' } as unknown as Env
     const res = await app.request('/me', auth(token), env)
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'token_invalid' })
@@ -234,9 +235,43 @@ describe('STORY-003 · JWT middleware — ES256', () => {
     const token = await makeEs256Token({ sub: 'u', role: 'superadmin' }, privateKey, 'ec-key-3')
 
     const app = makeApp()
-    const env = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://supa-ec3.test' } as unknown as Env
+    const env = { SUPABASE_URL: 'http://supa-ec3.test' } as unknown as Env
     const res = await app.request('/me', auth(token), env)
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'token_invalid' })
+  })
+})
+
+// SEC-009: Algorithm is pinned to env config — token header `alg` is ignored.
+describe('SEC-009 · JWT algorithm pinned to env config', () => {
+  it('ES256 token presented to HS256 env: 401 token_invalid (algorithm confusion blocked)', async () => {
+    const { privateKey } = (await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    )) as CryptoKeyPair
+    const token = await makeEs256Token({ sub: 'u', role: 'superadmin' }, privateKey, 'ec-key-x')
+
+    const app = makeApp()
+    // HS256 env: SUPABASE_JWT_SECRET present → middleware uses HMAC, never tries JWKS
+    const env = { SUPABASE_JWT_SECRET: SECRET, SUPABASE_URL: 'http://unused' } as unknown as Env
+    const res = await app.request('/me', auth(token), env)
+    // HS256 verification of an ECDSA-signed token always fails
+    expect(res.status).toBe(401)
+  })
+
+  it('HS256 token presented to ES256 env: 401 token_invalid (algorithm confusion blocked)', async () => {
+    const token = await signToken({ sub: 'u', role: 'superadmin' })
+
+    // Publish a JWKS that has no matching EC key so ES256 path returns INVALID
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [] }), { headers: { 'Content-Type': 'application/json' } }),
+    )
+
+    const app = makeApp()
+    // ES256 env: no SUPABASE_JWT_SECRET → middleware uses JWKS, never tries HMAC
+    const env = { SUPABASE_URL: 'http://supa-alg-confusion.test' } as unknown as Env
+    const res = await app.request('/me', auth(token), env)
+    expect(res.status).toBe(401)
   })
 })

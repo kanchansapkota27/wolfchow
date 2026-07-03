@@ -42,7 +42,12 @@ export interface Env {
 
   // --- Secrets ---
   SUPABASE_SERVICE_ROLE_KEY: string
-  SUPABASE_JWT_SECRET: string
+  /**
+   * Set for HS256 Supabase projects (older). When present the JWT middleware
+   * uses HMAC-SHA256 verification. When absent it falls back to ES256 via JWKS.
+   * Never read from the token header — algorithm is always derived from config.
+   */
+  SUPABASE_JWT_SECRET?: string
   MASTER_ENCRYPTION_KEY: string
   INTERNAL_CRON_SECRET: string
   /** Reserved, unused — no Stripe webhooks in this architecture. */
