@@ -441,6 +441,110 @@ const schemas: Record<string, unknown> = {
       updated_at: { type: 'string', format: 'date-time' },
     },
   },
+  Device: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      restaurant_id: { type: 'string', format: 'uuid' },
+      name: { type: 'string' },
+      permissions: {
+        type: 'array',
+        items: { type: 'string', enum: ['orders:accept_reject', 'orders:status', 'inventory:write', 'orders:pause'] },
+      },
+      device_uuid: { type: 'string', nullable: true },
+      platform: { type: 'string', nullable: true },
+      last_seen_at: { type: 'string', format: 'date-time', nullable: true },
+      revoked_at: { type: 'string', format: 'date-time', nullable: true },
+      created_at: { type: 'string', format: 'date-time' },
+    },
+  },
+  EmailLog: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      to_address: { type: 'string', format: 'email' },
+      subject: { type: 'string' },
+      smtp_source: { type: 'string', enum: ['own', 'global'], nullable: true },
+      status: { type: 'string', enum: ['sent', 'failed', 'suppressed'] },
+      failure_reason: { type: 'string', nullable: true },
+      sent_at: { type: 'string', format: 'date-time' },
+    },
+  },
+  WidgetSettings: {
+    type: 'object',
+    properties: {
+      slug: { type: 'string' },
+      display_name: { type: 'string' },
+      logo_url: { type: 'string', nullable: true },
+      brand_colors: { type: 'object', nullable: true },
+      font_family: { type: 'string', nullable: true },
+      currency: { type: 'string' },
+      timezone: { type: 'string' },
+      payment_methods: { type: 'array', items: { type: 'string' } },
+      stripe_publishable_key: { type: 'string', nullable: true },
+      pickup_delivery_note: { type: 'string', nullable: true },
+      tips: ref('TipsConfig'),
+      tax: ref('TaxConfig'),
+      orders_paused: { type: 'boolean' },
+      pause_reason: { type: 'string', nullable: true },
+      features: ref('FeatureFlags'),
+      scheduling: ref('SchedulingConfig'),
+      notices: { type: 'array', items: ref('Notice') },
+      media_base_url: { type: 'string' },
+    },
+  },
+  PublicOrderItem: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      item_name: { type: 'string', nullable: true },
+      variant_name: { type: 'string', nullable: true },
+      quantity: { type: 'integer' },
+      unit_price: { type: 'integer', description: 'Price in cents' },
+      modifiers: { type: 'array', items: { type: 'object' } },
+      notes: { type: 'string', nullable: true },
+    },
+  },
+  PublicOrderTracking: {
+    type: 'object',
+    properties: {
+      order_id: { type: 'string', format: 'uuid' },
+      tracking_token: { type: 'string' },
+      status: { type: 'string' },
+      payment_method: { type: 'string' },
+      customer_name: { type: 'string', nullable: true },
+      subtotal: { type: 'integer', description: 'In cents' },
+      promo_discount: { type: 'integer', description: 'In cents' },
+      tax_amount: { type: 'integer', description: 'In cents' },
+      tip_amount: { type: 'integer', description: 'In cents' },
+      total: { type: 'integer', description: 'In cents' },
+      created_at: { type: 'string', format: 'date-time' },
+      scheduled_for: { type: 'string', format: 'date-time', nullable: true },
+      estimated_ready: { type: 'string', format: 'date-time', nullable: true },
+      items: { type: 'array', items: ref('PublicOrderItem') },
+    },
+  },
+}
+
+function healthPaths(): Record<string, PathItem> {
+  return {
+    '/health': {
+      get: {
+        tags: ['health'],
+        summary: 'Liveness probe',
+        description: 'Dependency-free health check. Returns 200 even when Supabase or Stripe are degraded.',
+        responses: {
+          '200': res('Healthy', {
+            type: 'object',
+            properties: {
+              status: { type: 'string', example: 'ok' },
+              timestamp: { type: 'string', format: 'date-time' },
+            },
+          }),
+        },
+      },
+    },
+  }
 }
 
 function authPaths(): Record<string, PathItem> {
@@ -642,6 +746,30 @@ function superadminPaths(): Record<string, PathItem> {
           }),
         },
       }),
+      post: secured({
+        summary: 'Create a restaurant directly (bypasses invite flow)',
+        requestBody: body({
+          type: 'object',
+          required: ['slug', 'business_name', 'timezone', 'currency'],
+          properties: {
+            slug: { type: 'string' },
+            business_name: { type: 'string' },
+            display_name: { type: 'string' },
+            timezone: { type: 'string', example: 'Europe/London' },
+            currency: { type: 'string', minLength: 3, maxLength: 3, example: 'GBP' },
+            country: { type: 'string' },
+            state: { type: 'string' },
+            plan_id: { type: 'string', format: 'uuid' },
+            override_commission_type: { type: 'string', enum: ['percentage', 'flat'] },
+            override_commission_value: { type: 'number' },
+          },
+        }),
+        responses: {
+          '201': res('Created restaurant', { type: 'object', properties: { restaurant: ref('Restaurant') } }),
+          '409': errRes('Slug already taken'),
+          '422': errRes('Validation error'),
+        },
+      }),
     },
     '/superadmin/restaurants/{id}': {
       get: secured({
@@ -807,6 +935,84 @@ function superadminPaths(): Record<string, PathItem> {
         responses: {
           '200': res('New secret', { type: 'object', properties: { webhook_signing_secret: { type: 'string' } } }),
           '500': errRes('DB update failed'),
+        },
+      }),
+    },
+
+    // ── Direct restaurant user creation ──────────────────────────────────────────
+
+    '/superadmin/restaurants/{id}/users': {
+      post: secured({
+        summary: 'Create an owner user account for an existing restaurant',
+        description: 'User is flagged force_password_change: true on first login.',
+        parameters: [uuidParam('id', 'Restaurant id')],
+        requestBody: body({
+          type: 'object',
+          required: ['email', 'password', 'name'],
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string', minLength: 8 },
+            name: { type: 'string' },
+            phone: { type: 'string' },
+          },
+        }),
+        responses: {
+          '201': res('Created user', {
+            type: 'object',
+            properties: {
+              user: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  email: { type: 'string', format: 'email' },
+                  name: { type: 'string' },
+                  role: { type: 'string' },
+                  restaurant_id: { type: 'string', format: 'uuid' },
+                  force_password_change: { type: 'boolean' },
+                  created_at: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+          }),
+          '409': errRes('Email already taken'),
+          '422': errRes('Validation error'),
+        },
+      }),
+    },
+
+    // ── Invite revocation ────────────────────────────────────────────────────────
+
+    '/superadmin/invites/{id}/revoke': {
+      post: secured({
+        summary: 'Soft-revoke an unused invite (no-op on used/expired)',
+        parameters: [uuidParam('id', 'Invite id')],
+        responses: {
+          '204': res('Revoked'),
+          '404': errRes('Invite not found or already used/expired'),
+        },
+      }),
+    },
+
+    // ── SMTP override listing ────────────────────────────────────────────────────
+
+    '/superadmin/smtp/overrides': {
+      get: secured({
+        summary: 'List all per-restaurant SMTP overrides with monthly usage',
+        responses: {
+          '200': res('Overrides', {
+            type: 'object',
+            properties: {
+              overrides: {
+                type: 'array',
+                items: {
+                  allOf: [ref('SmtpConfig'), {
+                    type: 'object',
+                    properties: { restaurant_name: { type: 'string' } },
+                  }],
+                },
+              },
+            },
+          }),
         },
       }),
     },
@@ -1618,6 +1824,18 @@ function adminPaths(): Record<string, PathItem> {
       }),
     },
     '/admin/payments/methods': {
+      get: secured({
+        summary: 'Get enabled payment methods and pickup/delivery note',
+        responses: {
+          '200': res('Payment methods', {
+            type: 'object',
+            properties: {
+              payment_methods: { type: 'array', items: { type: 'string' } },
+              pickup_delivery_note: { type: 'string', nullable: true },
+            },
+          }),
+        },
+      }),
       patch: secured({
         summary: 'Set accepted payment methods (validated against plan allowlist)',
         requestBody: body({
@@ -2021,6 +2239,195 @@ function adminPaths(): Record<string, PathItem> {
         },
       }),
     },
+
+    // ── Admin order accept / reject ───────────────────────────────────────────────
+
+    '/admin/orders/{id}/accept': {
+      post: secured({
+        summary: 'Accept an order from the admin panel',
+        description: 'Captures Stripe PaymentIntent for card orders. Broadcasts order_accepted.',
+        parameters: [uuidParam('id', 'Order id')],
+        responses: {
+          '200': res('Accepted order', ref('Order')),
+          '409': errRes('Order already accepted'),
+          '422': errRes('Invalid status'),
+          '502': errRes('Stripe capture failed'),
+        },
+      }),
+    },
+    '/admin/orders/{id}/reject': {
+      post: secured({
+        summary: 'Reject an order from the admin panel',
+        description: 'Cancels Stripe PaymentIntent for card orders. Broadcasts order_rejected.',
+        parameters: [uuidParam('id', 'Order id')],
+        requestBody: body({
+          type: 'object',
+          properties: { reason: { type: 'string', maxLength: 500 } },
+        }, false),
+        responses: {
+          '200': res('Rejected order', ref('Order')),
+          '404': errRes('Not found'),
+          '422': errRes('Invalid status'),
+        },
+      }),
+    },
+
+    // ── Closure delete ───────────────────────────────────────────────────────────
+
+    '/admin/closures/{id}': {
+      delete: secured({
+        summary: 'Delete a special closure',
+        parameters: [uuidParam('id', 'Closure id')],
+        responses: {
+          '204': res('Deleted'),
+          '404': errRes('Not found'),
+        },
+      }),
+    },
+
+    // ── Email log ────────────────────────────────────────────────────────────────
+
+    '/admin/email-log': {
+      get: secured({
+        summary: 'Last 50 email attempts for this restaurant (sent / failed / suppressed)',
+        description: 'Used for delivery diagnostics. Shows the most recent entries for all order notification emails.',
+        responses: {
+          '200': res('Email log', {
+            type: 'object',
+            properties: { logs: { type: 'array', items: ref('EmailLog') } },
+          }),
+        },
+      }),
+    },
+
+    // ── Devices ──────────────────────────────────────────────────────────────────
+
+    '/admin/devices': {
+      get: secured({
+        summary: 'List active tablet devices with plan cap info',
+        responses: {
+          '200': res('Devices', {
+            type: 'object',
+            properties: {
+              devices: { type: 'array', items: ref('Device') },
+              device_cap: { type: 'integer', nullable: true },
+              device_count: { type: 'integer' },
+            },
+          }),
+        },
+      }),
+      post: secured({
+        summary: 'Create a tablet device and return a one-time device token (owner-only)',
+        description: 'Generates a dt_-prefixed token stored in KV (90-day TTL). The token is never stored in plaintext and never returned again — enter it on the tablet immediately.',
+        requestBody: body({
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', maxLength: 100 },
+            permissions: {
+              type: 'array',
+              items: { type: 'string', enum: ['orders:accept_reject', 'orders:status', 'inventory:write', 'orders:pause'] },
+            },
+          },
+        }),
+        responses: {
+          '201': res('Device token + device row', {
+            type: 'object',
+            properties: {
+              device_token: { type: 'string', example: 'dt_…', description: 'One-time token — store immediately, not returned again' },
+              device: ref('Device'),
+            },
+          }),
+          '402': res('Plan device cap reached', ref('Error')),
+          '422': errRes('Validation error'),
+        },
+      }),
+    },
+    '/admin/devices/{id}': {
+      patch: secured({
+        summary: 'Update device name or permissions',
+        description: 'Syncs updated permissions into KV so the next login gets fresh JWT claims.',
+        parameters: [uuidParam('id', 'Device id')],
+        requestBody: body({
+          type: 'object',
+          properties: {
+            name: { type: 'string', maxLength: 100 },
+            permissions: {
+              type: 'array',
+              items: { type: 'string', enum: ['orders:accept_reject', 'orders:status', 'inventory:write', 'orders:pause'] },
+            },
+          },
+        }),
+        responses: {
+          '200': res('Updated device', ref('Device')),
+          '404': errRes('Not found'),
+          '422': errRes('Validation error'),
+        },
+      }),
+      delete: secured({
+        summary: 'Revoke a tablet device (owner-only)',
+        description: 'Deletes KV token entries immediately so the tablet is instantly deauthorised. Sets revoked_at in DB.',
+        parameters: [uuidParam('id', 'Device id')],
+        responses: {
+          '204': res('Revoked'),
+          '404': errRes('Not found'),
+        },
+      }),
+    },
+
+    // ── Modifier assignments ─────────────────────────────────────────────────────
+
+    '/admin/menu/items/{item_id}/modifier-assignments': {
+      get: secured({
+        summary: 'List global modifier group IDs assigned to an item',
+        parameters: [uuidParam('item_id', 'Item id')],
+        responses: {
+          '200': res('Assigned group IDs', {
+            type: 'object',
+            properties: { group_ids: { type: 'array', items: { type: 'string', format: 'uuid' } } },
+          }),
+        },
+      }),
+      put: secured({
+        summary: 'Replace the full set of global modifier group assignments for an item',
+        description: 'Deletes existing assignments then inserts the supplied set. All group_ids must belong to the same restaurant.',
+        parameters: [uuidParam('item_id', 'Item id')],
+        requestBody: body({
+          type: 'object',
+          required: ['group_ids'],
+          properties: {
+            group_ids: { type: 'array', items: { type: 'string', format: 'uuid' } },
+          },
+        }),
+        responses: {
+          '200': res('Updated group IDs', {
+            type: 'object',
+            properties: { group_ids: { type: 'array', items: { type: 'string', format: 'uuid' } } },
+          }),
+          '422': errRes('One or more group_ids not found for this restaurant'),
+        },
+      }),
+    },
+
+    // ── Items reorder ────────────────────────────────────────────────────────────
+
+    '/admin/menu/items/reorder': {
+      post: secured({
+        summary: 'Batch-update sort_order for multiple items',
+        requestBody: body({
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['id', 'sort_order'],
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              sort_order: { type: 'integer', minimum: 0 },
+            },
+          },
+        }),
+        responses: { '204': res('Reordered'), '422': errRes('Validation error') },
+      }),
+    },
   }
 }
 
@@ -2254,6 +2661,263 @@ function tabletPaths(): Record<string, PathItem> {
         },
       }),
     },
+
+    // ── Order history ────────────────────────────────────────────────────────────
+
+    '/tablet/orders/history': {
+      get: secured({
+        summary: 'Paginated completed/rejected/missed order history',
+        description: 'Date window is controlled by the plan\'s transaction_history_days field (Starter=30, Growth=365, Pro=unlimited).',
+        parameters: [queryParam('page', 'Page number (default 1)', { type: 'integer' })],
+        responses: {
+          '200': res('Order history', {
+            type: 'object',
+            properties: {
+              orders: { type: 'array', items: ref('Order') },
+              total: { type: 'integer' },
+              page: { type: 'integer' },
+              page_size: { type: 'integer', example: 20 },
+              history_days: { type: 'integer', nullable: true, description: 'null = unlimited (Pro plan)' },
+            },
+          }),
+        },
+      }),
+    },
+
+    // ── Heartbeat ────────────────────────────────────────────────────────────────
+
+    '/tablet/heartbeat': {
+      post: secured({
+        summary: 'Fire-and-forget last_seen_at update for the device',
+        description: 'Called periodically by the tablet PWA to indicate it is online. Always returns 204 — failures are silently ignored.',
+        responses: { '204': res('Received') },
+      }),
+    },
+  }
+}
+
+function publicPaths(): Record<string, PathItem> {
+  const tags = ['public']
+  const op = (o: OperationObject): OperationObject => ({ ...o, tags })
+
+  return {
+    '/public/{slug}/settings': {
+      get: op({
+        summary: 'Widget bootstrap — brand, payments, tips, tax, notices, feature flags',
+        description: 'KV-cached for 60 seconds. Called once on widget load before rendering anything.',
+        parameters: [stringPathParam('slug', 'Restaurant URL slug')],
+        responses: {
+          '200': res('Widget settings', ref('WidgetSettings')),
+          '404': errRes('Restaurant not found'),
+        },
+      }),
+    },
+    '/public/{slug}/menu': {
+      get: op({
+        summary: 'Full public menu — categories, items, variants, modifier groups',
+        description: 'Item images included only when menu_photos feature flag is true. Modifier groups included only when item_modifiers flag is true. KV-cached.',
+        parameters: [stringPathParam('slug', 'Restaurant URL slug')],
+        responses: {
+          '200': res('Menu', {
+            type: 'object',
+            properties: {
+              categories: {
+                type: 'array',
+                items: {
+                  allOf: [ref('MenuCategory'), {
+                    type: 'object',
+                    properties: { items: { type: 'array', items: ref('MenuItem') } },
+                  }],
+                },
+              },
+            },
+          }),
+          '404': errRes('Restaurant not found'),
+        },
+      }),
+    },
+    '/public/{slug}/orders': {
+      post: op({
+        summary: 'Place a new order',
+        description:
+          'Validates all items/variants/modifiers from DB — prices are never trusted from the client. ' +
+          'Applies promo discount and tax. For card: creates Stripe PaymentIntent (manual capture) and returns client_secret. ' +
+          'For non-card: broadcasts new_order to tablet, sends confirmation email, auto-accepts if enabled.',
+        parameters: [stringPathParam('slug', 'Restaurant URL slug')],
+        requestBody: body({
+          type: 'object',
+          required: ['customer_name', 'customer_email', 'payment_method', 'items'],
+          properties: {
+            customer_name: { type: 'string' },
+            customer_email: { type: 'string', format: 'email' },
+            customer_phone: { type: 'string' },
+            payment_method: ref('PaymentMethod'),
+            scheduled_for: { type: 'string', format: 'date-time', description: 'Required when payment_method=scheduled' },
+            items: {
+              type: 'array',
+              minItems: 1,
+              items: {
+                type: 'object',
+                required: ['item_id', 'quantity'],
+                properties: {
+                  item_id: { type: 'string', format: 'uuid' },
+                  variant_id: { type: 'string', format: 'uuid' },
+                  quantity: { type: 'integer', minimum: 1, maximum: 50 },
+                  modifiers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['group_id', 'option_id'],
+                      properties: {
+                        group_id: { type: 'string', format: 'uuid' },
+                        option_id: { type: 'string', format: 'uuid' },
+                      },
+                    },
+                  },
+                  notes: { type: 'string' },
+                },
+              },
+            },
+            promo_code: { type: 'string' },
+            promo_id: { type: 'string', format: 'uuid' },
+            tip_amount: { type: 'number', minimum: 0 },
+            notes: { type: 'string', maxLength: 1000 },
+            marketing_consent: { type: 'boolean' },
+          },
+        }),
+        responses: {
+          '201': res('Order created', {
+            type: 'object',
+            properties: {
+              order_id: { type: 'string', format: 'uuid' },
+              tracking_token: { type: 'string' },
+              client_secret: { type: 'string', nullable: true, description: 'Stripe PaymentIntent client secret (card orders only)' },
+              total: { type: 'integer', description: 'Total in cents' },
+              currency: { type: 'string' },
+            },
+          }),
+          '422': errRes('Validation error (unavailable item/variant/modifier, invalid promo, etc.)'),
+          '503': errRes('Orders paused or Stripe not configured'),
+          '502': errRes('Stripe PaymentIntent creation failed'),
+        },
+      }),
+    },
+    '/public/{slug}/orders/{order_id}/confirm': {
+      post: op({
+        summary: 'Confirm a card order after Stripe.js payment',
+        description: 'Verifies PaymentIntent is in requires_capture state with Stripe. Moves order to auth_success (or accepted if auto_accept). Broadcasts new_order to tablet and sends confirmation email.',
+        parameters: [
+          stringPathParam('slug', 'Restaurant URL slug'),
+          uuidParam('order_id', 'Order id'),
+        ],
+        requestBody: body({
+          type: 'object',
+          required: ['payment_intent_id'],
+          properties: { payment_intent_id: { type: 'string' } },
+        }),
+        responses: {
+          '200': res('Confirmed', {
+            type: 'object',
+            properties: {
+              order_id: { type: 'string', format: 'uuid' },
+              tracking_token: { type: 'string' },
+              status: { type: 'string', enum: ['auth_success', 'accepted'] },
+            },
+          }),
+          '409': errRes('Order already confirmed'),
+          '422': errRes('Intent mismatch or payment not authorised'),
+          '502': errRes('Stripe verification failed'),
+        },
+      }),
+    },
+    '/public/{slug}/orders/{tracking_token}': {
+      get: op({
+        summary: 'Order tracking page data (requires order_tracking_page feature flag)',
+        parameters: [
+          stringPathParam('slug', 'Restaurant URL slug'),
+          stringPathParam('tracking_token', 'Tracking token returned at order creation'),
+        ],
+        responses: {
+          '200': res('Tracking data', ref('PublicOrderTracking')),
+          '404': errRes('Not found or feature_not_available'),
+        },
+      }),
+    },
+    '/public/{slug}/slots': {
+      get: op({
+        summary: 'Available pickup time slots for scheduled ordering',
+        description: 'Requires scheduled_orders_enabled feature flag. Computed from operating hours and closures. KV-cached.',
+        parameters: [stringPathParam('slug', 'Restaurant URL slug')],
+        responses: {
+          '200': res('Slots', {
+            type: 'object',
+            properties: { slots: { type: 'array', items: { type: 'string', format: 'date-time' } } },
+          }),
+          '402': errRes('Feature locked — scheduled_orders_enabled is false'),
+          '404': errRes('Restaurant not found'),
+        },
+      }),
+    },
+    '/public/{slug}/promo/validate': {
+      post: op({
+        summary: 'Validate a promo code against a subtotal before order submission',
+        parameters: [stringPathParam('slug', 'Restaurant URL slug')],
+        requestBody: body({
+          type: 'object',
+          required: ['code', 'subtotal'],
+          properties: {
+            code: { type: 'string', maxLength: 50, description: 'Uppercased server-side' },
+            subtotal: { type: 'number', minimum: 0 },
+          },
+        }),
+        responses: {
+          '200': res('Validation result', {
+            type: 'object',
+            properties: {
+              valid: { type: 'boolean' },
+              promo_id: { type: 'string', format: 'uuid', nullable: true },
+              title: { type: 'string', nullable: true },
+              discount_type: { type: 'string', nullable: true },
+              discount_value: { type: 'number', nullable: true },
+              discount_amount: { type: 'number', nullable: true },
+              free_item_id: { type: 'string', format: 'uuid', nullable: true },
+              message: { type: 'string', nullable: true, description: 'Human-readable reason when valid=false' },
+            },
+          }),
+        },
+      }),
+    },
+
+    // ── R2 media ─────────────────────────────────────────────────────────────────
+
+    '/r2/{key}': {
+      get: {
+        tags: ['media'],
+        summary: 'Serve a media file from R2',
+        description:
+          'Key must match {uuid}/{uuid}/{name}.ext or {uuid}/logo/{name}.ext patterns. ' +
+          'Content-type is validated against an allowlist before serving. ' +
+          'Returns security headers including CSP default-src \'none\' and 1-year cache.',
+        parameters: [stringPathParam('key', 'R2 object key')],
+        responses: {
+          '200': { description: 'Image bytes', content: { 'image/*': { schema: { type: 'string', format: 'binary' } } } },
+          '404': errRes('Not found or invalid key pattern'),
+        },
+      },
+      put: {
+        tags: ['media'],
+        summary: 'Upload a file to R2 (local development only)',
+        description: 'Blocked in production (when R2_ACCOUNT_ID is set). Key must be scoped to the caller\'s restaurant_id. Use presigned PUT URLs from /admin/restaurant/logo or /admin/menu/items/:id/image in production.',
+        security: bearer,
+        parameters: [stringPathParam('key', 'R2 object key (must start with {restaurant_id}/')],
+        requestBody: { required: true, content: { 'image/*': { schema: { type: 'string', format: 'binary' } } } },
+        responses: {
+          '204': res('Uploaded'),
+          '403': errRes('Forbidden — production or wrong restaurant scope'),
+          '415': errRes('Unsupported content type'),
+        },
+      },
+    },
   }
 }
 
@@ -2263,22 +2927,26 @@ export function buildOpenApiDocument(): OpenApiDocument {
     openapi: '3.1.0',
     info: {
       title: 'RestroAPI',
-      version: '0.3.0',
+      version: '0.4.0',
       description:
         'Multi-tenant restaurant ordering SaaS API. ' +
-        'Covers: auth (login/refresh/logout/device/invite/signup), ' +
+        'Covers: health check, auth (login/refresh/logout/device/invite/signup), ' +
         'superadmin (plans, invites, restaurants, SMTP, billing, audit, platform settings, impersonation), ' +
-        'admin (restaurant profile, plan usage, menu categories/items/variants/modifiers, ' +
-        'operating hours, closures, scheduling, pause/unpause, active orders, automation, ' +
-        'staff management, Stripe payment config, SMTP, notifications, tips, tax, ' +
-        'promotions, notices, transactions/refunds), and ' +
-        'tablet (session, orders CRUD/accept/reject/status, inventory, pause/unpause).',
+        'admin (restaurant profile, plan usage, menu categories/items/variants/modifiers/assignments, ' +
+        'operating hours, closures, scheduling, pause/unpause, active orders, accept/reject, automation, ' +
+        'devices, Stripe payment config, SMTP, notifications, email-log, tips, tax, ' +
+        'promotions, notices, transactions/refunds), ' +
+        'tablet (session, orders CRUD/accept/reject/status/history, inventory, pause/unpause, heartbeat), ' +
+        'public storefront (settings, menu, orders, confirm, tracking, slots, promo), and R2 media.',
     },
     tags: [
+      { name: 'health', description: 'Liveness probe' },
       { name: 'auth', description: 'Login, refresh, logout, device auth, invite validation, signup' },
       { name: 'superadmin', description: 'Platform control plane (Bearer JWT + platform role + MFA required)' },
       { name: 'admin', description: 'Restaurant owner operations (Bearer JWT, restaurant_owner role)' },
-      { name: 'tablet', description: 'Kitchen tablet operations (Bearer JWT issued from device token, kitchen role)' },
+      { name: 'tablet', description: 'Kitchen tablet operations (Bearer JWT issued from device token, tablet_device role)' },
+      { name: 'public', description: 'Public storefront/widget endpoints (no auth, rate-limited by IP)' },
+      { name: 'media', description: 'R2 media serving and local-dev upload' },
     ],
     components: {
       securitySchemes: {
@@ -2286,6 +2954,13 @@ export function buildOpenApiDocument(): OpenApiDocument {
       },
       schemas,
     },
-    paths: { ...authPaths(), ...superadminPaths(), ...adminPaths(), ...tabletPaths() },
+    paths: {
+      ...healthPaths(),
+      ...authPaths(),
+      ...superadminPaths(),
+      ...adminPaths(),
+      ...tabletPaths(),
+      ...publicPaths(),
+    },
   }
 }
