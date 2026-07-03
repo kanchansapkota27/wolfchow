@@ -213,9 +213,10 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     const adminEmail = (user as { email: string } | null)?.email
     if (!adminEmail) return c.json({ error: 'user_not_found' }, 404)
 
-    // Optional custom recipient — falls back to the admin's own email
+    // Optional custom recipient — validated as proper email, falls back to admin's own email
     const body = await parseBody(c.req.raw) as { to?: string } | null
-    const toEmail = (typeof body?.to === 'string' && body.to.includes('@')) ? body.to : adminEmail
+    const toRaw = typeof body?.to === 'string' ? body.to.trim() : ''
+    const toEmail = z.string().email().safeParse(toRaw).success ? toRaw : adminEmail
 
     const transport = deps.transport?.(c.env)
     const sender = deps.sendTestEmail ?? makeSavedConfigTester(c.env, transport)

@@ -45,12 +45,12 @@ export function registerStatusRoutes(app: Hono<HonoEnv>, deps: StatusRouteDeps =
     const admin = createAdminClient(c.env)
     const { data: order, error: fetchErr } = await admin
       .from('orders')
-      .select('id, status, restaurant_id')
+      .select('id, status')
       .eq('id', orderId)
+      .eq('restaurant_id', restaurantId)
       .single()
 
     if (fetchErr || !order) return c.json({ error: 'not_found' }, 404)
-    if (order.restaurant_id !== restaurantId) return c.json({ error: 'forbidden' }, 403)
 
     const allowed = VALID_TRANSITIONS[order.status] ?? []
     if (!allowed.includes(newStatus)) {

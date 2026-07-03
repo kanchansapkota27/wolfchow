@@ -63,7 +63,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
     // Load order items (no price info leaked beyond what's already been paid)
     const { data: items } = await admin
       .from('order_items')
-      .select('id, item_id, item_name, variant_name, quantity, unit_price, modifiers, notes')
+      .select('id, item_id, item_name, variant_name, quantity, modifiers, notes')
       .eq('order_id', or.id as string)
 
     // Estimate ready time based on created_at + prep_minutes
@@ -92,8 +92,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
           item_name: ir.item_name as string | null,
           variant_name: ir.variant_name as string | null,
           quantity: ir.quantity as number,
-          unit_price: Number(ir.unit_price),
-          modifiers: ir.modifiers as Array<{ name: string; price_delta: number }>,
+          modifiers: (ir.modifiers as Array<{ name: string }> ?? []).map(({ name }) => ({ name })),
           notes: ir.notes as string | null,
         }
       }),

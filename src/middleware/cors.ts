@@ -29,8 +29,8 @@ export function corsMiddleware(): MiddlewareHandler<HonoEnv> {
         return origin && configured.includes(origin) ? origin : null
       }
 
-      // Dev: allow any local origin and file:// (browsers send "null" for file://).
-      if (!origin || origin === 'null') return origin ?? null
+      // Dev: allow any local origin. Reject null-origin (file:// / sandboxed iframes).
+      if (!origin || origin === 'null') return null
       return DEV_LOCAL_ORIGIN_RE.test(origin) ? origin : null
     },
     allowHeaders: ['Authorization', 'Content-Type'],

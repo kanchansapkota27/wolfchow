@@ -310,6 +310,7 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
     // Apply promotion
     let promoDiscount = 0
     let promoId: string | null = null
+    let promoUsageLimit: number | null = null
 
     if (input.promo_id || input.promo_code) {
       let promoQuery = admin.from('promotions').select('id, discount_type, discount_value, minimum_order_amount, usage_limit, usage_count, start_time, end_time').eq('restaurant_id', restaurantId).eq('active', true)
@@ -332,6 +333,7 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
 
         if ((!start || start <= now) && (!end || end >= now) && (limit === null || count < limit) && (minOrder === null || subtotal >= minOrder)) {
           promoId = promo.id as string
+          promoUsageLimit = limit
           const dtype = promo.discount_type as string
           const dvalue = promo.discount_value as number
           if (dtype === 'percentage') promoDiscount = Math.round((subtotal * dvalue) / 100 * 100) / 100
@@ -425,15 +427,14 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
       return c.json({ error: 'order_items_failed' }, 500)
     }
 
-    // Increment promo usage count (best-effort, non-atomic)
+    // Atomic promo usage increment — rejects if the limit was reached by a concurrent request
     if (promoId) {
-      try {
-        const { data: currentPromo } = await admin.from('promotions').select('usage_count').eq('id', promoId).single()
-        if (currentPromo) {
-          const currentCount = (currentPromo as Record<string, unknown>).usage_count as number
-          await admin.from('promotions').update({ usage_count: currentCount + 1 }).eq('id', promoId)
-        }
-      } catch { /* ignore */ }
+      const { data: incremented, error: rpcErr } = await admin
+        .rpc('increment_promo_usage', { _promo_id: promoId, _max_usage: promoUsageLimit })
+      if (rpcErr || incremented === false) {
+        await admin.from('orders').delete().eq('id', orderId)
+        return c.json({ error: 'promo_limit_reached' }, 409)
+      }
     }
 
     // For card payments: create Stripe PaymentIntent
@@ -603,22 +604,26 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
         const stripe = new StripeService(secretKey)
         await stripe.capturePaymentIntent(stripeIntentId, `capture_${orderId}`)
 
-        await admin.from('orders').update({
+        const { data: locked } = await admin.from('orders').update({
           status: 'accepted',
           payment_status: 'captured',
           stripe_amount_authorized: intent.amount,
           updated_at: new Date().toISOString(),
-        }).eq('id', orderId)
+        }).eq('id', orderId).eq('status', 'pending_payment').select('id')
+
+        if (!locked?.length) return c.json({ error: 'order_already_confirmed' }, 409)
 
         const realtime = new RealtimeService(c.env)
         realtime.broadcast(restaurantId, 'order_accepted', { order_id: orderId }, c.executionCtx)
       } else {
-        await admin.from('orders').update({
+        const { data: locked } = await admin.from('orders').update({
           status: 'auth_success',
           payment_status: 'authorized',
           stripe_amount_authorized: intent.amount,
           accept_deadline_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        }).eq('id', orderId)
+        }).eq('id', orderId).eq('status', 'pending_payment').select('id')
+
+        if (!locked?.length) return c.json({ error: 'order_already_confirmed' }, 409)
       }
 
       // Notify tablet — card orders broadcast here after payment is confirmed
