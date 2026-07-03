@@ -79,7 +79,7 @@ export function registerStatusRoutes(app: Hono<HonoEnv>, deps: StatusRouteDeps =
 
     if (newStatus === 'ready' && deps.notifier) {
       const u = updated as Record<string, unknown>
-      void deps.notifier(c.env).sendOrderReady(restaurantId, {
+      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderReady(restaurantId, {
         id: orderId,
         tracking_token: u.tracking_token as string,
         customer_name: u.customer_name as string,
@@ -88,7 +88,7 @@ export function registerStatusRoutes(app: Hono<HonoEnv>, deps: StatusRouteDeps =
         payment_method: u.payment_method as string,
         notes: (u.notes as string | null) ?? null,
         scheduled_for: (u.scheduled_for as string | null) ?? null,
-      })
+      }))
     }
 
     return c.json(updated)

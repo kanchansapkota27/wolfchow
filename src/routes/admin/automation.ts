@@ -7,7 +7,7 @@ import { buildKey, KvCache } from '../../services/kv'
 const patchAutomationSchema = z.object({
   auto_accept: z.boolean().optional(),
   auto_reject_enabled: z.boolean().optional(),
-  auto_reject_minutes: z.number().int().min(5).max(120).optional(),
+  auto_reject_minutes: z.number().int().min(2).max(15).optional(),
 })
 
 async function parseBody(req: Request): Promise<unknown> {

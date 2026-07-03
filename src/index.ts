@@ -12,6 +12,7 @@ import { registerPublicRoutes } from './routes/public'
 import { jwtMiddleware } from './middleware/jwt'
 import { createSmartTransport } from './services/email-transport'
 import { NotificationService } from './services/notifications'
+import { runInventoryRestore, runAutoReject } from './services/cron'
 
 const app = new Hono<HonoEnv>()
 
@@ -107,9 +108,23 @@ const notifier = (env: Env) => new NotificationService(env, createSmartTransport
 registerHealthRoutes(app)
 registerAuthRoutes(app)
 registerPublicRoutes(app, { notifier })
-registerAdminRoutes(app, emailDeps)
+registerAdminRoutes(app, { ...emailDeps, notifier })
 registerSuperadminRoutes(app, emailDeps)
 registerTabletRoutes(app, { notifier })
 
-export default app
+// Attach the scheduled handler directly to the Hono app instance so tests
+// can still call app.request() while the CF Workers runtime gets the
+// scheduled() method it needs for cron triggers.
+const appWithCron = Object.assign(app, {
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      Promise.all([
+        runInventoryRestore(env, ctx),
+        runAutoReject(env, ctx),
+      ]),
+    )
+  },
+})
+
 export { app }
+export default appWithCron

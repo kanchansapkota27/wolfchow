@@ -5,6 +5,7 @@ import { OrderQueue } from './pages/OrderQueue'
 import { ActiveOrders } from './pages/ActiveOrders'
 import { Inventory } from './pages/Inventory'
 import { PauseControl } from './pages/PauseControl'
+import { OrderHistory } from './pages/OrderHistory'
 
 export function App() {
   return (
@@ -13,6 +14,7 @@ export function App() {
       <Route element={<Layout />}>
         <Route index element={<OrderQueue />} />
         <Route path="active" element={<ActiveOrders />} />
+        <Route path="history" element={<OrderHistory />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="pause" element={<PauseControl />} />
       </Route>

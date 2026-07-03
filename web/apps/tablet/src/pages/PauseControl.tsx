@@ -25,10 +25,10 @@ function usePauseCountdown(pauseUntil: string | null): string | null {
 // ── Pause options ─────────────────────────────────────────────────────────────
 
 const PAUSE_OPTIONS: Array<{ label: string; sub: string; mode: 'timed' | 'manual'; minutes?: number; icon: string }> = [
-  { label: '15 min',  sub: 'Back in 15 minutes',    mode: 'timed',  minutes: 15,  icon: '⏱' },
-  { label: '30 min',  sub: 'Back in 30 minutes',    mode: 'timed',  minutes: 30,  icon: '⏱' },
-  { label: '1 hour',  sub: 'Back in an hour',        mode: 'timed',  minutes: 60,  icon: '🕐' },
-  { label: 'Manual',  sub: 'Until you resume',        mode: 'manual',               icon: '✋' },
+  { label: '15 min', sub: 'Back in 15 minutes', mode: 'timed',  minutes: 15, icon: 'timer' },
+  { label: '30 min', sub: 'Back in 30 minutes', mode: 'timed',  minutes: 30, icon: 'timer' },
+  { label: '1 hour', sub: 'Back in an hour',    mode: 'timed',  minutes: 60, icon: 'schedule' },
+  { label: 'Manual', sub: 'Until you resume',   mode: 'manual',              icon: 'pan_tool' },
 ]
 
 // ── Paused fullscreen state ───────────────────────────────────────────────────
@@ -38,56 +38,71 @@ function PausedView({ pause, onResume, resuming }: { pause: PauseState; onResume
   const [confirming, setConfirming] = useState(false)
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-8 p-8 text-center" style={{ background: 'rgba(120,53,15,0.08)' }}>
-      {/* Big pause indicator */}
+    <div className="flex h-full flex-col items-center justify-center gap-8 p-8 text-center" style={{ background: 'rgba(255,183,120,0.03)' }}>
       <div
-        className="flex h-32 w-32 items-center justify-center rounded-full text-6xl"
-        style={{ background: 'rgba(245,158,11,0.15)', border: '3px solid rgba(245,158,11,0.4)' }}
+        className="flex h-32 w-32 items-center justify-center rounded-full"
+        style={{ background: 'rgba(255,183,120,0.1)', border: '3px solid rgba(255,183,120,0.3)' }}
       >
-        ⏸
+        <span className="material-symbols-outlined" style={{ fontSize: 56, color: 'var(--md-tertiary)', fontVariationSettings: "'FILL' 1" }}>pause_circle</span>
       </div>
 
       <div className="space-y-3">
-        <p className="text-3xl font-black" style={{ color: '#fbbf24' }}>Orders Paused</p>
+        <p
+          className="font-black"
+          style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 32, color: 'var(--md-tertiary)' }}
+        >
+          Orders Paused
+        </p>
         {pause.pause_mode === 'timed' && countdown && (
-          <p className="text-5xl font-black tabular-nums text-white">{countdown}</p>
+          <p
+            className="tabular-nums font-black"
+            style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 48, color: 'var(--md-on-surface)' }}
+          >
+            {countdown}
+          </p>
         )}
         {pause.pause_mode === 'manual' && (
-          <p className="text-sm font-medium" style={{ color: '#92400e' }}>Until manually resumed</p>
+          <p className="text-sm font-medium" style={{ color: 'var(--md-outline)' }}>Until manually resumed</p>
         )}
         {pause.pause_reason && (
-          <p className="text-sm italic" style={{ color: '#78716c' }}>"{pause.pause_reason}"</p>
+          <p className="text-sm italic" style={{ color: 'var(--md-on-surface-var)' }}>"{pause.pause_reason}"</p>
         )}
       </div>
 
-      {/* Resume */}
       {!confirming ? (
         <button
           onClick={() => setConfirming(true)}
           disabled={resuming}
-          className="rounded-2xl px-12 py-5 text-xl font-black text-white transition-colors disabled:opacity-40"
-          style={{ background: '#16a34a' }}
+          className="rounded-xl font-black transition-all active:scale-95 disabled:opacity-40"
+          style={{
+            padding: '16px 48px',
+            background: 'var(--md-secondary-c)',
+            color: 'var(--md-on-secondary-c)',
+            fontFamily: "'JetBrains Mono',monospace",
+            fontSize: 14,
+            letterSpacing: '0.05em',
+          }}
         >
-          ▶ Resume Orders
+          RESUME ORDERS
         </button>
       ) : (
         <div className="space-y-4 w-full max-w-xs">
-          <p className="text-base font-semibold text-white">Resume accepting orders now?</p>
+          <p className="text-base font-semibold" style={{ color: 'var(--md-on-surface)' }}>Resume accepting orders now?</p>
           <div className="flex gap-3">
             <button
               onClick={() => setConfirming(false)}
-              className="flex-1 rounded-2xl border py-4 text-sm font-bold transition-colors"
-              style={{ borderColor: '#334155', color: '#94a3b8', background: '#1e293b' }}
+              className="flex-1 rounded-xl py-4 text-sm font-bold transition-colors"
+              style={{ border: '1px solid var(--md-outline-var)', color: 'var(--md-on-surface-var)', background: 'var(--md-surface-c)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.04em', fontSize: 12 }}
             >
-              Cancel
+              CANCEL
             </button>
             <button
               onClick={onResume}
               disabled={resuming}
-              className="flex-1 rounded-2xl py-4 text-sm font-black text-white transition-colors disabled:opacity-40"
-              style={{ background: '#16a34a' }}
+              className="flex-1 rounded-xl py-4 font-black transition-all active:scale-95 disabled:opacity-40"
+              style={{ background: 'var(--md-secondary-c)', color: 'var(--md-on-secondary-c)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.04em', fontSize: 12 }}
             >
-              {resuming ? 'Resuming…' : '✓ Yes, Resume'}
+              {resuming ? 'RESUMING…' : 'YES, RESUME'}
             </button>
           </div>
         </div>
@@ -138,8 +153,11 @@ export function PauseControl() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4" style={{ borderColor: '#1e293b', borderTopColor: '#f59e0b' }} />
+      <div className="flex h-full items-center justify-center" style={{ background: 'var(--md-bg)' }}>
+        <div
+          className="h-10 w-10 animate-spin rounded-full border-4"
+          style={{ borderColor: 'var(--md-surface-ch)', borderTopColor: 'var(--md-tertiary)' }}
+        />
       </div>
     )
   }
@@ -149,16 +167,33 @@ export function PauseControl() {
   }
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#080d17' }}>
-      <div className="border-b px-4 py-3" style={{ borderColor: '#1e293b' }}>
-        <p className="text-sm font-bold text-white">Pause Orders</p>
-        <p className="text-xs mt-0.5" style={{ color: '#10b981' }}>● Currently accepting orders</p>
+    <div className="flex h-full flex-col" style={{ background: 'var(--md-bg)' }}>
+      <div className="border-b px-6 py-4" style={{ borderColor: 'var(--md-outline-var)' }}>
+        <p
+          className="font-bold"
+          style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 20, color: 'var(--md-on-surface)' }}
+        >
+          Pause Orders
+        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="w-2.5 h-2.5 rounded-full pulse-dot" style={{ background: 'var(--md-secondary)' }} />
+          <p
+            className="font-bold"
+            style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'var(--md-secondary)', letterSpacing: '0.05em' }}
+          >
+            CURRENTLY ACCEPTING ORDERS
+          </p>
+        </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
-        <div className="text-center mb-2">
-          <p className="text-lg font-bold text-white">How long do you need?</p>
-          <p className="text-sm mt-1" style={{ color: '#64748b' }}>New orders will be paused for this duration</p>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 gap-8">
+        <div className="text-center">
+          <p className="font-bold" style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 22, color: 'var(--md-on-surface)' }}>
+            How long do you need?
+          </p>
+          <p className="text-sm mt-1.5" style={{ color: 'var(--md-outline)' }}>
+            New orders will be paused for this duration
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
@@ -167,15 +202,24 @@ export function PauseControl() {
               key={opt.label}
               onClick={() => void handlePause(opt.mode, opt.minutes)}
               disabled={busy}
-              className="flex flex-col items-center justify-center rounded-3xl py-8 px-4 text-center transition-all active:scale-95 disabled:opacity-40"
+              className="flex flex-col items-center justify-center rounded-2xl py-8 px-4 text-center transition-all active:scale-95 disabled:opacity-40"
               style={{
-                background: 'rgba(245,158,11,0.08)',
-                border: '2px solid rgba(245,158,11,0.25)',
+                background: 'rgba(255,183,120,0.06)',
+                border: '2px solid rgba(255,183,120,0.2)',
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.border = '2px solid rgba(255,183,120,0.5)')}
+              onMouseLeave={(e) => (e.currentTarget.style.border = '2px solid rgba(255,183,120,0.2)')}
             >
-              <span className="text-3xl mb-2">{opt.icon}</span>
-              <p className="text-2xl font-black" style={{ color: '#fbbf24' }}>{opt.label}</p>
-              <p className="text-xs mt-1" style={{ color: '#92400e' }}>{opt.sub}</p>
+              <span className="material-symbols-outlined mb-3" style={{ fontSize: 32, color: 'var(--md-tertiary)', fontVariationSettings: "'FILL' 1" }}>
+                {opt.icon}
+              </span>
+              <p
+                className="font-black"
+                style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 22, color: 'var(--md-tertiary)' }}
+              >
+                {opt.label}
+              </p>
+              <p className="text-xs mt-1.5" style={{ color: 'var(--md-on-tertiary-c)' }}>{opt.sub}</p>
             </button>
           ))}
         </div>

@@ -30,7 +30,7 @@ export function RejectSheet({ orderName, shortId, onReject, onClose }: RejectShe
     <>
       <div
         className="fixed inset-0 z-40"
-        style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+        style={{ background: 'rgba(1,15,31,0.85)', backdropFilter: 'blur(6px)' }}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -39,34 +39,36 @@ export function RejectSheet({ orderName, shortId, onReject, onClose }: RejectShe
         role="dialog"
         aria-modal="true"
         aria-label="Decline order"
-        className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl p-6 shadow-2xl"
-        style={{ background: '#0f172a', borderTop: '1px solid #1e293b' }}
+        className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl p-6 shadow-2xl"
+        style={{ background: 'var(--md-surface-c)', borderTop: '1px solid var(--md-outline-var)' }}
       >
-        {/* Handle */}
-        <div className="mx-auto mb-5 h-1 w-12 rounded-full" style={{ background: '#334155' }} />
+        <div className="mx-auto mb-5 h-1 w-12 rounded-full" style={{ background: 'var(--md-outline-var)' }} />
 
-        {/* Title */}
         <div className="mb-5">
           <div className="flex items-center gap-3 mb-1">
-            <span className="text-2xl">❌</span>
-            <p className="text-xl font-black text-white">Decline Order #{shortId}</p>
+            <span className="material-symbols-outlined" style={{ fontSize: 26, color: 'var(--md-error)' }}>cancel</span>
+            <p
+              className="font-black"
+              style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 20, color: 'var(--md-on-surface)' }}
+            >
+              Decline Order {shortId}
+            </p>
           </div>
-          <p className="text-sm" style={{ color: '#64748b' }}>
+          <p className="text-sm" style={{ color: 'var(--md-outline)' }}>
             {orderName} · Select a reason (optional)
           </p>
         </div>
 
-        {/* Preset chips */}
         <div className="mb-4 flex flex-wrap gap-2">
           {REJECT_PRESETS.map((p) => (
             <button
               key={p}
               onClick={() => setPreset(preset === p ? null : p)}
-              className="rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors"
+              className="rounded-lg px-4 py-2.5 text-sm font-semibold transition-all"
               style={
                 preset === p
-                  ? { background: '#991b1b', color: '#fecaca', border: '1px solid #ef4444' }
-                  : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+                  ? { background: 'var(--md-error-c)', color: 'var(--md-on-error-c)', border: '1px solid var(--md-error)' }
+                  : { background: 'var(--md-surface-low)', color: 'var(--md-on-surface-var)', border: '1px solid var(--md-outline-var)' }
               }
             >
               {p}
@@ -74,7 +76,6 @@ export function RejectSheet({ orderName, shortId, onReject, onClose }: RejectShe
           ))}
         </div>
 
-        {/* Custom note */}
         {!preset && (
           <textarea
             value={note}
@@ -82,28 +83,47 @@ export function RejectSheet({ orderName, shortId, onReject, onClose }: RejectShe
             placeholder="Custom reason…"
             rows={2}
             maxLength={500}
-            className="mb-4 w-full resize-none rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none"
-            style={{ background: '#1e293b', border: '1px solid #334155' }}
+            className="mb-4 w-full resize-none rounded-xl px-4 py-3 text-sm focus:outline-none"
+            style={{
+              background: 'var(--md-surface-low)',
+              border: '1px solid var(--md-outline-var)',
+              color: 'var(--md-on-surface)',
+            }}
+            onFocus={(e) => (e.target.style.border = '1px solid var(--md-error)')}
+            onBlur={(e) => (e.target.style.border = '1px solid var(--md-outline-var)')}
           />
         )}
 
-        {/* Actions */}
         <div className="flex gap-3">
           <button
             onClick={onClose}
             disabled={busy}
-            className="rounded-2xl border py-4 text-sm font-bold transition-colors disabled:opacity-40"
-            style={{ flex: '0 0 120px', borderColor: '#334155', color: '#94a3b8', background: '#1e293b' }}
+            className="rounded-xl py-4 text-sm font-bold transition-colors disabled:opacity-40"
+            style={{
+              flex: '0 0 120px',
+              border: '1px solid var(--md-outline-var)',
+              color: 'var(--md-on-surface-var)',
+              background: 'var(--md-surface-low)',
+              fontFamily: "'JetBrains Mono',monospace",
+              fontSize: 12,
+              letterSpacing: '0.04em',
+            }}
           >
-            Cancel
+            CANCEL
           </button>
           <button
             onClick={() => void handleConfirm()}
             disabled={busy}
-            className="flex-1 rounded-2xl py-4 text-base font-black text-white transition-colors disabled:opacity-40"
-            style={{ background: busy ? '#7f1d1d' : '#b91c1c' }}
+            className="flex-1 rounded-xl py-4 font-black transition-colors disabled:opacity-40"
+            style={{
+              background: 'var(--md-error-c)',
+              color: 'var(--md-on-error-c)',
+              fontFamily: "'JetBrains Mono',monospace",
+              fontSize: 13,
+              letterSpacing: '0.04em',
+            }}
           >
-            {busy ? 'Declining…' : '✕ Confirm Decline'}
+            {busy ? 'DECLINING…' : 'CONFIRM DECLINE'}
           </button>
         </div>
       </div>

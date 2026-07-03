@@ -910,7 +910,7 @@ function AutomationContent() {
               </div>
               <input
                 type="range"
-                min={5} max={60} step={5}
+                min={2} max={15} step={1}
                 value={automation.auto_reject_minutes}
                 onChange={(e) => setAutomation((a) => ({ ...a, auto_reject_minutes: Number(e.target.value) }))}
                 className="w-full accent-blue-600"

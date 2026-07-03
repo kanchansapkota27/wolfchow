@@ -21,6 +21,7 @@ import { registerTransactionRoutes, type TransactionRouteDeps } from './transact
 import { registerAdminOrderRoutes, type AdminOrderRouteDeps } from './orders'
 import { registerAdminPlanRoutes } from './plan'
 import { registerDeviceRoutes } from './devices'
+import { registerEmailLogRoutes } from './email-log'
 
 export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemRouteDeps, ModifierRouteDeps, PauseRouteDeps, PaymentRouteDeps, SmtpRouteDeps, NotificationRouteDeps, NoticesRouteDeps, TransactionRouteDeps, AdminOrderRouteDeps {}
 
@@ -59,4 +60,5 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   registerAdminOrderRoutes(app, deps)
   registerAdminPlanRoutes(app)
   registerDeviceRoutes(app)
+  registerEmailLogRoutes(app)
 }

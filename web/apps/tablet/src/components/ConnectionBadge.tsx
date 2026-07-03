@@ -1,9 +1,9 @@
 import { useRealtime, type RealtimeStatus } from '../lib/realtime'
 
 const STATUS: Record<RealtimeStatus, { dot: string; label: string; labelColor: string }> = {
-  connected:    { dot: '#10b981', label: 'Live',          labelColor: '#10b981' },
-  reconnecting: { dot: '#f59e0b', label: 'Reconnecting…', labelColor: '#f59e0b' },
-  disconnected: { dot: '#ef4444', label: 'Offline',       labelColor: '#ef4444' },
+  connected:    { dot: 'var(--md-secondary)', label: 'Live',          labelColor: 'var(--md-secondary)' },
+  reconnecting: { dot: 'var(--md-tertiary)',  label: 'Reconnecting…', labelColor: 'var(--md-tertiary)' },
+  disconnected: { dot: 'var(--md-error)',     label: 'Offline',       labelColor: 'var(--md-error)' },
 }
 
 export function ConnectionBadge() {

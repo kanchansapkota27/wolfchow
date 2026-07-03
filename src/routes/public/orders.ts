@@ -4,7 +4,9 @@ import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
 import { EncryptionService } from '../../services/encryption'
+import { StripeService } from '../../services/stripe'
 import { KvCache, buildKey } from '../../services/kv'
+import { RealtimeService } from '../../services/realtime'
 import type { NotificationService, NotificationOrderItem } from '../../services/notifications'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -463,19 +465,26 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
       await menuCache.delete(buildKey('menu', restaurantId)).catch(() => null)
     }
 
+    // Notify tablet of new order (card orders broadcast after payment confirm instead)
+    if (!isCardPayment) {
+      const realtime = new RealtimeService(c.env)
+      realtime.broadcast(restaurantId, 'new_order', { order_id: orderId }, c.executionCtx)
+    }
+
+    // Build notification items once — used for both confirmation and auto-accept emails
+    const notifItems: NotificationOrderItem[] = orderItemsToInsert.map((item) => ({
+      item_name: item.item_name as string | null,
+      variant_name: item.variant_name as string | null,
+      quantity: item.quantity as number,
+      unit_price: item.unit_price as number,
+      modifiers: (item.modifiers as Array<{ name: string; price_delta: number }>) ?? [],
+      notes: item.notes as string | null,
+    }))
+
     // Send confirmation email for non-card orders (already auth_success).
     // Card orders get their confirmation after /confirm succeeds.
     if (!isCardPayment && deps.notifier) {
-      const notifier = deps.notifier(c.env)
-      const notifItems: NotificationOrderItem[] = orderItemsToInsert.map((item) => ({
-        item_name: item.item_name as string | null,
-        variant_name: item.variant_name as string | null,
-        quantity: item.quantity as number,
-        unit_price: item.unit_price as number,
-        modifiers: (item.modifiers as Array<{ name: string; price_delta: number }>) ?? [],
-        notes: item.notes as string | null,
-      }))
-      void notifier.sendOrderConfirmation(restaurantId, {
+      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderConfirmation(restaurantId, {
         id: orderId,
         tracking_token: trackingToken,
         customer_name: input.customer_name,
@@ -485,7 +494,33 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
         items: notifItems,
         notes: input.notes ?? null,
         scheduled_for: input.scheduled_for ?? null,
-      })
+      }))
+    }
+
+    // Auto-accept pickup/delivery orders immediately when the restaurant has it enabled.
+    // Card orders are handled in /confirm after Stripe authorization.
+    if (!isCardPayment && (r.auto_accept as boolean)) {
+      await admin
+        .from('orders')
+        .update({ status: 'accepted', updated_at: new Date().toISOString() })
+        .eq('id', orderId)
+
+      const realtime = new RealtimeService(c.env)
+      realtime.broadcast(restaurantId, 'order_accepted', { order_id: orderId }, c.executionCtx)
+
+      if (deps.notifier) {
+        c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderAccepted(restaurantId, {
+          id: orderId,
+          tracking_token: trackingToken,
+          customer_name: input.customer_name,
+          customer_email: input.customer_email,
+          total,
+          payment_method: input.payment_method,
+          items: notifItems,
+          notes: input.notes ?? null,
+          scheduled_for: input.scheduled_for ?? null,
+        }))
+      }
     }
 
     return c.json({
@@ -524,7 +559,7 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
 
     const { data: order } = await admin
       .from('orders')
-      .select('id, status, stripe_intent_id, total, tracking_token, customer_name, customer_email, payment_method, notes, scheduled_for')
+      .select('id, status, stripe_intent_id, total, tracking_token, customer_name, customer_email, payment_method, notes, scheduled_for, auto_accept')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .maybeSingle()
@@ -560,17 +595,40 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
         return c.json({ error: 'payment_not_authorized', intent_status: intent.status }, 422)
       }
 
-      await admin.from('orders').update({
-        status: 'auth_success',
-        payment_status: 'authorized',
-        stripe_amount_authorized: intent.amount,
-        accept_deadline_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      }).eq('id', orderId)
+      // Auto-accept: capture Stripe intent immediately then move to accepted.
+      // Regular path: move to auth_success and wait for tablet to accept.
+      const shouldAutoAccept = or.auto_accept as boolean
+
+      if (shouldAutoAccept) {
+        const stripe = new StripeService(secretKey)
+        await stripe.capturePaymentIntent(stripeIntentId, `capture_${orderId}`)
+
+        await admin.from('orders').update({
+          status: 'accepted',
+          payment_status: 'captured',
+          stripe_amount_authorized: intent.amount,
+          updated_at: new Date().toISOString(),
+        }).eq('id', orderId)
+
+        const realtime = new RealtimeService(c.env)
+        realtime.broadcast(restaurantId, 'order_accepted', { order_id: orderId }, c.executionCtx)
+      } else {
+        await admin.from('orders').update({
+          status: 'auth_success',
+          payment_status: 'authorized',
+          stripe_amount_authorized: intent.amount,
+          accept_deadline_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        }).eq('id', orderId)
+      }
+
+      // Notify tablet — card orders broadcast here after payment is confirmed
+      const realtimeConfirm = new RealtimeService(c.env)
+      realtimeConfirm.broadcast(restaurantId, 'new_order', { order_id: orderId }, c.executionCtx)
 
       // Send confirmation email for card orders now that payment is authorised
       if (deps.notifier) {
         const notifier = deps.notifier(c.env)
-        void notifier.sendOrderConfirmation(restaurantId, {
+        c.executionCtx.waitUntil(notifier.sendOrderConfirmation(restaurantId, {
           id: orderId,
           tracking_token: or.tracking_token as string,
           customer_name: or.customer_name as string,
@@ -579,13 +637,13 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
           payment_method: or.payment_method as string,
           notes: (or.notes as string | null) ?? null,
           scheduled_for: (or.scheduled_for as string | null) ?? null,
-        })
+        }))
       }
 
       return c.json({
         order_id: orderId,
         tracking_token: or.tracking_token as string,
-        status: 'auth_success',
+        status: shouldAutoAccept ? 'accepted' : 'auth_success',
       })
     } catch {
       return c.json({ error: 'stripe_verification_failed' }, 502)

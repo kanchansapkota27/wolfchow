@@ -554,6 +554,23 @@ export function createApiClient(config: ApiClientConfig) {
         `/tablet/inventory/categories/${id}`,
         { method: 'PATCH', body: data },
       ),
+    getOrderHistory: (page = 1) =>
+      apiFetch<{
+        orders: Array<{
+          id: string
+          status: string
+          total: number
+          payment_method: string
+          customer_name: string
+          created_at: string
+          updated_at: string
+          items: Array<{ item_name: string | null; variant_name: string | null; quantity: number }>
+        }>
+        total: number
+        page: number
+        page_size: number
+        history_days: number
+      }>('/tablet/orders/history', { query: { page } }),
   }
 
   const admin = {

@@ -5,6 +5,7 @@ import { EncryptionService } from '../../services/encryption'
 import { StripeService } from '../../services/stripe'
 import type { Broadcaster } from '../../services/realtime'
 import type { NotificationService } from '../../services/notifications'
+import { resolvePlan } from '../../services/plan'
 
 // ── Active order statuses ─────────────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     if (deps.notifier) {
       const u = updated as Record<string, unknown>
-      void deps.notifier(c.env).sendOrderAccepted(restaurantId, {
+      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderAccepted(restaurantId, {
         id: orderId,
         tracking_token: u.tracking_token as string,
         customer_name: u.customer_name as string,
@@ -158,7 +159,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
         })),
         notes: (u.notes as string | null) ?? null,
         scheduled_for: (u.scheduled_for as string | null) ?? null,
-      })
+      }))
     }
 
     return c.json(updated)
@@ -241,7 +242,7 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     if (deps.notifier) {
       const u = updated as Record<string, unknown>
-      void deps.notifier(c.env).sendOrderRejected(restaurantId, {
+      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderRejected(restaurantId, {
         id: orderId,
         tracking_token: u.tracking_token as string,
         customer_name: u.customer_name as string,
@@ -250,9 +251,46 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
         payment_method: u.payment_method as string,
         notes: (u.notes as string | null) ?? null,
         scheduled_for: (u.scheduled_for as string | null) ?? null,
-      }, reason)
+      }, reason))
     }
 
     return c.json(updated)
+  })
+
+  // ── GET /tablet/orders/history ────────────────────────────────────────────
+  // Returns completed/rejected orders newest-first, paginated by plan history window.
+
+  app.get('/tablet/orders/history', async (c) => {
+    const restaurantId = c.get('jwt').restaurant_id!
+    const admin = createAdminClient(c.env)
+
+    const plan = await resolvePlan(c.env, restaurantId)
+    const historyDays = (plan?.transaction_history_days as number | null) ?? 30
+    const since = new Date(Date.now() - historyDays * 86_400_000).toISOString()
+
+    const pageParam = c.req.query('page')
+    const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1
+    const pageSize = 20
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
+    const { data, error, count } = await admin
+      .from('orders')
+      .select('id, status, total, payment_method, customer_name, created_at, updated_at, items:order_items(item_name, variant_name, quantity)', { count: 'exact' })
+      .eq('restaurant_id', restaurantId)
+      .in('status', ['completed', 'rejected', 'missed'])
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (error) return c.json({ error: 'fetch_failed' }, 500)
+
+    return c.json({
+      orders: data ?? [],
+      total: count ?? 0,
+      page,
+      page_size: pageSize,
+      history_days: historyDays,
+    })
   })
 }

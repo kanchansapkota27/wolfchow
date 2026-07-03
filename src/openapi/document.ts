@@ -339,7 +339,7 @@ const schemas: Record<string, unknown> = {
     properties: {
       auto_accept: { type: 'boolean', description: 'Auto-accept incoming orders without tablet confirmation' },
       auto_reject_enabled: { type: 'boolean' },
-      auto_reject_minutes: { type: 'integer', minimum: 5, maximum: 120, description: 'Minutes after arrival before auto-reject fires' },
+      auto_reject_minutes: { type: 'integer', minimum: 2, maximum: 15, description: 'Minutes after arrival before auto-reject fires' },
     },
   },
   Promotion: {
@@ -1460,7 +1460,7 @@ function adminPaths(): Record<string, PathItem> {
           properties: {
             auto_accept: { type: 'boolean' },
             auto_reject_enabled: { type: 'boolean' },
-            auto_reject_minutes: { type: 'integer', minimum: 5, maximum: 120 },
+            auto_reject_minutes: { type: 'integer', minimum: 2, maximum: 15 },
           },
         }),
         responses: {

@@ -74,34 +74,34 @@ describe('STORY-026 · Auto-accept & auto-reject configuration', () => {
     expect(mockKv.delete).toHaveBeenCalledWith(`settings:${RESTAURANT_ID}`)
   })
 
-  it('auto_reject_minutes 4: 422', async () => {
+  it('auto_reject_minutes 1 (below min): 422', async () => {
     const token = await ownerToken()
     const res = await app.request('/admin/orders/automation', {
       method: 'PATCH',
       headers: authHeaders(token),
-      body: JSON.stringify({ auto_reject_minutes: 4 }),
+      body: JSON.stringify({ auto_reject_minutes: 1 }),
     }, env)
     expect(res.status).toBe(422)
   })
 
-  it('auto_reject_minutes 121: 422', async () => {
+  it('auto_reject_minutes 16 (above max): 422', async () => {
     const token = await ownerToken()
     const res = await app.request('/admin/orders/automation', {
       method: 'PATCH',
       headers: authHeaders(token),
-      body: JSON.stringify({ auto_reject_minutes: 121 }),
+      body: JSON.stringify({ auto_reject_minutes: 16 }),
     }, env)
     expect(res.status).toBe(422)
   })
 
   it('both auto_accept and auto_reject: allowed simultaneously', async () => {
-    mockFrom.mockReturnValueOnce(chain({ data: { auto_accept: true, auto_reject_enabled: true, auto_reject_minutes: 30 } }))
+    mockFrom.mockReturnValueOnce(chain({ data: { auto_accept: true, auto_reject_enabled: true, auto_reject_minutes: 10 } }))
 
     const token = await ownerToken()
     const res = await app.request('/admin/orders/automation', {
       method: 'PATCH',
       headers: authHeaders(token),
-      body: JSON.stringify({ auto_accept: true, auto_reject_enabled: true, auto_reject_minutes: 30 }),
+      body: JSON.stringify({ auto_accept: true, auto_reject_enabled: true, auto_reject_minutes: 10 }),
     }, env)
 
     expect(res.status).toBe(200)

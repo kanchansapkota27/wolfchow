@@ -1,5 +1,6 @@
 import type { Env } from '../types'
 import { SmtpService, SmtpLimitExceededError, NoSmtpConfigError, type EmailTransport } from './smtp'
+import { createAdminClient } from './supabase'
 
 // ── Order data shape used across all email types ────────────────────────────
 
@@ -24,48 +25,158 @@ export interface NotificationOrder {
   scheduled_for: string | null
 }
 
+// ── Notification defaults (mirrors the admin route's DEFAULT_SEND_CUSTOMER) ──
+
+const NOTIFY_CUSTOMER_DEFAULTS: Record<string, boolean> = {
+  pending_payment: false,
+  scheduled: true,
+  auth_success: true,
+  accepted: true,
+  preparing: false,
+  ready: true,
+  completed: false,
+  rejected: true,
+  missed: true,
+  refunded: true,
+}
+
 // ── Service ─────────────────────────────────────────────────────────────────
 
 /**
- * Sends transactional order emails through SmtpService. All methods are
- * fire-and-forget — a send failure (limit exceeded, no config, transport error)
- * is swallowed and never propagates to the caller.
+ * Sends transactional order emails through SmtpService. All public methods
+ * consult `notification_config` to respect per-status admin settings before
+ * sending. Send failures (limit exceeded, no SMTP config, transport error)
+ * are swallowed — email is best-effort. `sendPreview` is an exception: it
+ * surfaces errors so the admin can diagnose SMTP misconfiguration.
  */
 export class NotificationService {
   private readonly smtp: SmtpService
   private readonly widgetBaseUrl: string
+  private readonly admin: ReturnType<typeof createAdminClient>
 
   constructor(env: Env, transport: EmailTransport) {
     this.smtp = new SmtpService(env, transport)
     this.widgetBaseUrl = env.WIDGET_BASE_URL?.replace(/\/$/, '') ?? ''
+    this.admin = createAdminClient(env)
   }
 
   async sendOrderConfirmation(restaurantId: string, order: NotificationOrder): Promise<void> {
-    await this.trySend(restaurantId, order.customer_email,
-      `Order received — #${shortId(order.id)}`,
-      confirmationHtml(order, this.widgetBaseUrl),
-    )
+    const status = order.scheduled_for ? 'scheduled' : 'auth_success'
+    const cfg = await this.resolveConfig(restaurantId, status)
+    const subject = `Order received — #${shortId(order.id)}`
+    const html = confirmationHtml(order, this.widgetBaseUrl)
+    if (cfg.sendToCustomer) {
+      await this.trySend(restaurantId, order.customer_email, subject, html)
+    } else {
+      await this.logSuppressed(restaurantId, order.customer_email, subject)
+    }
+    for (const to of cfg.internalRecipients) {
+      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
+    }
   }
 
   async sendOrderAccepted(restaurantId: string, order: NotificationOrder): Promise<void> {
-    await this.trySend(restaurantId, order.customer_email,
-      `Your order is being prepared — #${shortId(order.id)}`,
-      acceptedHtml(order, this.widgetBaseUrl),
-    )
+    const cfg = await this.resolveConfig(restaurantId, 'accepted')
+    const subject = `Your order is being prepared — #${shortId(order.id)}`
+    const html = acceptedHtml(order, this.widgetBaseUrl)
+    if (cfg.sendToCustomer) {
+      await this.trySend(restaurantId, order.customer_email, subject, html)
+    } else {
+      await this.logSuppressed(restaurantId, order.customer_email, subject)
+    }
+    for (const to of cfg.internalRecipients) {
+      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
+    }
   }
 
   async sendOrderRejected(restaurantId: string, order: NotificationOrder, reason?: string | null): Promise<void> {
-    await this.trySend(restaurantId, order.customer_email,
-      `Your order was cancelled — #${shortId(order.id)}`,
-      rejectedHtml(order, reason ?? null),
-    )
+    const cfg = await this.resolveConfig(restaurantId, 'rejected')
+    const subject = `Your order was cancelled — #${shortId(order.id)}`
+    const html = rejectedHtml(order, reason ?? null)
+    if (cfg.sendToCustomer) {
+      await this.trySend(restaurantId, order.customer_email, subject, html)
+    } else {
+      await this.logSuppressed(restaurantId, order.customer_email, subject)
+    }
+    for (const to of cfg.internalRecipients) {
+      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
+    }
   }
 
   async sendOrderReady(restaurantId: string, order: NotificationOrder): Promise<void> {
-    await this.trySend(restaurantId, order.customer_email,
-      `Your order is ready! — #${shortId(order.id)}`,
-      readyHtml(order, this.widgetBaseUrl),
-    )
+    const cfg = await this.resolveConfig(restaurantId, 'ready')
+    const subject = `Your order is ready! — #${shortId(order.id)}`
+    const html = readyHtml(order, this.widgetBaseUrl)
+    if (cfg.sendToCustomer) {
+      await this.trySend(restaurantId, order.customer_email, subject, html)
+    } else {
+      await this.logSuppressed(restaurantId, order.customer_email, subject)
+    }
+    for (const to of cfg.internalRecipients) {
+      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
+    }
+  }
+
+  async sendPreview(restaurantId: string, status: string, to: string): Promise<void> {
+    const order: NotificationOrder = {
+      id: 'aaaaaaaa-bbbb-cccc-dddd-preview000001',
+      tracking_token: 'tok_preview_0000001',
+      customer_name: 'Preview Customer',
+      customer_email: to,
+      total: 24.49,
+      payment_method: 'card',
+      items: [
+        { item_name: 'Classic Cheeseburger', variant_name: null, quantity: 2, unit_price: 9.99, modifiers: [{ name: 'Extra Cheese', price_delta: 0.50 }], notes: null },
+        { item_name: 'Truffle Fries', variant_name: 'Large', quantity: 1, unit_price: 4.51, modifiers: [], notes: 'Extra crispy please' },
+      ],
+      notes: null,
+      scheduled_for: null,
+    }
+
+    let subject: string
+    let html: string
+
+    switch (status) {
+      case 'accepted':
+        subject = `[Preview] Your order is being prepared — #${shortId(order.id)}`
+        html = acceptedHtml(order, this.widgetBaseUrl)
+        break
+      case 'rejected':
+        subject = `[Preview] Your order was cancelled — #${shortId(order.id)}`
+        html = rejectedHtml(order, 'Out of stock — sorry for the inconvenience')
+        break
+      case 'ready':
+        subject = `[Preview] Your order is ready! — #${shortId(order.id)}`
+        html = readyHtml(order, this.widgetBaseUrl)
+        break
+      default:
+        subject = `[Preview] Order received — #${shortId(order.id)}`
+        html = confirmationHtml(order, this.widgetBaseUrl)
+    }
+
+    // Bypass trySend — errors must surface so the admin sees the config issue
+    await this.smtp.send({ restaurant_id: restaurantId, to, subject, html })
+  }
+
+  private async resolveConfig(
+    restaurantId: string,
+    status: string,
+  ): Promise<{ sendToCustomer: boolean; internalRecipients: string[] }> {
+    const defaultResult = { sendToCustomer: NOTIFY_CUSTOMER_DEFAULTS[status] ?? false, internalRecipients: [] }
+    try {
+      const { data } = await this.admin
+        .from('notification_config')
+        .select('send_customer, internal_recipients')
+        .eq('restaurant_id', restaurantId)
+        .eq('trigger_status', status)
+        .maybeSingle()
+
+      if (!data) return defaultResult
+      const row = data as { send_customer: boolean; internal_recipients: string[] | null }
+      return { sendToCustomer: row.send_customer, internalRecipients: row.internal_recipients ?? [] }
+    } catch {
+      return defaultResult
+    }
   }
 
   private async trySend(restaurantId: string, to: string, subject: string, html: string): Promise<void> {
@@ -74,6 +185,21 @@ export class NotificationService {
     } catch (err) {
       if (err instanceof SmtpLimitExceededError || err instanceof NoSmtpConfigError) return
       // Unknown transport errors are also swallowed — email is best-effort
+    }
+  }
+
+  private async logSuppressed(restaurantId: string, to: string, subject: string): Promise<void> {
+    try {
+      await this.admin.from('email_log').insert({
+        restaurant_id: restaurantId,
+        to_address: to,
+        subject,
+        smtp_source: null,
+        status: 'suppressed',
+        failure_reason: 'send_customer=false in notification_config',
+      })
+    } catch {
+      // best-effort
     }
   }
 }

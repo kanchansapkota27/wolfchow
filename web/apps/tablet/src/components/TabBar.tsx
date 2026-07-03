@@ -5,6 +5,7 @@ interface Tab { to: string; label: string; icon: string; end?: boolean }
 const TABS: Tab[] = [
   { to: '/',          label: 'Orders',    icon: '📋', end: true },
   { to: '/active',   label: 'Kitchen',   icon: '🔥' },
+  { to: '/history',  label: 'History',   icon: '🕐' },
   { to: '/inventory', label: 'Inventory', icon: '📦' },
   { to: '/pause',    label: 'Pause',     icon: '⏸' },
 ]

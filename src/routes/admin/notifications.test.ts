@@ -88,7 +88,11 @@ function chainDirect(opts: { data?: unknown; error?: unknown } = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockKv.get.mockResolvedValue(null)
+  // Return a plan from KV so resolvePlan short-circuits without calling .maybeSingle()
+  mockKv.get.mockImplementation((key: string) => {
+    if (key.startsWith('plan:')) return Promise.resolve({ feature_flags: { email_notifications: true } })
+    return Promise.resolve(null)
+  })
   mockSendPreviewEmail.mockResolvedValue(undefined)
 })
 

@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../types'
+import type { HonoEnv, Env } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
+import type { NotificationService } from '../../services/notifications'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,8 @@ async function parseBody(req: Request): Promise<unknown> {
 export interface NotificationRouteDeps {
   /** Send preview email for status to recipient. */
   sendPreviewEmail?: (restaurantId: string, status: TriggerStatus, to: string) => Promise<void>
+  /** NotificationService factory — used to send real preview emails in production. */
+  notifier?: (env: Env) => NotificationService
 }
 
 // ── Routes ─────────────────────────────────────────────────────────────────────
@@ -176,7 +179,12 @@ export function registerNotificationRoutes(app: Hono<HonoEnv>, deps: Notificatio
     const adminEmail = (user as { email: string } | null)?.email
     if (!adminEmail) return c.json({ error: 'user_not_found' }, 404)
 
-    const sender = deps.sendPreviewEmail ?? defaultSendPreviewEmail
+    const sender: (rId: string, st: TriggerStatus, to: string) => Promise<void> =
+      deps.sendPreviewEmail ??
+      (deps.notifier
+        ? (rId, st, to) => deps.notifier!(c.env).sendPreview(rId, st, to)
+        : defaultSendPreviewEmail)
+
     try {
       await sender(restaurantId, status, adminEmail)
     } catch (err) {
