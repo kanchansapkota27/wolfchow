@@ -10,6 +10,11 @@ import type { AuthMethodReference, HonoEnv, JwtClaims } from '../types'
  *   - ES256 (current default): asymmetric ECDSA, verified against the project's
  *     JWKS fetched from {SUPABASE_URL}/auth/v1/.well-known/jwks.json
  *
+ * The algorithm is derived solely from environment config (presence of
+ * SUPABASE_JWT_SECRET → HS256; absent → ES256). The token header's `alg` field
+ * is never used to select the verification path, preventing algorithm-confusion
+ * attacks if a future code path forgot to pin the expected algorithm.
+ *
  * JWKS are cached in the Worker isolate for 5 minutes so the key endpoint is
  * not hit on every request.
  *
@@ -29,23 +34,22 @@ export const jwtMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
   const parts = token.split('.')
   if (parts.length !== 3) return c.json({ error: 'token_invalid' }, 401)
 
-  let alg: string
+  // Extract kid from the token header for JWKS key selection (ES256 path only).
+  // We do NOT read `alg` from the header — the algorithm is determined by env config.
   let kid: string | undefined
   try {
     const h = decodeJson(parts[0] as string) as Record<string, unknown>
-    alg = typeof h.alg === 'string' ? h.alg : ''
     kid = typeof h.kid === 'string' ? h.kid : undefined
   } catch {
     return c.json({ error: 'token_invalid' }, 401)
   }
 
+  // Algorithm pinned to env config: SUPABASE_JWT_SECRET present → HS256, absent → ES256.
   let verified: VerifyResult
-  if (alg === 'HS256') {
+  if (c.env.SUPABASE_JWT_SECRET) {
     verified = await verifyHs256(token, c.env.SUPABASE_JWT_SECRET)
-  } else if (alg === 'ES256') {
-    verified = await verifyEs256(token, kid, c.env.SUPABASE_URL)
   } else {
-    return c.json({ error: 'token_invalid' }, 401)
+    verified = await verifyEs256(token, kid, c.env.SUPABASE_URL)
   }
 
   if (!verified.valid) {
