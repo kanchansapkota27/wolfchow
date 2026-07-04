@@ -129,14 +129,6 @@ async function verifyHs256(token: string, secret: string): Promise<VerifyResult>
   if (parts.length !== 3) return INVALID
   const [headerB64, payloadB64, signatureB64] = parts as [string, string, string]
 
-  let alg: unknown
-  try {
-    alg = (decodeJson(headerB64) as Record<string, unknown>).alg
-  } catch {
-    return INVALID
-  }
-  if (alg !== 'HS256') return INVALID
-
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
