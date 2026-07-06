@@ -552,9 +552,7 @@ function StripeKeyGuide({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="text-sm text-gray-600">
-          Use a <strong>restricted key</strong> instead of your full secret key. If it's ever leaked,
-          an attacker can only interact with existing payments — they cannot access your balance,
-          trigger payouts, or touch account settings.
+          Use a <strong>restricted key</strong> instead of your full secret key.
         </p>
 
         <div>
@@ -612,10 +610,6 @@ function StripeKeyGuide({ onClose }: { onClose: () => void }) {
           </ul>
         </div>
 
-        <p className="text-xs text-gray-400">
-          Worst case if leaked: an attacker could cancel or refund orders already in flight.
-          They cannot move money out of your Stripe account.
-        </p>
 
         <button
           onClick={onClose}
