@@ -63,8 +63,10 @@ function chain(opts: { data?: unknown; error?: unknown } = {}) {
   return {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue(resolved),
+    then: vi.fn((resolve: (v: typeof resolved) => unknown) => Promise.resolve(resolve(resolved))),
   }
 }
 
@@ -86,7 +88,7 @@ const alwaysOpenHours = Array.from({ length: 7 }, (_, i) => ({
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockKv.get.mockResolvedValue(null)
+  mockKv.get.mockResolvedValue({ feature_flags: { scheduled_orders_enabled: true } })
   mockKv.delete.mockResolvedValue(undefined)
 })
 
@@ -113,7 +115,7 @@ describe('STORY-019 · Scheduling configuration', () => {
     expect(res.status).toBe(200)
     const body = await res.json() as typeof updated
     expect(body.base_prep_minutes).toBe(25)
-    expect(mockKv.delete).toHaveBeenCalledWith(`settings:${RESTAURANT_ID}`)
+    expect(mockKv.delete).toHaveBeenCalledWith(`settings:widget:${RESTAURANT_ID}`)
   })
 
   it('scheduling_interval 45: 422', async () => {
@@ -151,8 +153,12 @@ describe('STORY-019 · Scheduling configuration', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-05T10:00:00.000Z'))
 
-    mockFrom.mockReturnValueOnce(chain({ data: { base_prep_minutes: 15, scheduling_interval: 30, future_days_allowed: 7 } }))
-    mockKv.get.mockResolvedValue(alwaysOpenHours)
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { base_prep_minutes: 15, scheduling_interval: 30, future_days_allowed: 7 } }))  // restaurant config
+      .mockReturnValueOnce(chain({ data: [] }))  // special_closures (none)
+    mockKv.get
+      .mockResolvedValueOnce({ feature_flags: { scheduled_orders_enabled: true } })  // resolvePlan
+      .mockResolvedValueOnce(alwaysOpenHours)                                          // hours read
 
     const token = await ownerToken()
     const res = await app.request('/admin/scheduling/preview', { headers: authHeaders(token) }, env)
@@ -172,8 +178,12 @@ describe('STORY-019 · Scheduling configuration', () => {
     vi.setSystemTime(new Date('2026-01-05T10:00:00.000Z'))
 
     const interval = 15
-    mockFrom.mockReturnValueOnce(chain({ data: { base_prep_minutes: 10, scheduling_interval: interval, future_days_allowed: 7 } }))
-    mockKv.get.mockResolvedValue(alwaysOpenHours)
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { base_prep_minutes: 10, scheduling_interval: interval, future_days_allowed: 7 } }))  // restaurant config
+      .mockReturnValueOnce(chain({ data: [] }))  // special_closures (none)
+    mockKv.get
+      .mockResolvedValueOnce({ feature_flags: { scheduled_orders_enabled: true } })  // resolvePlan
+      .mockResolvedValueOnce(alwaysOpenHours)                                          // hours read
 
     const token = await ownerToken()
     const res = await app.request('/admin/scheduling/preview', { headers: authHeaders(token) }, env)

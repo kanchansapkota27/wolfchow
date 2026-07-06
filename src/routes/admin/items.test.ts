@@ -106,7 +106,7 @@ const fakeItem = {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockKv.get.mockResolvedValue(null) // no plan in KV → no cap/flags
+  mockKv.get.mockResolvedValue({}) // empty plan from KV → no cap, no feature lock
   mockKv.delete.mockResolvedValue(undefined)
 })
 

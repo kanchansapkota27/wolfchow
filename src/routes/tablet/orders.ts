@@ -68,12 +68,15 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     const { data: order, error: fetchErr } = await admin
       .from('orders')
-      .select('id, status, payment_method, stripe_intent_id')
+      .select('id, status, payment_method, stripe_intent_id, restaurant_id')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .single()
 
     if (fetchErr || !order) return c.json({ error: 'not_found' }, 404)
+    if ((order as Record<string, unknown>).restaurant_id !== restaurantId) {
+      return c.json({ error: 'forbidden' }, 403)
+    }
     if (order.status === 'accepted') return c.json({ error: 'order_already_accepted' }, 409)
     if (order.status !== 'auth_success') {
       return c.json({ error: 'invalid_status', current: order.status }, 422)
@@ -157,12 +160,15 @@ export function registerOrderRoutes(app: Hono<HonoEnv>, deps: OrderRouteDeps = {
 
     const { data: order, error: fetchErr } = await admin
       .from('orders')
-      .select('id, status, payment_method, stripe_intent_id')
+      .select('id, status, payment_method, stripe_intent_id, restaurant_id')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .single()
 
     if (fetchErr || !order) return c.json({ error: 'not_found' }, 404)
+    if ((order as Record<string, unknown>).restaurant_id !== restaurantId) {
+      return c.json({ error: 'forbidden' }, 403)
+    }
     if (!['auth_success', 'accepted'].includes(order.status)) {
       return c.json({ error: 'invalid_status', current: order.status }, 422)
     }

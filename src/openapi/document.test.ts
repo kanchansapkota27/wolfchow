@@ -40,7 +40,7 @@ describe('STORY-044 · OpenAPI documentation (auth + superadmin + admin)', () =>
   it('declares a bearer security scheme and tags', () => {
     const doc = buildOpenApiDocument()
     expect(doc.components.securitySchemes.bearerAuth).toMatchObject({ type: 'http', scheme: 'bearer' })
-    expect(doc.tags.map((t) => t.name)).toEqual(['auth', 'superadmin', 'admin'])
+    expect(doc.tags.map((t) => t.name)).toEqual(['health', 'auth', 'superadmin', 'admin', 'tablet', 'public', 'media'])
   })
 
   it('secures superadmin routes with bearer auth but leaves login public', () => {

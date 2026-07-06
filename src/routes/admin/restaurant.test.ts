@@ -119,9 +119,9 @@ describe('STORY-013 · Restaurant profile management', () => {
     const res = await app.request('/admin/restaurant', { headers: authHeaders(token) }, env)
 
     expect(res.status).toBe(200)
-    const body = await res.json() as typeof fakeRestaurant
-    expect(body.id).toBe(RESTAURANT_ID)
-    expect(body.business_name).toBe('The Burger Place')
+    const body = await res.json() as { restaurant: typeof fakeRestaurant }
+    expect(body.restaurant.id).toBe(RESTAURANT_ID)
+    expect(body.restaurant.business_name).toBe('The Burger Place')
     // Confirm the query filtered by restaurant_id from JWT (not any other)
     const eqCall = mockFrom.mock.results[0]?.value.eq.mock.calls[0]
     expect(eqCall).toEqual(['id', RESTAURANT_ID])
@@ -144,8 +144,8 @@ describe('STORY-013 · Restaurant profile management', () => {
     )
 
     expect(res.status).toBe(200)
-    const body = await res.json() as { display_name: string }
-    expect(body.display_name).toBe('Burger Palace')
+    const body = await res.json() as { restaurant: { display_name: string } }
+    expect(body.restaurant.display_name).toBe('Burger Palace')
 
     // KV invalidation: both settings: and theme: deleted
     const deletedKeys = mockKv.delete.mock.calls.map(([k]: [string]) => k)

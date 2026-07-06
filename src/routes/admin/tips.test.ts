@@ -72,7 +72,7 @@ describe('STORY-025 · Tip & tax configuration', () => {
     expect(res.status).toBe(200)
     const body = await res.json() as typeof updated
     expect(body.tips_enabled).toBe(true)
-    expect(mockKv.delete).toHaveBeenCalledWith(`settings:${RESTAURANT_ID}`)
+    expect(mockKv.delete).toHaveBeenCalledWith(`settings:widget:${RESTAURANT_ID}`)
   })
 
   it('7 presets: 422', async () => {
@@ -119,7 +119,7 @@ describe('STORY-025 · Tip & tax configuration', () => {
     expect(res.status).toBe(200)
     const body = await res.json() as typeof updated
     expect(body.tax_rate).toBe(18)
-    expect(mockKv.delete).toHaveBeenCalledWith(`settings:${RESTAURANT_ID}`)
+    expect(mockKv.delete).toHaveBeenCalledWith(`settings:widget:${RESTAURANT_ID}`)
   })
 
   it('tax_enabled=true, tax_rate=0: 422', async () => {

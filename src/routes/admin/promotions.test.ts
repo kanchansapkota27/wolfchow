@@ -84,8 +84,8 @@ describe('STORY-027 · Promotions management', () => {
     }, env)
 
     expect(res.status).toBe(201)
-    const body = await res.json() as typeof saved
-    expect(body.discount_type).toBe('percentage')
+    const body = await res.json() as { promotion: typeof saved }
+    expect(body.promotion.discount_type).toBe('percentage')
     expect(mockKv.delete).toHaveBeenCalledWith(`promos:${RESTAURANT_ID}`)
   })
 

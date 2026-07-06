@@ -104,7 +104,7 @@ const fakeCategory = {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockKv.get.mockResolvedValue(null) // no plan in KV by default → no cap
+  mockKv.get.mockResolvedValue({}) // empty plan from KV → no cap, no feature lock
   mockKv.delete.mockResolvedValue(undefined)
 })
 

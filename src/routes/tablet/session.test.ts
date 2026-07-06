@@ -76,6 +76,7 @@ beforeEach(() => {
 
 describe('STORY-030 · Tablet authentication', () => {
   it('valid tablet_device token: GET /tablet/session returns identity + pause state', async () => {
+    ;(env.DEVICE_TOKENS as { get: ReturnType<typeof vi.fn> }).get.mockResolvedValueOnce('token-ref')
     mockFrom.mockReturnValueOnce(chain({ data: PAUSE_STATE }))
     const token = await makeToken('tablet_device', ['orders:accept_reject'], RESTAURANT_ID, 'device-abc')
     const res = await app.fetch(
