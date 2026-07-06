@@ -127,4 +127,5 @@ const appWithCron = Object.assign(app, {
 })
 
 export { app }
+export { TenantCounterDO } from './durable/TenantCounterDO'
 export default appWithCron

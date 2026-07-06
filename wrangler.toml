@@ -35,12 +35,19 @@ binding = "FLAGS_CACHE"
 id = "flags_cache_placeholder"
 
 [[kv_namespaces]]
-binding = "SMTP_COUNTERS"
-id = "smtp_counters_placeholder"
-
-[[kv_namespaces]]
 binding = "DEVICE_TOKENS"
 id = "device_tokens_placeholder"
+
+# --- Durable Objects ---
+# TenantCounterDO: atomic per-tenant counters (SMTP monthly limits, future quotas).
+# One instance per restaurant keyed by restaurant_id via idFromName().
+[[durable_objects.bindings]]
+name = "TENANT_COUNTER"
+class_name = "TenantCounterDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TenantCounterDO"]
 
 # --- R2 bucket ---
 [[r2_buckets]]

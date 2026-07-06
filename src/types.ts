@@ -16,8 +16,11 @@ export interface Env {
   MENU_CACHE: KVNamespace
   SETTINGS_CACHE: KVNamespace
   FLAGS_CACHE: KVNamespace
-  SMTP_COUNTERS: KVNamespace
   DEVICE_TOKENS: KVNamespace
+
+  // --- Durable Objects ---
+  /** Atomic per-tenant counters (SMTP monthly limits, future quotas). */
+  TENANT_COUNTER: DurableObjectNamespace
 
   // --- R2 ---
   MEDIA_BUCKET: R2Bucket
