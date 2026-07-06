@@ -56,27 +56,28 @@ export class SecretsService {
    * Reads vault.decrypted_secrets through the vault schema client.
    */
   async get(vaultId: string): Promise<string> {
-    const { data, error } = await this.client
-      .schema('vault')
-      .from('decrypted_secrets')
-      .select('decrypted_secret')
-      .eq('id', vaultId)
-      .single()
-
-    if (error || !data) throw new Error(`vault.get failed: ${error?.message ?? 'not found'}`)
-    const row = data as { decrypted_secret: string | null }
-    if (row.decrypted_secret === null) throw new Error('vault.get: secret is null')
-    return row.decrypted_secret
+    const { data, error } = await this.client.rpc('vault_get_secret', { p_id: vaultId })
+    if (error) throw new Error(`vault.get failed: ${error.message}`)
+    if (data === null || data === undefined) throw new Error('vault.get: secret is null')
+    return data as string
   }
 
   /** Delete a secret from Vault (called when the referencing row is deleted). */
   async delete(vaultId: string): Promise<void> {
-    const { error } = await this.client
-      .schema('vault')
-      .from('secrets')
-      .delete()
-      .eq('id', vaultId)
+    const { error } = await this.client.rpc('vault_delete_secret', { p_id: vaultId })
     if (error) throw new Error(`vault.delete failed: ${error.message}`)
+  }
+
+  /**
+   * Find the uuid of an existing secret by name, or null if not found.
+   * Allows routes to rotate an orphaned vault entry (name still registered
+   * but the referencing DB row was deleted) instead of failing with a
+   * duplicate-name constraint error.
+   */
+  async findByName(name: string): Promise<string | null> {
+    const { data, error } = await this.client.rpc('vault_find_secret_id', { p_name: name })
+    if (error) throw new Error(`vault.findByName failed: ${error.message}`)
+    return (data as string | null) ?? null
   }
 }
 

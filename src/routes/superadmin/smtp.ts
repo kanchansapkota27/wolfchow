@@ -80,7 +80,16 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
       await secrets.rotate(existingRow.password_vault_id, parsed.data.password)
       passwordVaultId = existingRow.password_vault_id
     } else {
-      passwordVaultId = await secrets.put('smtp:global', parsed.data.password)
+      // Guard against orphaned vault entries: if the smtp_config row was deleted
+      // but the vault entry was not, rotating the existing secret avoids a unique
+      // constraint error on the name column.
+      const orphanedId = await secrets.findByName('smtp:global')
+      if (orphanedId) {
+        await secrets.rotate(orphanedId, parsed.data.password)
+        passwordVaultId = orphanedId
+      } else {
+        passwordVaultId = await secrets.put('smtp:global', parsed.data.password)
+      }
     }
 
     const fields = {
@@ -156,7 +165,13 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
       await secrets.rotate(existingVaultId, parsed.data.password)
       passwordVaultId = existingVaultId
     } else {
-      passwordVaultId = await secrets.put(`smtp:${restaurantId}`, parsed.data.password)
+      const orphanedId = await secrets.findByName(`smtp:${restaurantId}`)
+      if (orphanedId) {
+        await secrets.rotate(orphanedId, parsed.data.password)
+        passwordVaultId = orphanedId
+      } else {
+        passwordVaultId = await secrets.put(`smtp:${restaurantId}`, parsed.data.password)
+      }
     }
 
     const { error } = await admin.from('smtp_config').upsert(

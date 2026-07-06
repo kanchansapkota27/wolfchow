@@ -88,47 +88,36 @@ describe('STORY-042 · SecretsService', () => {
 
   describe('get', () => {
     it('returns decrypted secret', async () => {
-      const chain = schemaChain({ data: { decrypted_secret: 'sk_test_abc' } })
-      mockSchema.mockReturnValue({ from: () => chain })
-
+      mockRpc.mockResolvedValue({ data: 'sk_test_abc', error: null })
       const svc = new SecretsService(env)
       const secret = await svc.get('vault-uuid-1')
       expect(secret).toBe('sk_test_abc')
-      expect(mockSchema).toHaveBeenCalledWith('vault')
+      expect(mockRpc).toHaveBeenCalledWith('vault_get_secret', { p_id: 'vault-uuid-1' })
     })
 
     it('throws when secret is null (not yet set)', async () => {
-      const chain = schemaChain({ data: { decrypted_secret: null } })
-      mockSchema.mockReturnValue({ from: () => chain })
-
+      mockRpc.mockResolvedValue({ data: null, error: null })
       const svc = new SecretsService(env)
       await expect(svc.get('vault-uuid-1')).rejects.toThrow('vault.get: secret is null')
     })
 
     it('throws on DB error', async () => {
-      const chain = schemaChain({ data: null, error: { message: 'row not found' } })
-      mockSchema.mockReturnValue({ from: () => chain })
-
+      mockRpc.mockResolvedValue({ data: null, error: { message: 'row not found' } })
       const svc = new SecretsService(env)
       await expect(svc.get('vault-uuid-1')).rejects.toThrow('vault.get failed: row not found')
     })
   })
 
   describe('delete', () => {
-    it('deletes via vault schema', async () => {
-      const chain = schemaChain({})
-      mockSchema.mockReturnValue({ from: () => chain })
-
+    it('deletes via vault_delete_secret RPC', async () => {
+      mockRpc.mockResolvedValue({ error: null })
       const svc = new SecretsService(env)
       await svc.delete('vault-uuid-1')
-      expect(chain.delete).toHaveBeenCalled()
-      expect(chain.eq).toHaveBeenCalledWith('id', 'vault-uuid-1')
+      expect(mockRpc).toHaveBeenCalledWith('vault_delete_secret', { p_id: 'vault-uuid-1' })
     })
 
     it('throws on error', async () => {
-      const chain = schemaChain({ error: { message: 'delete failed' } })
-      mockSchema.mockReturnValue({ from: () => chain })
-
+      mockRpc.mockResolvedValue({ error: { message: 'delete failed' } })
       const svc = new SecretsService(env)
       await expect(svc.delete('vault-uuid-1')).rejects.toThrow('vault.delete failed: delete failed')
     })
