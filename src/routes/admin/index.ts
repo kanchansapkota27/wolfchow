@@ -28,7 +28,7 @@ export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemR
 /**
  * Restaurant admin route group. Every `/admin/*` route sits behind:
  * - JWT verification
- * - A restaurant-scoped role (`restaurant_owner` or `kitchen`)
+ * - `restaurant_owner` role only (kitchen-role users use the /tablet/* routes)
  * - A non-null restaurant_id claim
  *
  * `deps` is injectable for testing (e.g. swap out the R2 presigned URL generator).
@@ -37,7 +37,7 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   app.use(
     '/admin/*',
     jwtMiddleware,
-    requireRole('restaurant_owner', 'kitchen'),
+    requireRole('restaurant_owner'),
     requireRestaurant(),
   )
 

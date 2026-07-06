@@ -168,40 +168,4 @@ describe('STORY-020 · Pause ordering system', () => {
     )
   })
 
-  it('kitchen without orders:pause permission: 403', async () => {
-    const token = await makeToken('kitchen', [])  // no permissions
-
-    const res = await app.request(
-      '/admin/orders/pause',
-      {
-        method: 'POST',
-        headers: authHeaders(token),
-        body: JSON.stringify({ mode: 'manual' }),
-      },
-      env,
-    )
-
-    expect(res.status).toBe(403)
-    const body = await res.json() as { error: string; required_permission: string }
-    expect(body.error).toBe('forbidden')
-    expect(body.required_permission).toBe('orders:pause')
-  })
-
-  it('kitchen WITH orders:pause permission: 200', async () => {
-    mockFrom.mockReturnValueOnce(chain({ data: { ...pausedState, pause_mode: 'manual' } }))
-
-    const token = await makeToken('kitchen', ['orders:pause'])
-
-    const res = await app.request(
-      '/admin/orders/pause',
-      {
-        method: 'POST',
-        headers: authHeaders(token),
-        body: JSON.stringify({ mode: 'manual' }),
-      },
-      env,
-    )
-
-    expect(res.status).toBe(200)
-  })
 })

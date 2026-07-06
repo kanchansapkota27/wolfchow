@@ -83,11 +83,6 @@ export function registerPauseRoutes(app: Hono<HonoEnv>, deps: PauseRouteDeps = {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
-    // Kitchen role requires the orders:pause permission
-    if (jwt.role === 'kitchen' && !jwt.permissions?.includes('orders:pause')) {
-      return c.json({ error: 'forbidden', required_permission: 'orders:pause' }, 403)
-    }
-
     const parsed = pauseSchema.safeParse(await parseBody(c.req.raw))
     if (!parsed.success) {
       return c.json({ error: 'invalid_request', code: 'validation', issues: parsed.error.issues }, 422)
@@ -140,11 +135,6 @@ export function registerPauseRoutes(app: Hono<HonoEnv>, deps: PauseRouteDeps = {
   app.post('/admin/orders/unpause', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
-
-    // Kitchen role requires the orders:pause permission to unpause too
-    if (jwt.role === 'kitchen' && !jwt.permissions?.includes('orders:pause')) {
-      return c.json({ error: 'forbidden', required_permission: 'orders:pause' }, 403)
-    }
 
     const admin = createAdminClient(c.env)
     const { data, error } = await admin
