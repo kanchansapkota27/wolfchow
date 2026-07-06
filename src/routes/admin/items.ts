@@ -34,7 +34,7 @@ const tagsSchema = z
 const createItemSchema = z.object({
   name: z.string().min(1).max(150),
   description: z.string().optional(),
-  price: z.number().min(0), // 0 is valid for items that use variants for pricing
+  price: z.number().gt(0),
   category_id: z.string().uuid(),
   availability_state: z.enum(AVAILABILITY_STATES).default('available'),
   tags: tagsSchema,

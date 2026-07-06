@@ -37,7 +37,7 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
   app.use(
     '/admin/*',
     jwtMiddleware,
-    requireRole('restaurant_owner'),
+    requireRole('restaurant_owner', 'kitchen'),
     requireRestaurant(),
   )
 

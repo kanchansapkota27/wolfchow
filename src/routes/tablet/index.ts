@@ -20,7 +20,7 @@ export interface TabletDeps extends OrderRouteDeps, StatusRouteDeps, InventoryRo
  * - non-null restaurant_id claim
  */
 export function registerTabletRoutes(app: Hono<HonoEnv>, deps: TabletDeps = {}): void {
-  app.use('/tablet/*', jwtMiddleware, requireRole('tablet_device'), requireRestaurant())
+  app.use('/tablet/*', jwtMiddleware, requireRole('tablet_device', 'kitchen'), requireRestaurant())
 
   registerSessionRoutes(app)
   registerOrderRoutes(app, deps)
