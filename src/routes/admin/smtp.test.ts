@@ -16,20 +16,24 @@ vi.mock('../../services/supabase', () => ({
 // ── Injectable deps ───────────────────────────────────────────────────────────
 
 const mockTestSmtpConnection = vi.fn()
-const mockSealSmtpPassword   = vi.fn()
+const mockPutSmtpPassword   = vi.fn()
 const mockSendTestEmail      = vi.fn()
 
 const app = new Hono<HonoEnv>()
 registerAdminRoutes(app, {
   testSmtpConnection: mockTestSmtpConnection,
-  sealSmtpPassword:   mockSealSmtpPassword,
+  putSmtpPassword:    mockPutSmtpPassword,
   sendTestEmail:      mockSendTestEmail,
 })
 
 // ── Fake env ──────────────────────────────────────────────────────────────────
 
 const mockKv      = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
-const mockSmtpKv  = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
+const mockCounterFetch = vi.fn()
+const mockTenantCounter = {
+  idFromName: () => 'id',
+  get: () => ({ fetch: mockCounterFetch }),
+}
 
 const env = {
   SUPABASE_URL: 'http://unused',
@@ -37,7 +41,7 @@ const env = {
   SUPABASE_SERVICE_ROLE_KEY: 'service',
   SUPABASE_JWT_SECRET: 'test-secret-at-least-32-characters-long-xx',
   SETTINGS_CACHE: mockKv,
-  SMTP_COUNTERS: mockSmtpKv,
+  TENANT_COUNTER: mockTenantCounter,
   MEDIA_BUCKET: {},
   R2_ACCOUNT_ID: 'acc', R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'secret', R2_BUCKET_NAME: 'media',
@@ -97,10 +101,12 @@ function chain(opts: { data?: unknown; error?: unknown } = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockKv.get.mockResolvedValue(null)
-  mockSmtpKv.get.mockResolvedValue(null)
-  mockTestSmtpConnection.mockResolvedValue(undefined)  // success by default
-  mockSealSmtpPassword.mockResolvedValue('encrypted-password-blob')
+  // Return a plan with email_notifications enabled so resolvePlan never hits the
+  // DB in POST/DELETE handlers. Tests needing a different plan override per-test.
+  mockKv.get.mockResolvedValue({ feature_flags: { email_notifications: true } })
+  mockCounterFetch.mockResolvedValue({ status: 200, json: () => Promise.resolve({ count: 0 }) })
+  mockTestSmtpConnection.mockResolvedValue(undefined)
+  mockPutSmtpPassword.mockResolvedValue('vault-id-uuid')
   mockSendTestEmail.mockResolvedValue(undefined)
 })
 
@@ -109,6 +115,7 @@ describe('STORY-023 · SMTP configuration', () => {
     const savedConfig = { host: 'smtp.example.com', port: 587, username: 'user@example.com', from_email: 'orders@example.com', from_name: 'My Restaurant', updated_at: new Date().toISOString() }
     mockFrom
       .mockReturnValueOnce(chain({ data: { email: 'owner@example.com' } }))  // fetch user email
+      .mockReturnValueOnce(chain({ data: null }))                              // check existing vault_id → none
       .mockReturnValueOnce(chain({ data: savedConfig }))                       // upsert smtp_config
 
     const token = await ownerToken()
@@ -130,8 +137,8 @@ describe('STORY-023 · SMTP configuration', () => {
     expect(body.smtp_source).toBe('own')
     expect(body.monthly_limit).toBeNull()
 
-    // Seal was called with plaintext password
-    expect(mockSealSmtpPassword).toHaveBeenCalledWith('secret123', RESTAURANT_ID)
+    // put called with plaintext password and vault name
+    expect(mockPutSmtpPassword).toHaveBeenCalledWith('secret123', `smtp:${RESTAURANT_ID}`)
 
     // Test connection was called before saving
     expect(mockTestSmtpConnection).toHaveBeenCalledWith(
@@ -139,14 +146,16 @@ describe('STORY-023 · SMTP configuration', () => {
       'owner@example.com',
     )
 
-    // Upsert stored encrypted blob, not plaintext
-    const upsertArg = mockFrom.mock.results[1]?.value.upsert.mock.calls[0]?.[0] as Record<string, unknown>
-    expect(upsertArg.encrypted_password).toBe('encrypted-password-blob')
+    // Upsert stored vault_id reference, not plaintext
+    const upsertArg = mockFrom.mock.results[2]?.value.upsert.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(upsertArg.password_vault_id).toBe('vault-id-uuid')
     expect(upsertArg).not.toHaveProperty('password')
   })
 
   it('bad SMTP credentials: testSmtpConnection throws → 422', async () => {
-    mockFrom.mockReturnValueOnce(chain({ data: { email: 'owner@example.com' } }))
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { email: 'owner@example.com' } }))
+      .mockReturnValueOnce(chain({ data: null }))  // check existing vault_id → none
     mockTestSmtpConnection.mockRejectedValue(new Error('authentication failed'))
 
     const token = await ownerToken()
@@ -165,13 +174,13 @@ describe('STORY-023 · SMTP configuration', () => {
     expect(body.error).toBe('smtp_connection_failed')
     expect(body.detail).toBe('authentication failed')
     // Nothing saved
-    expect(mockSealSmtpPassword).not.toHaveBeenCalled()
+    expect(mockPutSmtpPassword).not.toHaveBeenCalled()
   })
 
   it('GET /admin/smtp: password absent, smtp_source=own when own row exists', async () => {
     const ownRow = { host: 'smtp.example.com', port: 587, username: 'u@x.com', from_email: 'o@x.com', from_name: 'Rest', updated_at: new Date().toISOString() }
     mockFrom.mockReturnValueOnce(chain({ data: ownRow }))
-    mockSmtpKv.get.mockResolvedValue('5')  // 5 emails used this month
+    mockCounterFetch.mockResolvedValue({ status: 200, json: () => Promise.resolve({ count: 5 }) })
 
     const token = await ownerToken()
     const res = await app.request('/admin/smtp', { headers: authHeaders(token) }, env)
@@ -203,13 +212,15 @@ describe('STORY-023 · SMTP configuration', () => {
   })
 
   it('DELETE /admin/smtp: own row removed, 204', async () => {
-    mockFrom.mockReturnValueOnce(chain({ data: null }))
+    mockFrom
+      .mockReturnValueOnce(chain({ data: null }))  // fetch existing vault_id → none
+      .mockReturnValueOnce(chain({}))               // delete operation
 
     const token = await ownerToken()
     const res = await app.request('/admin/smtp', { method: 'DELETE', headers: authHeaders(token) }, env)
 
     expect(res.status).toBe(204)
-    const deleteCalled = mockFrom.mock.results[0]?.value.delete.mock.calls.length
+    const deleteCalled = mockFrom.mock.results[1]?.value.delete.mock.calls.length
     expect(deleteCalled).toBe(1)
   })
 })

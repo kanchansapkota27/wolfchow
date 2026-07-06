@@ -3,14 +3,13 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
-import { EncryptionService } from '../../services/encryption'
+import { getStripeClient } from '../../services/secrets'
 
 const DEFAULT_HISTORY_DAYS = 30
 const PAGE_SIZE = 50
 
 export interface TransactionRouteDeps {
-  refundStripePayment?: (secretKey: string, paymentIntentId: string, amountCents?: number) => Promise<{ id: string }>
-  openStripeKey?: (sealed: string, restaurantId: string) => Promise<string>
+  refundStripePayment?: (paymentIntentId: string, amountCents?: number) => Promise<{ id: string }>
 }
 
 async function parseBody(req: Request): Promise<unknown> {
@@ -23,8 +22,6 @@ const refundSchema = z.object({
 })
 
 export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionRouteDeps = {}): void {
-  // ── GET /admin/transactions ────────────────────────────────────────────────
-
   app.get('/admin/transactions', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
 
@@ -58,8 +55,6 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
     })
   })
 
-  // ── GET /admin/transactions/:order_id ─────────────────────────────────────
-
   app.get('/admin/transactions/:order_id', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
     const orderId = c.req.param('order_id')
@@ -75,8 +70,6 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
     if (error || !data) return c.json({ error: 'not_found' }, 404)
     return c.json(data)
   })
-
-  // ── POST /admin/transactions/:order_id/refund ──────────────────────────────
 
   app.post('/admin/transactions/:order_id/refund', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
@@ -114,42 +107,15 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
       return c.json({ error: 'no_payment_intent' }, 422)
     }
 
-    // Fetch sealed Stripe key for this restaurant
-    const { data: payConfig } = await admin
-      .from('payment_config')
-      .select('stripe_secret_key_sealed')
-      .eq('restaurant_id', restaurantId)
-      .single()
-
-    if (!payConfig || !(payConfig as { stripe_secret_key_sealed: string | null }).stripe_secret_key_sealed) {
-      return c.json({ error: 'stripe_not_configured' }, 422)
-    }
-
-    const sealed = (payConfig as { stripe_secret_key_sealed: string }).stripe_secret_key_sealed
-    const openKey = deps.openStripeKey
-      ? await deps.openStripeKey(sealed, restaurantId)
-      : await new EncryptionService(c.env.MASTER_ENCRYPTION_KEY).open(sealed, restaurantId)
-
-    const doRefund = deps.refundStripePayment
-      ? deps.refundStripePayment
-      : async (sk: string, piId: string, amountCents?: number) => {
-          const body = new URLSearchParams({ payment_intent: piId })
-          if (amountCents) body.set('amount', String(amountCents))
-          const resp = await fetch('https://api.stripe.com/v1/refunds', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${sk}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body,
-          })
-          if (!resp.ok) {
-            const err = await resp.json() as { error?: { message?: string } }
-            throw new Error(err.error?.message ?? 'stripe_refund_failed')
-          }
-          return resp.json() as Promise<{ id: string }>
-        }
-
     let refund: { id: string }
     try {
-      refund = await doRefund(openKey, o.stripe_intent_id!, parsed.data.amount_cents)
+      if (deps.refundStripePayment) {
+        refund = await deps.refundStripePayment(o.stripe_intent_id, parsed.data.amount_cents)
+      } else {
+        const stripe = await getStripeClient(restaurantId, c.env)
+        if (!stripe) return c.json({ error: 'stripe_not_configured' }, 422)
+        refund = await stripe.refundPaymentIntent(o.stripe_intent_id, parsed.data.amount_cents)
+      }
     } catch (err) {
       return c.json({ error: 'refund_failed', detail: (err as Error).message }, 502)
     }

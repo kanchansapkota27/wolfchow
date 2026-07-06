@@ -51,7 +51,6 @@ export interface Env {
    * Never read from the token header — algorithm is always derived from config.
    */
   SUPABASE_JWT_SECRET?: string
-  MASTER_ENCRYPTION_KEY: string
   INTERNAL_CRON_SECRET: string
   /** Reserved, unused — no Stripe webhooks in this architecture. */
   STRIPE_WEBHOOK_SECRET: string

@@ -16,10 +16,10 @@ vi.mock('../../services/supabase', () => ({
 // ── Injectable deps ───────────────────────────────────────────────────────────
 
 const mockVerifyStripeKey = vi.fn()
-const mockSealStripeKey   = vi.fn()
+const mockPutStripeKey    = vi.fn()
 
 const app = new Hono<HonoEnv>()
-registerAdminRoutes(app, { verifyStripeKey: mockVerifyStripeKey, sealStripeKey: mockSealStripeKey })
+registerAdminRoutes(app, { verifyStripeKey: mockVerifyStripeKey, putStripeKey: mockPutStripeKey })
 
 // ── Fake env ──────────────────────────────────────────────────────────────────
 
@@ -69,26 +69,31 @@ function chain(opts: { data?: unknown; error?: unknown } = {}) {
   return {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     upsert: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue(resolved),
+    maybeSingle: vi.fn().mockResolvedValue(resolved),
+    then: vi.fn((resolve: (v: typeof resolved) => unknown) => Promise.resolve(resolve(resolved))),
   }
 }
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockKv.get.mockResolvedValue(null)
+  // Return an empty plan from KV so resolvePlan never hits the DB in these tests.
+  // Tests that need a specific plan override mockKv.get per-test.
+  mockKv.get.mockResolvedValue({})
   mockKv.delete.mockResolvedValue(undefined)
   mockVerifyStripeKey.mockResolvedValue(true)
-  mockSealStripeKey.mockResolvedValue('encrypted-blob-base64')
+  mockPutStripeKey.mockResolvedValue('encrypted-blob-base64')
 })
 
 describe('STORY-022 · Payment configuration', () => {
   it('store valid Stripe key: encrypted in DB, plaintext absent from response', async () => {
     const savedAt = new Date().toISOString()
-    mockFrom.mockReturnValueOnce(
-      chain({ data: { stripe_publishable_key: 'pk_test_abc', updated_at: savedAt } }),
-    )
+    mockFrom
+      .mockReturnValueOnce(chain({ data: null }))  // check existing vault_id → none
+      .mockReturnValueOnce(chain({ data: { stripe_publishable_key: 'pk_test_abc', updated_at: savedAt } }))
 
     const token = await ownerToken()
     const res = await app.request(
@@ -110,11 +115,11 @@ describe('STORY-022 · Payment configuration', () => {
     expect(body.publishable_key).toBe('pk_test_abc')
 
     // seal was called with the plaintext key
-    expect(mockSealStripeKey).toHaveBeenCalledWith('sk_test_validkey', RESTAURANT_ID)
+    expect(mockPutStripeKey).toHaveBeenCalledWith('sk_test_validkey', `stripe:${RESTAURANT_ID}`)
 
-    // Upsert wrote the encrypted blob, not the plaintext
-    const upsertArg = mockFrom.mock.results[0]?.value.upsert.mock.calls[0]?.[0] as Record<string, unknown>
-    expect(upsertArg.encrypted_stripe_secret).toBe('encrypted-blob-base64')
+    // Upsert wrote the vault_id reference, not the plaintext key
+    const upsertArg = mockFrom.mock.results[1]?.value.upsert.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(upsertArg.stripe_secret_vault_id).toBe('encrypted-blob-base64')
     expect(upsertArg).not.toHaveProperty('secret_key')
   })
 
@@ -151,13 +156,13 @@ describe('STORY-022 · Payment configuration', () => {
     expect(res.status).toBe(422)
     const body = await res.json() as { error: string; code: string }
     expect(body.error).toBe('invalid_stripe_key')
-    expect(mockSealStripeKey).not.toHaveBeenCalled()
+    expect(mockPutStripeKey).not.toHaveBeenCalled()
   })
 
-  it('GET stripe config: encrypted_stripe_secret absent from response, has_secret reflects presence', async () => {
+  it('GET stripe config: vault_id absent from response, has_secret reflects presence', async () => {
     const savedAt = new Date().toISOString()
     mockFrom.mockReturnValueOnce(
-      chain({ data: { stripe_publishable_key: 'pk_test_abc', encrypted_stripe_secret: 'some-encrypted-blob', updated_at: savedAt } }),
+      chain({ data: { stripe_publishable_key: 'pk_test_abc', stripe_secret_vault_id: 'vault-id-uuid', updated_at: savedAt } }),
     )
 
     const token = await ownerToken()
@@ -165,7 +170,7 @@ describe('STORY-022 · Payment configuration', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json() as Record<string, unknown>
-    expect(JSON.stringify(body)).not.toContain('encrypted_stripe_secret')
+    expect(JSON.stringify(body)).not.toContain('stripe_secret_vault_id')
     expect(JSON.stringify(body)).not.toContain('sk_')
     expect(body.has_secret).toBe(true)
     expect(body.publishable_key).toBe('pk_test_abc')
@@ -208,6 +213,6 @@ describe('STORY-022 · Payment configuration', () => {
     )
 
     expect(res.status).toBe(200)
-    expect(mockKv.delete).toHaveBeenCalledWith(`settings:${RESTAURANT_ID}`)
+    expect(mockKv.delete).toHaveBeenCalledWith(`settings:widget:${RESTAURANT_ID}`)
   })
 })

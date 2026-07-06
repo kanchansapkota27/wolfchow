@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Env } from '../types'
 import { createAdminClient } from './supabase'
-import { EncryptionService } from './encryption'
+import { SecretsService } from './secrets'
 
 /** Thrown when a fallback send would exceed the restaurant's monthly limit. */
 export class SmtpLimitExceededError extends Error {
@@ -40,15 +40,13 @@ export interface EmailMessage {
 
 /**
  * Pluggable email transport. Cloudflare Workers cannot open raw SMTP (TCP)
- * connections, so the concrete transport must be an HTTP email provider — chosen
- * in a later story. Until then the default transport errors; callers/tests
- * inject their own.
+ * connections, so the concrete transport must be an HTTP email provider.
  */
 export interface EmailTransport {
   send(message: EmailMessage): Promise<void>
 }
 
-/** Default transport: no provider configured yet (see STORY-039 ADR). */
+/** Default transport: no provider configured yet. */
 export function notConfiguredTransport(): EmailTransport {
   return {
     send: () => Promise.reject(new Error('email transport not configured')),
@@ -60,7 +58,7 @@ interface SmtpConfigRow {
   host: string
   port: number
   username: string
-  encrypted_password: string
+  password_vault_id: string
   from_email: string
   from_name: string
 }
@@ -79,27 +77,20 @@ export interface SendOptions {
  *
  * Resolution order: the restaurant's own `smtp_config` row (no limit) → the
  * global config (`restaurant_id IS NULL`), which is subject to the restaurant's
- * plan monthly limit enforced via a KV counter. The stored password is
- * decrypted with the EncryptionService (context = the row's restaurant_id, or
- * "global"). Limit breaches are audited and block the send; successful sends are
- * written to `email_log`.
- *
- * NOTE: the spec's middle "superadmin per-restaurant override" tier is not
- * representable in the current schema (`smtp_config` is unique per restaurant_id,
- * null = global), so it collapses into "own". See the STORY-039 ADR.
+ * plan monthly limit enforced via TenantCounterDO (atomic). Passwords are
+ * read from Supabase Vault via SecretsService.
  */
 export class SmtpService {
   private readonly admin: SupabaseClient
-  private readonly encryption: EncryptionService
-  private readonly kv: KVNamespace
+  private readonly secrets: SecretsService
 
   constructor(
-    env: Env,
+    private readonly env: Env,
     private readonly transport: EmailTransport = notConfiguredTransport(),
+    secrets?: SecretsService,
   ) {
     this.admin = createAdminClient(env)
-    this.encryption = new EncryptionService(env.MASTER_ENCRYPTION_KEY)
-    this.kv = env.SMTP_COUNTERS
+    this.secrets = secrets ?? new SecretsService(env)
   }
 
   async send(opts: SendOptions): Promise<SmtpSource> {
@@ -107,7 +98,6 @@ export class SmtpService {
     try {
       resolved = await this.resolveCredentials(opts.restaurant_id)
 
-      // Own SMTP is unlimited; fallback paths honour the plan's monthly limit.
       if (resolved.source !== 'own' && resolved.monthly_limit !== null) {
         await this.checkAndIncrementLimit(opts.restaurant_id, resolved.monthly_limit)
       }
@@ -129,7 +119,6 @@ export class SmtpService {
       await this.logEmail(opts.restaurant_id, opts.to, opts.subject, resolved.source)
       return resolved.source
     } catch (err) {
-      // Log every failure so admins can diagnose delivery issues via /admin/email-log
       const reason = err instanceof Error ? err.message : 'unknown_error'
       await this.logEmail(
         opts.restaurant_id,
@@ -142,12 +131,6 @@ export class SmtpService {
     }
   }
 
-  /**
-   * Send a one-off test email using the global config only (no restaurant
-   * resolution, no limit counter, no email_log). Used by the superadmin SMTP
-   * test endpoint. Throws {@link NoSmtpConfigError} if no global config exists;
-   * the transport error surfaces if no email provider is wired yet.
-   */
   async sendGlobalTest(to: string, subject: string, html: string): Promise<void> {
     const global = await this.admin
       .from('smtp_config')
@@ -187,8 +170,7 @@ export class SmtpService {
   }
 
   private async toCredentials(row: SmtpConfigRow): Promise<SmtpCredentials> {
-    const context = row.restaurant_id ?? 'global'
-    const password = await this.encryption.open(row.encrypted_password, context)
+    const password = await this.secrets.get(row.password_vault_id)
     return {
       host: row.host,
       port: row.port,
@@ -199,7 +181,6 @@ export class SmtpService {
     }
   }
 
-  /** The restaurant's plan monthly SMTP limit; null = unlimited. */
   private async planMonthlyLimit(restaurantId: string): Promise<number | null> {
     const restaurant = await this.admin
       .from('restaurants')
@@ -218,26 +199,28 @@ export class SmtpService {
   }
 
   /**
-   * Read-modify-write KV counter `smtp:{restaurant_id}:{YYYY-MM}`. Workers KV has
-   * no atomic increment, so this is eventually consistent — acceptable for a soft
-   * monthly cap. At/over limit: audit and throw without incrementing or sending.
+   * Atomic monthly counter via TenantCounterDO.
+   * 429 from the DO = at limit; throw SmtpLimitExceededError without incrementing.
    */
   private async checkAndIncrementLimit(restaurantId: string, limit: number): Promise<void> {
-    const month = new Date().toISOString().slice(0, 7)
-    const key = `smtp:${restaurantId}:${month}`
-    const current = Number.parseInt((await this.kv.get(key)) ?? '0', 10) || 0
+    const period = new Date().toISOString().slice(0, 7) // YYYY-MM
+    const stub = this.env.TENANT_COUNTER.get(this.env.TENANT_COUNTER.idFromName(restaurantId))
+    const res = await stub.fetch('https://do/increment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ counter: 'smtp', period, limit }),
+    })
 
-    if (current >= limit) {
+    if (res.status === 429) {
+      const body = (await res.json()) as { count: number }
       await this.admin.from('audit_log').insert({
         restaurant_id: restaurantId,
         table_name: 'smtp_config',
         operation: 'UPDATE',
-        new_data: { event: 'smtp_limit_exceeded', limit, count: current },
+        new_data: { event: 'smtp_limit_exceeded', limit, count: body.count },
       })
       throw new SmtpLimitExceededError()
     }
-
-    await this.kv.put(key, String(current + 1))
   }
 
   private async logEmail(

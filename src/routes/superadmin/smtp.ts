@@ -1,11 +1,10 @@
 import type { Context, Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
-import { EncryptionService } from '../../services/encryption'
+import { SecretsService } from '../../services/secrets'
 import { NoSmtpConfigError, SmtpService, type EmailTransport } from '../../services/smtp'
 import { smtpGlobalSchema, smtpOverrideSchema } from './schemas'
 
-/** Dependencies, injectable for tests (e.g. a recording email transport). */
 export interface SmtpRouteDeps {
   transport?: (env: Env) => EmailTransport
 }
@@ -19,7 +18,7 @@ interface SmtpConfigRow {
   from_email: string
   from_name: string
   monthly_limit: number | null
-  encrypted_password: string
+  password_vault_id: string | null
 }
 
 async function readJson(c: Context<HonoEnv>): Promise<unknown> {
@@ -30,7 +29,6 @@ async function readJson(c: Context<HonoEnv>): Promise<unknown> {
   }
 }
 
-/** Strip the secret before returning a config row. */
 function publicConfig(row: SmtpConfigRow): Record<string, unknown> {
   return {
     id: row.id,
@@ -41,42 +39,61 @@ function publicConfig(row: SmtpConfigRow): Record<string, unknown> {
     from_email: row.from_email,
     from_name: row.from_name,
     monthly_limit: row.monthly_limit,
-    has_password: Boolean(row.encrypted_password),
+    has_password: Boolean(row.password_vault_id),
   }
 }
 
-/**
- * Superadmin SMTP management. Mounted under the `/superadmin/*` guard stack
- * (JWT → platform role → MFA). Passwords are sealed with `EncryptionService`
- * (context `global` or the restaurant_id) and never returned.
- */
+async function readMonthlyCount(env: Env, restaurantId: string): Promise<number> {
+  const period = new Date().toISOString().slice(0, 7)
+  try {
+    const stub = env.TENANT_COUNTER.get(env.TENANT_COUNTER.idFromName(restaurantId))
+    const res = await stub.fetch(
+      `https://do/read?counter=smtp&period=${period}`,
+      { method: 'GET' },
+    )
+    const body = await res.json() as { count: number }
+    return body.count ?? 0
+  } catch {
+    return 0
+  }
+}
+
 export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {}): void {
   app.post('/superadmin/smtp/global', async (c) => {
     const parsed = smtpGlobalSchema.safeParse(await readJson(c))
     if (!parsed.success) return c.json({ error: 'validation', issues: parsed.error.issues }, 422)
 
     const admin = createAdminClient(c.env)
-    const encryption = new EncryptionService(c.env.MASTER_ENCRYPTION_KEY)
-    const encrypted = await encryption.seal(parsed.data.password, 'global')
+    const secrets = new SecretsService(c.env)
+
+    // Find existing global row (NULLs not unique — can't use upsert)
+    const existing = await admin
+      .from('smtp_config')
+      .select('id, password_vault_id')
+      .is('restaurant_id', null)
+      .limit(1)
+      .maybeSingle()
+    const existingRow = existing.data as { id: string; password_vault_id: string | null } | null
+
+    let passwordVaultId: string
+    if (existingRow?.password_vault_id) {
+      await secrets.rotate(existingRow.password_vault_id, parsed.data.password)
+      passwordVaultId = existingRow.password_vault_id
+    } else {
+      passwordVaultId = await secrets.put('smtp:global', parsed.data.password)
+    }
+
     const fields = {
       host: parsed.data.host,
       port: parsed.data.port,
       username: parsed.data.username,
-      encrypted_password: encrypted,
+      password_vault_id: passwordVaultId,
       from_email: parsed.data.from_email,
       from_name: parsed.data.from_name,
     }
 
-    // UNIQUE(restaurant_id) treats NULLs as distinct, so upsert can't dedupe the
-    // global row — find-or-update by hand.
-    const existing = await admin
-      .from('smtp_config')
-      .select('id')
-      .is('restaurant_id', null)
-      .limit(1)
-      .maybeSingle()
-    if (existing.data) {
-      const upd = await admin.from('smtp_config').update(fields).eq('id', (existing.data as { id: string }).id)
+    if (existingRow) {
+      const upd = await admin.from('smtp_config').update(fields).eq('id', existingRow.id)
       if (upd.error) return c.json({ error: 'save_failed' }, 500)
     } else {
       const ins = await admin.from('smtp_config').insert({ restaurant_id: null, ...fields })
@@ -104,7 +121,6 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     const callerEmail = (user.data as { email: string } | null)?.email
     if (!callerEmail) return c.json({ error: 'caller_email_not_found' }, 400)
 
-    // Optional custom recipient in body — falls back to caller's own email
     const body = await readJson(c) as { to?: string } | null
     const toEmail = (typeof body?.to === 'string' && body.to.includes('@')) ? body.to : callerEmail
 
@@ -126,15 +142,30 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     if (!parsed.success) return c.json({ error: 'validation', issues: parsed.error.issues }, 422)
 
     const admin = createAdminClient(c.env)
-    const encryption = new EncryptionService(c.env.MASTER_ENCRYPTION_KEY)
-    const encrypted = await encryption.seal(parsed.data.password, restaurantId)
+    const secrets = new SecretsService(c.env)
+
+    const existing = await admin
+      .from('smtp_config')
+      .select('password_vault_id')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+    const existingVaultId = (existing.data as { password_vault_id: string | null } | null)?.password_vault_id
+
+    let passwordVaultId: string
+    if (existingVaultId) {
+      await secrets.rotate(existingVaultId, parsed.data.password)
+      passwordVaultId = existingVaultId
+    } else {
+      passwordVaultId = await secrets.put(`smtp:${restaurantId}`, parsed.data.password)
+    }
+
     const { error } = await admin.from('smtp_config').upsert(
       {
         restaurant_id: restaurantId,
         host: parsed.data.host,
         port: parsed.data.port,
         username: parsed.data.username,
-        encrypted_password: encrypted,
+        password_vault_id: passwordVaultId,
         from_email: parsed.data.from_email,
         from_name: parsed.data.from_name,
         monthly_limit: parsed.data.monthly_limit ?? null,
@@ -155,9 +186,7 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
       .maybeSingle()
     if (!data) return c.json({ error: 'no_override' }, 404)
 
-    const month = new Date().toISOString().slice(0, 7)
-    const raw = await c.env.SMTP_COUNTERS.get(`smtp:${restaurantId}:${month}`)
-    const monthly_used = Number.parseInt(raw ?? '0', 10) || 0
+    const monthly_used = await readMonthlyCount(c.env, restaurantId)
     return c.json({ config: { ...publicConfig(data as SmtpConfigRow), monthly_used } })
   })
 
@@ -169,15 +198,13 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
       .not('restaurant_id', 'is', null)
     if (error) return c.json({ error: 'list_failed' }, 500)
 
-    const month = new Date().toISOString().slice(0, 7)
     type OverrideRow = SmtpConfigRow & {
       restaurants: { display_name: string } | { display_name: string }[] | null
     }
     const rows = (data ?? []) as OverrideRow[]
     const overrides = await Promise.all(
       rows.map(async (row) => {
-        const raw = await c.env.SMTP_COUNTERS.get(`smtp:${row.restaurant_id!}:${month}`)
-        const monthly_used = Number.parseInt(raw ?? '0', 10) || 0
+        const monthly_used = await readMonthlyCount(c.env, row.restaurant_id!)
         const restaurant_name = Array.isArray(row.restaurants)
           ? (row.restaurants[0]?.display_name ?? null)
           : (row.restaurants?.display_name ?? null)
@@ -188,9 +215,23 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
   })
 
   app.delete('/superadmin/smtp/restaurants/:id', async (c) => {
+    const restaurantId = c.req.param('id')
     const admin = createAdminClient(c.env)
-    const { error } = await admin.from('smtp_config').delete().eq('restaurant_id', c.req.param('id'))
+
+    const existing = await admin
+      .from('smtp_config')
+      .select('password_vault_id')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+    const vaultId = (existing.data as { password_vault_id: string | null } | null)?.password_vault_id
+
+    const { error } = await admin.from('smtp_config').delete().eq('restaurant_id', restaurantId)
     if (error) return c.json({ error: 'delete_failed' }, 500)
+
+    if (vaultId) {
+      await new SecretsService(c.env).delete(vaultId).catch(() => {})
+    }
+
     return c.body(null, 204)
   })
 }

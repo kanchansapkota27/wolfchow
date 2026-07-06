@@ -3,17 +3,15 @@ import type { Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
-import { EncryptionService } from '../../services/encryption'
+import { SecretsService } from '../../services/secrets'
 import { SmtpService, type EmailTransport } from '../../services/smtp'
 import { requireRole } from '../../middleware/guards'
-
-// ── Schemas ────────────────────────────────────────────────────────────────────
 
 const saveSmtpSchema = z.object({
   host: z.string().min(1).max(253),
   port: z.number().int().min(1).max(65535),
   username: z.string().min(1).max(254),
-  password: z.string().optional(),  // empty = keep existing encrypted_password
+  password: z.string().optional(),
   from_email: z.string().email(),
   from_name: z.string().min(1).max(100),
 })
@@ -26,8 +24,6 @@ async function parseBody(req: Request): Promise<unknown> {
   }
 }
 
-// ── Deps interface ─────────────────────────────────────────────────────────────
-
 export interface SmtpTestCreds {
   host: string
   port: number
@@ -38,21 +34,14 @@ export interface SmtpTestCreds {
 }
 
 export interface SmtpRouteDeps {
-  /** HTTP email transport factory — used for both connection test and saved-config test. */
   transport?: (env: Env) => EmailTransport
-  /** Seal a plaintext SMTP password for storage. */
-  sealSmtpPassword?: (plaintext: string, restaurantId: string) => Promise<string>
-  /** Override the full test-connection flow (e.g. for unit tests). */
+  /** Store a new SMTP password in Vault; returns the vault_id uuid. */
+  putSmtpPassword?: (plaintext: string, name: string) => Promise<string>
   testSmtpConnection?: (creds: SmtpTestCreds, to: string) => Promise<void>
-  /** Override the saved-config test send (e.g. for unit tests). */
   sendTestEmail?: (restaurantId: string, to: string) => Promise<void>
 }
 
-// ── Routes ─────────────────────────────────────────────────────────────────────
-
 export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {}): void {
-  // ── POST /admin/smtp ───────────────────────────────────────────────────────
-
   app.post('/admin/smtp', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
@@ -71,7 +60,6 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     const creds = parsed.data
     const admin = createAdminClient(c.env)
 
-    // Fetch admin's own email for the test send
     const { data: user } = await admin
       .from('users')
       .select('email')
@@ -81,10 +69,16 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     const adminEmail = (user as { email: string } | null)?.email
     if (!adminEmail) return c.json({ error: 'user_not_found' }, 404)
 
-    // Resolve encrypted_password: use the new one if provided, else keep the existing one
-    let encryptedPassword: string
+    // Fetch existing row to know if we rotate or put
+    const { data: existing } = await admin
+      .from('smtp_config')
+      .select('password_vault_id')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+    const existingVaultId = (existing as { password_vault_id: string | null } | null)?.password_vault_id
+
+    let passwordVaultId: string
     if (creds.password) {
-      // Test the new credentials before saving
       const tester = deps.testSmtpConnection ?? makeConnectionTester(deps.transport?.(c.env))
       try {
         await tester({ ...creds, password: creds.password }, adminEmail)
@@ -93,20 +87,23 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
         return c.json({ error: 'smtp_connection_failed', detail }, 422)
       }
 
-      encryptedPassword = deps.sealSmtpPassword
-        ? await deps.sealSmtpPassword(creds.password, restaurantId)
-        : await new EncryptionService(c.env.MASTER_ENCRYPTION_KEY).seal(creds.password, restaurantId)
+      const secretName = `smtp:${restaurantId}`
+      if (deps.putSmtpPassword) {
+        passwordVaultId = await deps.putSmtpPassword(creds.password, secretName)
+      } else {
+        const secrets = new SecretsService(c.env)
+        if (existingVaultId) {
+          await secrets.rotate(existingVaultId, creds.password)
+          passwordVaultId = existingVaultId
+        } else {
+          passwordVaultId = await secrets.put(secretName, creds.password)
+        }
+      }
     } else {
-      // No new password — fetch the existing encrypted_password from DB
-      const { data: existing } = await admin
-        .from('smtp_config')
-        .select('encrypted_password')
-        .eq('restaurant_id', restaurantId)
-        .maybeSingle()
-      if (!existing) {
+      if (!existingVaultId) {
         return c.json({ error: 'invalid_request', detail: 'password required for new configuration' }, 422)
       }
-      encryptedPassword = (existing as { encrypted_password: string }).encrypted_password
+      passwordVaultId = existingVaultId
     }
 
     const { data, error } = await admin
@@ -117,7 +114,7 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
           host: creds.host,
           port: creds.port,
           username: creds.username,
-          encrypted_password: encryptedPassword,
+          password_vault_id: passwordVaultId,
           from_email: creds.from_email,
           from_name: creds.from_name,
         },
@@ -131,15 +128,12 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     return c.json({ ...(data as object), smtp_source: 'own', monthly_limit: null }, 201)
   })
 
-  // ── GET /admin/smtp ────────────────────────────────────────────────────────
-
   app.get('/admin/smtp', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
     const admin = createAdminClient(c.env)
 
-    // Own config takes priority
     const { data: own } = await admin
       .from('smtp_config')
       .select('host, port, username, from_email, from_name, created_at')
@@ -147,11 +141,10 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
       .maybeSingle()
 
     if (own) {
-      const used = await monthlyUsed(c.env.SMTP_COUNTERS, restaurantId)
+      const used = await readMonthlyCount(c.env, restaurantId)
       return c.json({ ...(own as object), smtp_source: 'own', monthly_limit: null, monthly_used: used })
     }
 
-    // Fall back to global (null restaurant_id)
     const { data: global } = await admin
       .from('smtp_config')
       .select('host, port, username, from_email, from_name, created_at')
@@ -161,14 +154,12 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     if (global) {
       const plan = await resolvePlan(c.env, restaurantId)
       const monthlyLimit = typeof plan?.smtp_monthly_limit === 'number' ? plan.smtp_monthly_limit : null
-      const used = await monthlyUsed(c.env.SMTP_COUNTERS, restaurantId)
+      const used = await readMonthlyCount(c.env, restaurantId)
       return c.json({ ...(global as object), smtp_source: 'global', monthly_limit: monthlyLimit, monthly_used: used })
     }
 
     return c.json({ smtp_source: null, monthly_limit: null, monthly_used: 0 })
   })
-
-  // ── DELETE /admin/smtp ─────────────────────────────────────────────────────
 
   app.delete('/admin/smtp', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
@@ -181,6 +172,15 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     }
 
     const admin = createAdminClient(c.env)
+
+    // Fetch vault_id before deleting so we can clean up the vault secret
+    const { data: existing } = await admin
+      .from('smtp_config')
+      .select('password_vault_id')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+    const vaultId = (existing as { password_vault_id: string | null } | null)?.password_vault_id
+
     const { error } = await admin
       .from('smtp_config')
       .delete()
@@ -188,10 +188,12 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
 
     if (error) return c.json({ error: 'delete_failed' }, 500)
 
+    if (vaultId) {
+      await new SecretsService(c.env).delete(vaultId).catch(() => {})
+    }
+
     return c.body(null, 204)
   })
-
-  // ── POST /admin/smtp/test ──────────────────────────────────────────────────
 
   app.post('/admin/smtp/test', async (c) => {
     const jwt = c.get('jwt')
@@ -213,7 +215,6 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     const adminEmail = (user as { email: string } | null)?.email
     if (!adminEmail) return c.json({ error: 'user_not_found' }, 404)
 
-    // Optional custom recipient — validated as proper email, falls back to admin's own email
     const body = await parseBody(c.req.raw) as { to?: string } | null
     const toRaw = typeof body?.to === 'string' ? body.to.trim() : ''
     const toEmail = z.string().email().safeParse(toRaw).success ? toRaw : adminEmail
@@ -231,14 +232,21 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
   })
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-async function monthlyUsed(kv: KVNamespace, restaurantId: string): Promise<number> {
-  const month = new Date().toISOString().slice(0, 7)
-  return Number.parseInt((await kv.get(`smtp:${restaurantId}:${month}`)) ?? '0', 10) || 0
+async function readMonthlyCount(env: Env, restaurantId: string): Promise<number> {
+  const period = new Date().toISOString().slice(0, 7)
+  try {
+    const stub = env.TENANT_COUNTER.get(env.TENANT_COUNTER.idFromName(restaurantId))
+    const res = await stub.fetch(
+      `https://do/read?counter=smtp&period=${period}`,
+      { method: 'GET' },
+    )
+    const body = await res.json() as { count: number }
+    return body.count ?? 0
+  } catch {
+    return 0
+  }
 }
 
-/** Send a verification email using the credentials as-is (before they are saved). */
 function makeConnectionTester(
   transport: EmailTransport | undefined,
 ): (creds: SmtpTestCreds, to: string) => Promise<void> {
@@ -253,7 +261,6 @@ function makeConnectionTester(
   }
 }
 
-/** Send a test email using the restaurant's saved (decrypted) SMTP config. */
 function makeSavedConfigTester(
   env: Env,
   transport: EmailTransport | undefined,

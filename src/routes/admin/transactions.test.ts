@@ -12,10 +12,9 @@ vi.mock('../../services/supabase', () => ({
 }))
 
 const mockRefund = vi.fn()
-const mockOpenKey = vi.fn()
 
 const app = new Hono<HonoEnv>()
-registerAdminRoutes(app, { refundStripePayment: mockRefund, openStripeKey: mockOpenKey })
+registerAdminRoutes(app, { refundStripePayment: mockRefund })
 
 const mockKv = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
 
@@ -53,6 +52,7 @@ function chain(opts: ChainOpts = {}) {
   return {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     range: vi.fn().mockReturnThis(),
@@ -116,18 +116,16 @@ describe('STORY-029 · Transaction history & refunds', () => {
       id: ORDER_ID,
       status: 'completed',
       total_cents: 2500,
-      payment_intent_id: 'pi_test_abc',
+      stripe_intent_id: 'pi_test_abc',
       refund_id: null,
       payment_method: 'card',
     }
     const updated = { ...order, status: 'refunded', refund_id: 're_test_123', refunded_at: new Date().toISOString() }
 
     mockFrom
-      .mockReturnValueOnce(chain({ data: order }))                                           // get order
-      .mockReturnValueOnce(chain({ data: { stripe_secret_key_sealed: 'sealed_key' } }))     // payment_config
-      .mockReturnValueOnce(chain({ data: updated }))                                         // update
+      .mockReturnValueOnce(chain({ data: order }))   // get order
+      .mockReturnValueOnce(chain({ data: updated })) // update
 
-    mockOpenKey.mockResolvedValue('sk_test_decrypted')
     mockRefund.mockResolvedValue({ id: 're_test_123' })
 
     const token = await ownerToken()
@@ -141,7 +139,7 @@ describe('STORY-029 · Transaction history & refunds', () => {
     const body = await res.json() as typeof updated
     expect(body.status).toBe('refunded')
     expect(body.refund_id).toBe('re_test_123')
-    expect(mockRefund).toHaveBeenCalledWith('sk_test_decrypted', 'pi_test_abc', undefined)
+    expect(mockRefund).toHaveBeenCalledWith('pi_test_abc', undefined)
   })
 
   it('refund already-refunded order: 409', async () => {
