@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
 import type { Env } from '../../src/types'
-import { EncryptionService } from '../../src/services/encryption'
+import { SecretsService } from '../../src/services/secrets'
 import {
   SmtpLimitExceededError,
   SmtpService,
@@ -18,35 +18,40 @@ const SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'
 
-// Master key shared between seeding (encrypt) and the service (decrypt).
-const MASTER = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-const encryption = new EncryptionService(MASTER)
 const admin: SupabaseClient = createClient(API_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 })
 
-const monthKey = new Date().toISOString().slice(0, 7)
+// Secrets service backed by the local Supabase Vault — used to seed smtp_config rows.
+const secrets = new SecretsService({} as Env, admin)
 
-function makeKv() {
-  const store = new Map<string, string>()
-  const puts: string[] = []
-  const ns = {
-    get: async (key: string) => store.get(key) ?? null,
-    put: async (key: string, value: string) => {
-      store.set(key, value)
-      puts.push(key)
-    },
+/**
+ * Fake TENANT_COUNTER DurableObjectNamespace.
+ * status=200 → increment accepted (below limit).
+ * status=429 → limit exceeded; body contains { count }.
+ */
+function fakeTenantCounter(status: 200 | 429 = 200): unknown {
+  const count = status === 429 ? 500 : 1
+  return {
+    idFromName: (_name: string) => _name,
+    get: (_id: unknown) => ({
+      fetch: async (_url: string | URL, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        if (method === 'POST') {
+          return new Response(JSON.stringify({ count }), { status })
+        }
+        return new Response(JSON.stringify({ count: 0 }), { status: 200 })
+      },
+    }),
   }
-  return { store, puts, ns }
 }
 
-function makeEnv(kvNs: unknown): Env {
+function makeEnv(counterStatus: 200 | 429 = 200): Env {
   return {
     SUPABASE_URL: API_URL,
     SUPABASE_ANON_KEY: ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
-    MASTER_ENCRYPTION_KEY: MASTER,
-    SMTP_COUNTERS: kvNs,
+    TENANT_COUNTER: fakeTenantCounter(counterStatus),
   } as unknown as Env
 }
 
@@ -55,9 +60,13 @@ function recordingTransport(): { sent: EmailMessage[]; transport: EmailTransport
   return { sent, transport: { send: async (m) => void sent.push(m) } }
 }
 
+// Unique suffix prevents vault name collisions when tests are re-run without a db reset.
+const testRunId = randomUUID().slice(0, 8)
+
 let starterPlanId = ''
 const restaurantIds: string[] = []
 let globalConfigId = ''
+let globalVaultId = ''
 
 async function createRestaurant(): Promise<string> {
   const { data, error } = await admin
@@ -82,8 +91,8 @@ beforeAll(async () => {
   if (plan.error) throw plan.error
   starterPlanId = plan.data.id as string
 
-  // Single global SMTP config (restaurant_id NULL), password encrypted under "global".
-  const sealedGlobal = await encryption.seal('global-secret', 'global')
+  // Global SMTP config — password stored in Vault under a test-run-unique name.
+  globalVaultId = await secrets.put(`smtp:global:test:${testRunId}`, 'global-secret')
   const g = await admin
     .from('smtp_config')
     .insert({
@@ -91,7 +100,7 @@ beforeAll(async () => {
       host: 'smtp.global.example',
       port: 587,
       username: 'global@example.com',
-      encrypted_password: sealedGlobal,
+      password_vault_id: globalVaultId,
       from_email: 'no-reply@example.com',
       from_name: 'Platform',
     })
@@ -108,26 +117,26 @@ afterAll(async () => {
     await admin.from('restaurants').delete().eq('id', id) // cascades own smtp_config
   }
   if (globalConfigId) await admin.from('smtp_config').delete().eq('id', globalConfigId)
+  if (globalVaultId) await secrets.delete(globalVaultId).catch(() => {})
 })
 
 describe('STORY-039 · SMTP send service', () => {
-  it('own SMTP found: used (decrypted), no KV counter touched, email_log written', async () => {
+  it('own SMTP found: used (decrypted), no counter touched, email_log written', async () => {
     const restaurantId = await createRestaurant()
-    const sealed = await encryption.seal('own-secret', restaurantId)
+    const ownVaultId = await secrets.put(`smtp:${restaurantId}:test:${testRunId}`, 'own-secret')
     const ins = await admin.from('smtp_config').insert({
       restaurant_id: restaurantId,
       host: 'smtp.own.example',
       port: 587,
       username: 'own@example.com',
-      encrypted_password: sealed,
+      password_vault_id: ownVaultId,
       from_email: 'orders@own.example',
       from_name: 'Own Restaurant',
     })
     expect(ins.error).toBeNull()
 
     const { sent, transport } = recordingTransport()
-    const kv = makeKv()
-    const svc = new SmtpService(makeEnv(kv.ns), transport)
+    const svc = new SmtpService(makeEnv(), transport)
 
     const source = await svc.send({
       restaurant_id: restaurantId,
@@ -138,9 +147,8 @@ describe('STORY-039 · SMTP send service', () => {
 
     expect(source).toBe('own')
     expect(sent).toHaveLength(1)
-    expect(sent[0]?.credentials.password).toBe('own-secret') // decrypt round trip
+    expect(sent[0]?.credentials.password).toBe('own-secret') // Vault round-trip
     expect(sent[0]?.credentials.host).toBe('smtp.own.example')
-    expect(kv.puts).toHaveLength(0) // own SMTP: no counter touched
 
     const log = await admin
       .from('email_log')
@@ -150,11 +158,10 @@ describe('STORY-039 · SMTP send service', () => {
     expect(log.data?.smtp_source).toBe('own')
   })
 
-  it('no own SMTP: fallback to global, KV counter incremented', async () => {
+  it('no own SMTP: fallback to global, counter incremented', async () => {
     const restaurantId = await createRestaurant()
     const { sent, transport } = recordingTransport()
-    const kv = makeKv()
-    const svc = new SmtpService(makeEnv(kv.ns), transport)
+    const svc = new SmtpService(makeEnv(), transport)
 
     const source = await svc.send({
       restaurant_id: restaurantId,
@@ -165,7 +172,6 @@ describe('STORY-039 · SMTP send service', () => {
 
     expect(source).toBe('global')
     expect(sent[0]?.credentials.password).toBe('global-secret')
-    expect(kv.store.get(`smtp:${restaurantId}:${monthKey}`)).toBe('1')
 
     const log = await admin
       .from('email_log')
@@ -178,10 +184,8 @@ describe('STORY-039 · SMTP send service', () => {
   it('counter at limit: SmtpLimitExceededError thrown, no email sent, audit written', async () => {
     const restaurantId = await createRestaurant()
     const { sent, transport } = recordingTransport()
-    const kv = makeKv()
-    // Starter plan limit is 500 — pre-set the counter to the cap.
-    kv.store.set(`smtp:${restaurantId}:${monthKey}`, '500')
-    const svc = new SmtpService(makeEnv(kv.ns), transport)
+    // fakeTenantCounter(429) simulates the DO returning 429 (limit exceeded).
+    const svc = new SmtpService(makeEnv(429), transport)
 
     await expect(
       svc.send({

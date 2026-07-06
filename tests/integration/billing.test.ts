@@ -82,7 +82,11 @@ async function createRestaurant(name: string): Promise<string> {
       business_name: `${name} LLC`,
       timezone: 'Europe/Istanbul',
       plan_id: starterPlanId,
-      commission_rate: COMMISSION,
+      // commission_rate was removed from restaurants in favour of plan-level
+      // commission_value (basis points). Set a per-restaurant override so the
+      // assertion value stays predictable: 500 bps = 5% = COMMISSION (0.05).
+      override_commission_value: 500,
+      override_commission_type: 'percentage',
     })
     .select('id')
     .single()
@@ -122,9 +126,11 @@ beforeAll(async () => {
   await insertOrder(withOrdersId, 50, new Date(now.getTime() - 5 * 86400000).toISOString())
   // One old order (~200 days ago): counts toward total, not 30d.
   await insertOrder(withOrdersId, 70, new Date(now.getTime() - 200 * 86400000).toISOString())
-  // Spread across distinct months (~14 months back) to test the 12-month cap.
-  for (let m = 1; m <= 14; m++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - m, 15)
+  // Spread across distinct months to test the 12-month cap.
+  // Start from m=2 (day 1 of 2 months ago) so all entries are safely outside
+  // the 30-day window regardless of which day of the month we run the test.
+  for (let m = 2; m <= 15; m++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - m, 1)
     await insertOrder(withOrdersId, 10, d.toISOString())
   }
 })

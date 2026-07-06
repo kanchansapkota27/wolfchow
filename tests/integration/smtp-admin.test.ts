@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import type { Env, HonoEnv } from '../../src/types'
 import { registerSuperadminRoutes } from '../../src/routes/superadmin'
+import { SecretsService } from '../../src/services/secrets'
 import { SmtpService, type EmailMessage, type EmailTransport } from '../../src/services/smtp'
-import { EncryptionService } from '../../src/services/encryption'
 import { signJwt } from '../../src/services/tokens'
 
 const API_URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321'
@@ -18,19 +18,29 @@ const SERVICE_ROLE_KEY =
 const JWT_SECRET =
   process.env.SUPABASE_JWT_SECRET ?? 'super-secret-jwt-token-with-at-least-32-characters-long'
 
-// Master key shared between the route (seal) and the test SmtpService (open).
-const MASTER = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-
 const admin: SupabaseClient = createClient(API_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 })
 
-function makeCounters(): KVNamespace {
-  const store = new Map<string, string>()
+// Vault-backed secrets service for the local Supabase instance.
+const secrets = new SecretsService({} as Env, admin)
+
+/**
+ * Fake TENANT_COUNTER DurableObjectNamespace.
+ * The smtp routes call TENANT_COUNTER.get(...).fetch() to read the monthly
+ * counter. Returns 200 with count=0 for GET and count=1 for POST (below limit).
+ */
+function fakeTenantCounter(): unknown {
   return {
-    get: async (key: string) => store.get(key) ?? null,
-    put: async (key: string, value: string) => void store.set(key, value),
-  } as unknown as KVNamespace
+    idFromName: (_name: string) => _name,
+    get: (_id: unknown) => ({
+      fetch: async (_url: string | URL, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        const body = method === 'POST' ? { count: 1 } : { count: 0 }
+        return new Response(JSON.stringify(body), { status: 200 })
+      },
+    }),
+  }
 }
 
 const env = {
@@ -38,8 +48,7 @@ const env = {
   SUPABASE_ANON_KEY: ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
   SUPABASE_JWT_SECRET: JWT_SECRET,
-  MASTER_ENCRYPTION_KEY: MASTER,
-  SMTP_COUNTERS: makeCounters(),
+  TENANT_COUNTER: fakeTenantCounter(),
 } as unknown as Env
 
 const app = new Hono<HonoEnv>()
@@ -79,6 +88,7 @@ let SUPERADMIN = ''
 let starterPlanId = ''
 let restaurantId = ''
 let globalConfigId = ''
+let globalVaultId = ''
 
 beforeAll(async () => {
   SUPERADMIN = await token('superadmin')
@@ -104,10 +114,11 @@ afterAll(async () => {
   await admin.from('smtp_config').delete().eq('restaurant_id', restaurantId)
   await admin.from('restaurants').delete().eq('id', restaurantId)
   if (globalConfigId) await admin.from('smtp_config').delete().eq('id', globalConfigId)
+  if (globalVaultId) await secrets.delete(globalVaultId).catch(() => {})
 })
 
 describe('STORY-009 · global SMTP configuration', () => {
-  it('set global SMTP: password encrypted in DB, plaintext absent', async () => {
+  it('set global SMTP: password stored in Vault, plaintext absent from smtp_config', async () => {
     const res = await req('POST', '/superadmin/smtp/global', SUPERADMIN, {
       host: 'smtp.global.test',
       port: 587,
@@ -120,16 +131,17 @@ describe('STORY-009 · global SMTP configuration', () => {
 
     const row = await admin
       .from('smtp_config')
-      .select('id, encrypted_password')
+      .select('id, password_vault_id')
       .is('restaurant_id', null)
       .limit(1)
       .single()
     globalConfigId = row.data?.id as string
-    const blob = row.data?.encrypted_password as string
-    expect(blob).not.toContain('global-plaintext-secret')
-    // Round-trips back to the plaintext under the 'global' context.
-    const enc = new EncryptionService(MASTER)
-    expect(await enc.open(blob, 'global')).toBe('global-plaintext-secret')
+    globalVaultId = row.data?.password_vault_id as string
+    expect(globalVaultId).toBeTruthy()
+
+    // Verify password round-trips through Vault correctly.
+    const plaintext = await secrets.get(globalVaultId)
+    expect(plaintext).toBe('global-plaintext-secret')
   })
 
   it('GET global SMTP: has_password=true, no password field', async () => {
@@ -138,7 +150,7 @@ describe('STORY-009 · global SMTP configuration', () => {
     const body = (await res.json()) as { config: Record<string, unknown> }
     expect(body.config.has_password).toBe(true)
     expect(body.config).not.toHaveProperty('password')
-    expect(body.config).not.toHaveProperty('encrypted_password')
+    expect(body.config).not.toHaveProperty('password_vault_id')
   })
 
   it('set restaurant override: stored with monthly_limit', async () => {
