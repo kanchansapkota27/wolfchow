@@ -3,8 +3,7 @@ import type { Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
-import { EncryptionService } from '../../services/encryption'
-import { StripeService } from '../../services/stripe'
+import { getStripeClient } from '../../services/secrets'
 import { KvCache, buildKey } from '../../services/kv'
 import { RealtimeService } from '../../services/realtime'
 import type { NotificationService, NotificationOrderItem } from '../../services/notifications'
@@ -52,51 +51,6 @@ function generateTrackingToken(): string {
   return `ord_live_${hex}`
 }
 
-// ── Stripe PaymentIntent creation ────────────────────────────────────────────
-
-const STRIPE_BASE = 'https://api.stripe.com/v1'
-
-async function createStripePaymentIntent(
-  secretKey: string,
-  amountCents: number,
-  currency: string,
-  restaurantId: string,
-  orderId: string,
-): Promise<{ id: string; client_secret: string }> {
-  const body = new URLSearchParams({
-    amount: String(amountCents),
-    currency: currency.toLowerCase(),
-    capture_method: 'manual',
-    'metadata[restaurant_id]': restaurantId,
-    'metadata[order_id]': orderId,
-  })
-  const res = await fetch(`${STRIPE_BASE}/payment_intents`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body,
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Stripe create PaymentIntent failed ${res.status}: ${err}`)
-  }
-  const data = await res.json() as { id: string; client_secret: string }
-  return data
-}
-
-async function fetchPaymentIntentStatus(
-  secretKey: string,
-  intentId: string,
-): Promise<{ status: string; amount: number }> {
-  const res = await fetch(`${STRIPE_BASE}/payment_intents/${intentId}`, {
-    headers: { Authorization: `Bearer ${secretKey}` },
-  })
-  if (!res.ok) throw new Error(`Stripe fetch failed ${res.status}`)
-  const data = await res.json() as { status: string; amount: number }
-  return data
-}
 
 // ── Deps ─────────────────────────────────────────────────────────────────────
 
@@ -159,7 +113,7 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
     // Get restaurant's configured payment methods
     const { data: paymentConfig } = await admin
       .from('payment_config')
-      .select('payment_methods_enabled, encrypted_stripe_secret')
+      .select('payment_methods_enabled, stripe_secret_vault_id')
       .eq('restaurant_id', restaurantId)
       .maybeSingle()
 
@@ -441,16 +395,19 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
     let clientSecret: string | null = null
     if (isCardPayment) {
       try {
-        const encryptedSecret = (paymentConfig as Record<string, unknown> | null)?.encrypted_stripe_secret as string | null
-        if (!encryptedSecret) {
+        const hasVaultId = Boolean((paymentConfig as Record<string, unknown> | null)?.stripe_secret_vault_id)
+        if (!hasVaultId) {
           await admin.from('orders').delete().eq('id', orderId)
           return c.json({ error: 'stripe_not_configured' }, 503)
         }
 
-        const enc = new EncryptionService(c.env.MASTER_ENCRYPTION_KEY)
-        const secretKey = await enc.open(encryptedSecret, restaurantId)
+        const stripeClient = await getStripeClient(restaurantId, c.env)
+        if (!stripeClient) {
+          await admin.from('orders').delete().eq('id', orderId)
+          return c.json({ error: 'stripe_not_configured' }, 503)
+        }
 
-        const intent = await createStripePaymentIntent(secretKey, totalCents, currency, restaurantId, orderId)
+        const intent = await stripeClient.createPaymentIntent(totalCents, currency, restaurantId, orderId)
         clientSecret = intent.client_secret
 
         await admin.from('orders').update({ stripe_intent_id: intent.id }).eq('id', orderId)
@@ -578,30 +535,19 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
     }
 
     // Verify with Stripe that the intent is in requires_capture state
-    const { data: paymentConfig } = await admin
-      .from('payment_config')
-      .select('encrypted_stripe_secret')
-      .eq('restaurant_id', restaurantId)
-      .maybeSingle()
-
-    const encryptedSecret = (paymentConfig as Record<string, unknown> | null)?.encrypted_stripe_secret as string | null
-    if (!encryptedSecret) return c.json({ error: 'stripe_not_configured' }, 503)
+    const stripe = await getStripeClient(restaurantId, c.env)
+    if (!stripe) return c.json({ error: 'stripe_not_configured' }, 503)
 
     try {
-      const enc = new EncryptionService(c.env.MASTER_ENCRYPTION_KEY)
-      const secretKey = await enc.open(encryptedSecret, restaurantId)
-      const intent = await fetchPaymentIntentStatus(secretKey, stripeIntentId)
+      const intent = await stripe.fetchPaymentIntentStatus(stripeIntentId)
 
       if (intent.status !== 'requires_capture') {
         return c.json({ error: 'payment_not_authorized', intent_status: intent.status }, 422)
       }
 
-      // Auto-accept: capture Stripe intent immediately then move to accepted.
-      // Regular path: move to auth_success and wait for tablet to accept.
       const shouldAutoAccept = or.auto_accept as boolean
 
       if (shouldAutoAccept) {
-        const stripe = new StripeService(secretKey)
         await stripe.capturePaymentIntent(stripeIntentId, `capture_${orderId}`)
 
         const { data: locked } = await admin.from('orders').update({

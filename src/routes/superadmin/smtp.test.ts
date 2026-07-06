@@ -9,13 +9,13 @@ const JWT_SECRET = 'test-secret-at-least-32-characters-long-xx'
 const app = new Hono<HonoEnv>()
 registerSuperadminRoutes(app)
 
+const mockCounterFetch = vi.fn(async () => ({ status: 200, json: async () => ({ count: 0 }) }))
 const envBypass = {
   SUPABASE_JWT_SECRET: JWT_SECRET,
   MFA_DEV_BYPASS: 'true',
   SUPABASE_URL: 'http://unused',
   SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
-  MASTER_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-  SMTP_COUNTERS: { get: vi.fn(async () => null) },
+  TENANT_COUNTER: { idFromName: () => 'id', get: () => ({ fetch: mockCounterFetch }) },
 } as unknown as Env
 
 async function superadminToken(): Promise<string> {

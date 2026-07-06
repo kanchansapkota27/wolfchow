@@ -46,4 +46,58 @@ export class StripeService {
     }
     return res.json() as Promise<StripeCancelResult>
   }
+
+  async createPaymentIntent(
+    amountCents: number,
+    currency: string,
+    restaurantId: string,
+    orderId: string,
+  ): Promise<{ id: string; client_secret: string }> {
+    const body = new URLSearchParams({
+      amount: String(amountCents),
+      currency: currency.toLowerCase(),
+      capture_method: 'manual',
+      'metadata[restaurant_id]': restaurantId,
+      'metadata[order_id]': orderId,
+    })
+    const res = await fetch(`${STRIPE_BASE}/payment_intents`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Stripe create PaymentIntent failed ${res.status}: ${err}`)
+    }
+    return res.json() as Promise<{ id: string; client_secret: string }>
+  }
+
+  async fetchPaymentIntentStatus(intentId: string): Promise<{ status: string; amount: number }> {
+    const res = await fetch(`${STRIPE_BASE}/payment_intents/${intentId}`, {
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    })
+    if (!res.ok) throw new Error(`Stripe fetch failed ${res.status}`)
+    return res.json() as Promise<{ status: string; amount: number }>
+  }
+
+  async refundPaymentIntent(intentId: string, amountCents?: number): Promise<{ id: string }> {
+    const body = new URLSearchParams({ payment_intent: intentId })
+    if (amountCents) body.set('amount', String(amountCents))
+    const res = await fetch(`${STRIPE_BASE}/refunds`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    })
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } }
+      throw new Error(err.error?.message ?? 'stripe_refund_failed')
+    }
+    return res.json() as Promise<{ id: string }>
+  }
 }

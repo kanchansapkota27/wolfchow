@@ -4,10 +4,8 @@ import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache } from '../../services/kv'
 import { resolvePlan } from '../../services/plan'
-import { EncryptionService } from '../../services/encryption'
+import { SecretsService } from '../../services/secrets'
 import { requireRole } from '../../middleware/guards'
-
-// ── Schemas ────────────────────────────────────────────────────────────────────
 
 const saveStripeKeySchema = z.object({
   secret_key: z.string().regex(/^sk_(live|test)_/, 'Must start with sk_live_ or sk_test_'),
@@ -30,19 +28,14 @@ async function parseBody(req: Request): Promise<unknown> {
   }
 }
 
-// ── Deps interface (injectable for testing) ────────────────────────────────────
-
 export interface PaymentRouteDeps {
   verifyStripeKey?: (secretKey: string) => Promise<boolean>
-  sealStripeKey?: (plaintext: string, restaurantId: string) => Promise<string>
+  /** Store a Stripe key in Vault; returns the vault_id uuid. */
+  putStripeKey?: (plaintext: string, name: string) => Promise<string>
 }
-
-// ── Routes ─────────────────────────────────────────────────────────────────────
 
 export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps = {}): void {
   const verifyStripeKey = deps.verifyStripeKey ?? defaultVerifyStripeKey
-
-  // ── POST /admin/payments/stripe ────────────────────────────────────────────
 
   app.post('/admin/payments/stripe', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
@@ -60,17 +53,36 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
       return c.json({ error: 'invalid_stripe_key', code: 'stripe_rejected' }, 422)
     }
 
-    const encryptedSecret = deps.sealStripeKey
-      ? await deps.sealStripeKey(secret_key, restaurantId)
-      : await new EncryptionService(c.env.MASTER_ENCRYPTION_KEY).seal(secret_key, restaurantId)
-
     const admin = createAdminClient(c.env)
+
+    // Check for existing vault_id to decide put vs rotate
+    const { data: existing } = await admin
+      .from('payment_config')
+      .select('stripe_secret_vault_id')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+    const existingVaultId = (existing as { stripe_secret_vault_id: string | null } | null)?.stripe_secret_vault_id
+
+    let stripeSecretVaultId: string
+    const secretName = `stripe:${restaurantId}`
+    if (deps.putStripeKey) {
+      stripeSecretVaultId = await deps.putStripeKey(secret_key, secretName)
+    } else {
+      const secrets = new SecretsService(c.env)
+      if (existingVaultId) {
+        await secrets.rotate(existingVaultId, secret_key)
+        stripeSecretVaultId = existingVaultId
+      } else {
+        stripeSecretVaultId = await secrets.put(secretName, secret_key)
+      }
+    }
+
     const { data, error } = await admin
       .from('payment_config')
       .upsert(
         {
           restaurant_id: restaurantId,
-          encrypted_stripe_secret: encryptedSecret,
+          stripe_secret_vault_id: stripeSecretVaultId,
           stripe_publishable_key: publishable_key,
           updated_at: new Date().toISOString(),
         },
@@ -87,8 +99,6 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
     return c.json({ publishable_key: data.stripe_publishable_key, has_secret: true, updated_at: data.updated_at })
   })
 
-  // ── GET /admin/payments/stripe ─────────────────────────────────────────────
-
   app.get('/admin/payments/stripe', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
@@ -96,7 +106,7 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
     const admin = createAdminClient(c.env)
     const { data, error } = await admin
       .from('payment_config')
-      .select('stripe_publishable_key, encrypted_stripe_secret, updated_at')
+      .select('stripe_publishable_key, stripe_secret_vault_id, updated_at')
       .eq('restaurant_id', restaurantId)
       .single()
 
@@ -104,26 +114,34 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
       return c.json({ publishable_key: null, has_secret: false, updated_at: null })
     }
 
+    const d = data as { stripe_publishable_key: string | null; stripe_secret_vault_id: string | null; updated_at: string | null }
     return c.json({
-      publishable_key: data.stripe_publishable_key,
-      has_secret: data.encrypted_stripe_secret !== null,
-      updated_at: data.updated_at,
+      publishable_key: d.stripe_publishable_key,
+      has_secret: d.stripe_secret_vault_id !== null,
+      updated_at: d.updated_at,
     })
   })
-
-  // ── DELETE /admin/payments/stripe ──────────────────────────────────────────
 
   app.delete('/admin/payments/stripe', requireRole('restaurant_owner'), async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
 
     const admin = createAdminClient(c.env)
+
+    // Fetch vault_id before nulling so we can clean up Vault
+    const { data: existing } = await admin
+      .from('payment_config')
+      .select('stripe_secret_vault_id')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+    const vaultId = (existing as { stripe_secret_vault_id: string | null } | null)?.stripe_secret_vault_id
+
     const { error } = await admin
       .from('payment_config')
       .upsert(
         {
           restaurant_id: restaurantId,
-          encrypted_stripe_secret: null,
+          stripe_secret_vault_id: null,
           stripe_publishable_key: null,
           updated_at: new Date().toISOString(),
         },
@@ -132,13 +150,15 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
 
     if (error) return c.json({ error: 'delete_failed' }, 500)
 
+    if (vaultId) {
+      await new SecretsService(c.env).delete(vaultId).catch(() => {})
+    }
+
     const cache = new KvCache(c.env.SETTINGS_CACHE)
     await cache.delete(buildKey('settings', restaurantId))
 
     return c.body(null, 204)
   })
-
-  // ── GET /admin/payments/methods ───────────────────────────────────────────
 
   app.get('/admin/payments/methods', async (c) => {
     const jwt = c.get('jwt')
@@ -156,8 +176,6 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
       pickup_delivery_note: (data as Record<string, unknown> | null)?.pickup_delivery_note ?? null,
     })
   })
-
-  // ── PATCH /admin/payments/methods ──────────────────────────────────────────
 
   app.patch('/admin/payments/methods', async (c) => {
     const jwt = c.get('jwt')
@@ -203,8 +221,6 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
     return c.json({ payment_methods: d.payment_methods_enabled, pickup_delivery_note: d.pickup_delivery_note ?? null })
   })
 
-  // ── PATCH /admin/payments/note ─────────────────────────────────────────────
-
   app.patch('/admin/payments/note', async (c) => {
     const jwt = c.get('jwt')
     const restaurantId = jwt.restaurant_id!
@@ -236,8 +252,6 @@ export function registerPaymentRoutes(app: Hono<HonoEnv>, deps: PaymentRouteDeps
     return c.json(data)
   })
 }
-
-// ── Default Stripe key verifier ────────────────────────────────────────────────
 
 async function defaultVerifyStripeKey(secretKey: string): Promise<boolean> {
   try {

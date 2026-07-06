@@ -1,8 +1,7 @@
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
-import { EncryptionService } from '../../services/encryption'
-import { StripeService } from '../../services/stripe'
+import { getStripeClient } from '../../services/secrets'
 import type { Broadcaster } from '../../services/realtime'
 
 const ACTIVE_STATUSES = ['auth_success', 'accepted', 'preparing', 'ready'] as const
@@ -14,10 +13,6 @@ export interface AdminOrderRouteDeps {
 }
 
 export function registerAdminOrderRoutes(app: Hono<HonoEnv>, deps: AdminOrderRouteDeps = {}): void {
-  // ── GET /admin/orders/active ───────────────────────────────────────────────
-  // Returns all in-flight orders for the live feed on the admin Orders page.
-  // Separate from the tablet endpoint which requires device auth.
-
   app.get('/admin/orders/active', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
     const admin = createAdminClient(c.env)
@@ -33,11 +28,6 @@ export function registerAdminOrderRoutes(app: Hono<HonoEnv>, deps: AdminOrderRou
 
     return c.json({ orders: data ?? [] })
   })
-
-  // ── POST /admin/orders/:id/accept ──────────────────────────────────────────
-  // Restaurant owners accept orders from the admin panel. Captures Stripe
-  // payment for card orders. Does not require orders:accept_reject permission
-  // (that restriction is for kitchen staff only).
 
   app.post('/admin/orders/:id/accept', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
@@ -62,19 +52,8 @@ export function registerAdminOrderRoutes(app: Hono<HonoEnv>, deps: AdminOrderRou
         if (deps.stripeCapture) {
           await deps.stripeCapture('', order.stripe_intent_id, orderId)
         } else {
-          const { data: payConf } = await admin
-            .from('payment_config')
-            .select('encrypted_stripe_secret')
-            .eq('restaurant_id', restaurantId)
-            .single()
-
-          if (!payConf?.encrypted_stripe_secret) {
-            return c.json({ error: 'stripe_not_configured' }, 500)
-          }
-
-          const enc = new EncryptionService(c.env.MASTER_ENCRYPTION_KEY)
-          const secretKey = await enc.open(payConf.encrypted_stripe_secret, restaurantId)
-          const stripe = new StripeService(secretKey)
+          const stripe = await getStripeClient(restaurantId, c.env)
+          if (!stripe) return c.json({ error: 'stripe_not_configured' }, 500)
           await stripe.capturePaymentIntent(order.stripe_intent_id, `capture_${orderId}`)
         }
       } catch (err) {
@@ -105,8 +84,6 @@ export function registerAdminOrderRoutes(app: Hono<HonoEnv>, deps: AdminOrderRou
     return c.json(updated)
   })
 
-  // ── POST /admin/orders/:id/reject ──────────────────────────────────────────
-
   app.post('/admin/orders/:id/reject', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
     const orderId = c.req.param('id')
@@ -134,16 +111,8 @@ export function registerAdminOrderRoutes(app: Hono<HonoEnv>, deps: AdminOrderRou
         if (deps.stripeCancel) {
           await deps.stripeCancel('', order.stripe_intent_id, orderId)
         } else {
-          const { data: payConf } = await admin
-            .from('payment_config')
-            .select('encrypted_stripe_secret')
-            .eq('restaurant_id', restaurantId)
-            .single()
-
-          if (payConf?.encrypted_stripe_secret) {
-            const enc = new EncryptionService(c.env.MASTER_ENCRYPTION_KEY)
-            const secretKey = await enc.open(payConf.encrypted_stripe_secret, restaurantId)
-            const stripe = new StripeService(secretKey)
+          const stripe = await getStripeClient(restaurantId, c.env)
+          if (stripe) {
             await stripe.cancelPaymentIntent(order.stripe_intent_id, `cancel_${orderId}`)
           }
         }
@@ -171,6 +140,9 @@ export function registerAdminOrderRoutes(app: Hono<HonoEnv>, deps: AdminOrderRou
       { order_id: orderId },
       {} as ExecutionContext,
     )
+
+    // reason variable declared above, suppress unused warning
+    void reason
 
     return c.json(updated)
   })

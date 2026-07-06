@@ -2,11 +2,9 @@ import type { Env } from '../types'
 import { createAdminClient } from './supabase'
 import { buildKey, KvCache } from './kv'
 import { RealtimeService } from './realtime'
-import { EncryptionService } from './encryption'
-import { StripeService } from './stripe'
+import { getStripeClient } from './secrets'
 
 // ── Inventory restore ─────────────────────────────────────────────────────────
-// Restores menu items to 'available' when their restore_at timestamp has passed.
 
 export async function runInventoryRestore(env: Env, ctx: ExecutionContext): Promise<void> {
   const admin = createAdminClient(env)
@@ -48,14 +46,11 @@ export async function runInventoryRestore(env: Env, ctx: ExecutionContext): Prom
 }
 
 // ── Auto-reject ───────────────────────────────────────────────────────────────
-// Rejects orders that have waited longer than the restaurant's auto_reject_minutes
-// without being accepted by the kitchen.
 
 export async function runAutoReject(env: Env, ctx: ExecutionContext): Promise<void> {
   const admin = createAdminClient(env)
   const now = new Date()
 
-  // Load all restaurants with auto-reject enabled in one query
   const { data: restaurants } = await admin
     .from('restaurants')
     .select('id, auto_reject_minutes')
@@ -79,8 +74,6 @@ export async function runAutoReject(env: Env, ctx: ExecutionContext): Promise<vo
 
     if (!orders?.length) continue
 
-    // Cancel Stripe intents for card orders (best-effort)
-    let stripeService: StripeService | null = null
     const cardOrders = (orders as Array<{
       id: string
       payment_method: string
@@ -89,33 +82,16 @@ export async function runAutoReject(env: Env, ctx: ExecutionContext): Promise<vo
 
     if (cardOrders.length > 0) {
       try {
-        const { data: payConf } = await admin
-          .from('payment_config')
-          .select('encrypted_stripe_secret')
-          .eq('restaurant_id', restaurantId)
-          .single()
-
-        if (payConf?.encrypted_stripe_secret) {
-          const enc = new EncryptionService(env.MASTER_ENCRYPTION_KEY)
-          const secretKey = await enc.open(
-            (payConf as Record<string, unknown>).encrypted_stripe_secret as string,
-            restaurantId,
+        const stripe = await getStripeClient(restaurantId, env)
+        if (stripe) {
+          await Promise.allSettled(
+            cardOrders.map((o) =>
+              stripe.cancelPaymentIntent(o.stripe_intent_id!, `auto_reject_${o.id}`),
+            ),
           )
-          stripeService = new StripeService(secretKey)
         }
       } catch {
-        // If we can't get the Stripe key, still reject the DB row
-      }
-
-      if (stripeService) {
-        await Promise.allSettled(
-          cardOrders.map((o) =>
-            stripeService!.cancelPaymentIntent(
-              o.stripe_intent_id!,
-              `auto_reject_${o.id}`,
-            ),
-          ),
-        )
+        // If we can't get the Stripe key, still reject the DB rows
       }
     }
 
