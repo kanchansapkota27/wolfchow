@@ -13,6 +13,10 @@ import { usePlan } from '../lib/usePlan'
 import { PlanLocked } from '../components/UpgradeModal'
 import { StripeKeyGuide } from '../components/StripeKeyGuide'
 import { sanitizeHtml } from '../lib/sanitize'
+import { Card } from '../components/settings/Card'
+import { SectionHeader } from '../components/settings/SectionHeader'
+import { LinkField } from '../components/settings/LinkField'
+import { BrandColorsCard } from '../components/settings/BrandColorsCard'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -68,17 +72,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-
-
-function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
-  return (
-    <div className="mb-5 flex items-center gap-2">
-      <Icon size={16} className="text-blue-600" />
-      <span className="text-xs font-bold tracking-widest text-gray-700 uppercase">{label}</span>
-    </div>
-  )
-}
-
 function Toggle({ checked, onChange, label, description }: {
   checked: boolean
   onChange: (v: boolean) => void
@@ -102,103 +95,6 @@ function Toggle({ checked, onChange, label, description }: {
         {description && <div className="mt-0.5 text-xs text-gray-500">{description}</div>}
       </div>
     </label>
-  )
-}
-
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('rounded-xl border border-gray-200 bg-white p-6', className)}>
-      {children}
-    </div>
-  )
-}
-
-// ── Link field ────────────────────────────────────────────────────────────────
-
-function LinkField({ label, initial, onSave }: {
-  label: string
-  initial: string
-  onSave: (url: string) => Promise<void>
-}) {
-  const [value, setValue] = useState(initial)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-
-  async function handleSave() {
-    if (value && !/^https?:\/\/.+/.test(value)) { setError('Must be a valid URL'); return }
-    setError(''); setSaving(true)
-    try { await onSave(value); setSaved(true); setTimeout(() => setSaved(false), 2000) }
-    catch { setError('Failed to save') }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-medium text-gray-500">{label}</label>
-      <div className="flex gap-2">
-        <input
-          type="url"
-          value={value}
-          onChange={(e) => { setValue(e.target.value); setError('') }}
-          placeholder="https://…"
-          className={cn(
-            'flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400',
-            error ? 'border-red-300' : 'border-gray-200',
-          )}
-        />
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saving}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900 disabled:opacity-40"
-        >
-          {saved ? 'Saved!' : saving ? '…' : 'Save'}
-        </button>
-      </div>
-      {error && <p className="mt-1 text-xs text-red-600" role="alert">{error}</p>}
-    </div>
-  )
-}
-
-// ── Brand colors card ─────────────────────────────────────────────────────────
-
-function BrandColorsCard({ restaurant, onSave }: { restaurant: Restaurant; onSave: () => void }) {
-  const api = useApi()
-  const [colors, setColors] = useState<BrandColors>(restaurant.brand_colors ?? {})
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function handleChange(key: keyof BrandColors, value: string) {
-    const next = { ...colors, [key]: value }
-    setColors(next)
-    if (debounce.current) clearTimeout(debounce.current)
-    debounce.current = setTimeout(async () => {
-      await api.admin.saveIntegrations({ brand_colors: next })
-      onSave()
-    }, 400)
-  }
-
-  return (
-    <Card>
-      <SectionHeader icon={Globe} label="Widget theme colors" />
-      <p className="mb-4 text-xs text-gray-500">
-        These colors are applied to your embedded ordering widget.
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        {(['primary', 'secondary', 'accent', 'text'] as Array<keyof BrandColors>).map((key) => (
-          <label key={key} className="flex cursor-pointer items-center gap-3">
-            <input
-              type="color"
-              value={colors[key] ?? '#2563eb'}
-              onChange={(e) => handleChange(key, e.target.value)}
-              className="h-9 w-9 cursor-pointer rounded-lg border border-gray-200"
-              aria-label={`${key} colour`}
-            />
-            <span className="text-sm capitalize text-gray-700">{key}</span>
-          </label>
-        ))}
-      </div>
-    </Card>
   )
 }
 
