@@ -212,6 +212,9 @@ importers:
 
   apps/tracking:
     dependencies:
+      '@tanstack/react-query':
+        specifier: ^5.101.0
+        version: 5.101.0(react@19.2.7)
       '@wolfchow/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
@@ -274,6 +277,9 @@ importers:
       '@wolfchow/types':
         specifier: workspace:*
         version: link:../types
+      react:
+        specifier: ^19.0.0
+        version: 19.2.7
 
   packages/auth:
     dependencies:

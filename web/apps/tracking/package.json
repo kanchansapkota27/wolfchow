@@ -10,6 +10,7 @@
     "deploy": "wrangler pages deploy ./dist --project-name=wolfchow-tracking"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.0",
     "@wolfchow/api-client": "workspace:*",
     "@wolfchow/types": "workspace:*",
     "@wolfchow/ui": "workspace:*",
