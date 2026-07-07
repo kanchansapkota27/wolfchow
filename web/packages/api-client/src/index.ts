@@ -47,6 +47,8 @@ export type {
   CreateNoticeInput,
 } from './client'
 export { ApiError } from './errors'
+export { createApiContext } from './context'
+export type { ApiContextValue } from './context'
 export {
   createLocalStorageSession,
   createMemorySession,

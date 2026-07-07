@@ -9,5 +9,8 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@wolfchow/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
   }
 }
