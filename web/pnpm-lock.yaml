@@ -169,6 +169,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.49.8
         version: 2.108.2
+      '@tanstack/react-query':
+        specifier: ^5.101.0
+        version: 5.101.0(react@19.2.7)
       '@wolfchow/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
