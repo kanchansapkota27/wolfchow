@@ -1,8 +1,5 @@
 import type { CartItem, WidgetSettings } from '../types'
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
-}
+import { formatCurrency } from '@wolfchow/utils'
 
 interface CartProps {
   items: CartItem[]
@@ -123,11 +120,11 @@ export function Cart({ items, settings, onUpdateQty, onRemove, onCheckout, onBac
             {/* Price */}
             <div style={{ flexShrink: 0, textAlign: 'right' }}>
               <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9375rem' }}>
-                {formatPrice(item.unit_price * item.quantity, currency)}
+                {formatCurrency(item.unit_price * item.quantity, currency)}
               </p>
               {item.quantity > 1 && (
                 <p style={{ margin: '0.125rem 0 0', fontSize: '0.75rem', color: '#9ca3af' }}>
-                  {formatPrice(item.unit_price, currency)} each
+                  {formatCurrency(item.unit_price, currency)} each
                 </p>
               )}
             </div>
@@ -140,17 +137,17 @@ export function Cart({ items, settings, onUpdateQty, onRemove, onCheckout, onBac
         <div style={{ padding: '0.875rem 1rem', borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem', fontSize: '0.9375rem' }}>
             <span>Subtotal</span>
-            <span>{formatPrice(subtotal, currency)}</span>
+            <span>{formatCurrency(subtotal, currency)}</span>
           </div>
           {settings.tax.enabled && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem', fontSize: '0.875rem', color: '#6b7280' }}>
               <span>{taxLabel}</span>
-              <span>{formatPrice(taxDisplay, currency)}</span>
+              <span>{formatCurrency(taxDisplay, currency)}</span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1rem', marginBottom: '1rem', paddingTop: '0.5rem', borderTop: '1px solid #f3f4f6' }}>
             <span>Estimated Total</span>
-            <span>{formatPrice(estimatedTotal, currency)}</span>
+            <span>{formatCurrency(estimatedTotal, currency)}</span>
           </div>
 
           <button

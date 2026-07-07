@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Stripe, StripeCardElement } from '@stripe/stripe-js'
 import type { CartItem, CheckoutForm, PromoValidation, WidgetSettings } from '../types'
+import { formatCurrency } from '@wolfchow/utils'
 import { Notices } from './Notices'
 
 // Load Stripe.js from CDN (more reliable than @stripe/stripe-js in bundled IIFE context)
@@ -90,10 +91,6 @@ function formatSlotTime(isoStr: string, tz: string): string {
     minute: '2-digit',
     hour12: true,
   }).format(new Date(isoStr))
-}
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
 interface CheckoutProps {
@@ -682,7 +679,7 @@ export function Checkout({
             </div>
             {promo && (
               <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: promo.valid ? '#16a34a' : '#dc2626' }}>
-                {promo.valid ? `✓ ${promo.title} — ${formatPrice(promo.discount_amount ?? 0, currency)} off` : promo.message}
+                {promo.valid ? `✓ ${promo.title} — ${formatCurrency(promo.discount_amount ?? 0, currency)} off` : promo.message}
               </p>
             )}
           </div>
@@ -727,7 +724,7 @@ export function Checkout({
                       fontWeight: 500,
                     }}
                   >
-                    {pct}% ({formatPrice(tipVal, currency)})
+                    {pct}% ({formatCurrency(tipVal, currency)})
                   </button>
                 )
               })}
@@ -796,25 +793,25 @@ export function Checkout({
       <div style={{ padding: '0.875rem 1rem', borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.875rem', fontSize: '0.875rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Subtotal</span><span>{formatPrice(subtotal, currency)}</span>
+            <span>Subtotal</span><span>{formatCurrency(subtotal, currency)}</span>
           </div>
           {promo?.valid && promo.discount_amount ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a' }}>
-              <span>Promo</span><span>−{formatPrice(promo.discount_amount, currency)}</span>
+              <span>Promo</span><span>−{formatCurrency(promo.discount_amount, currency)}</span>
             </div>
           ) : null}
           {settings.tax.enabled && (
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6b7280' }}>
-              <span>Tax</span><span>{formatPrice(taxAmount, currency)}</span>
+              <span>Tax</span><span>{formatCurrency(taxAmount, currency)}</span>
             </div>
           )}
           {tipAmount > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Tip</span><span>{formatPrice(tipAmount, currency)}</span>
+              <span>Tip</span><span>{formatCurrency(tipAmount, currency)}</span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1rem', paddingTop: '0.375rem', borderTop: '1px solid #f3f4f6' }}>
-            <span>Total</span><span>{formatPrice(total, currency)}</span>
+            <span>Total</span><span>{formatCurrency(total, currency)}</span>
           </div>
         </div>
 
@@ -825,7 +822,7 @@ export function Checkout({
             ? 'Placing Order…'
             : cardStatus === 'loading' && form.payment_method === 'card'
               ? 'Loading card form…'
-              : `Place Order · ${formatPrice(total, currency)}`
+              : `Place Order · ${formatCurrency(total, currency)}`
           return (
             <button
               onClick={onSubmit}

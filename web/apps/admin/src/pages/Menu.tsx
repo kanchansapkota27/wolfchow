@@ -11,6 +11,7 @@ import { usePlan } from '../lib/usePlan'
 import { PlanLocked, LockIcon, UpgradeModal } from '../components/UpgradeModal'
 import type { UpgradeMessage } from '../components/UpgradeModal'
 import { cn } from '../lib/utils'
+import { formatCurrency } from '@wolfchow/utils'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -39,10 +40,6 @@ const AVAIL_OPTIONS: Array<{
 const FIELD = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatPrice(cents: number, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100)
-}
 
 function AvailabilityBadge({ state }: { state: string }) {
   const opt = (AVAIL_OPTIONS.find((o) => o.value === state) ?? AVAIL_OPTIONS[0])!
@@ -214,7 +211,7 @@ function DrawerModifiers({ itemId }: { itemId: string }) {
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {(group.options ?? []).map((opt) => (
                   <span key={opt.id} className="rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-xs text-gray-500">
-                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatPrice(opt.price_delta)})` : ''}
+                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatCurrency(opt.price_delta / 100, 'USD')})` : ''}
                   </span>
                 ))}
               </div>
@@ -768,7 +765,7 @@ function ModifiersTab() {
               {(group.options ?? []).map((opt) => (
                 <div key={opt.id} className="group/opt flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
                   <span className="text-xs text-gray-600">
-                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatPrice(opt.price_delta)})` : ''}
+                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatCurrency(opt.price_delta / 100, 'USD')})` : ''}
                   </span>
                   <button
                     type="button"
@@ -1192,7 +1189,7 @@ export function Menu() {
                               <p className="truncate text-sm font-semibold text-gray-900">{item.name}</p>
                             </div>
                             <p className="mt-0.5 text-sm font-bold text-gray-700">
-                              {hasVariants ? `From ${formatPrice(minPrice)}` : formatPrice(minPrice)}
+                              {hasVariants ? `From ${formatCurrency(minPrice / 100, 'USD')}` : formatCurrency(minPrice / 100, 'USD')}
                             </p>
                             <div className="mt-2">
                               <AvailabilityBadge state={item.availability_state} />

@@ -1,8 +1,5 @@
 import type { OrderTrackingResult, WidgetSettings } from '../types'
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
-}
+import { formatCurrency } from '@wolfchow/utils'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; step: number }> = {
   pending_payment: { label: 'Awaiting Payment', color: '#9ca3af', step: 0 },
@@ -110,14 +107,14 @@ export function OrderTracking({ tracking, settings, onBack, onRefresh }: OrderTr
                   <span style={{ color: '#374151', fontWeight: 500 }}>
                     {item.quantity}× {displayName}{variantSuffix}
                   </span>
-                  <span style={{ color: '#374151' }}>{formatPrice(item.unit_price * item.quantity, currency)}</span>
+                  <span style={{ color: '#374151' }}>{formatCurrency(item.unit_price * item.quantity, currency)}</span>
                 </div>
                 {item.modifiers.length > 0 && (
                   <div style={{ paddingLeft: '1rem', marginTop: '0.125rem' }}>
                     {item.modifiers.map((mod, mi) => (
                       <div key={mi} style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', justifyContent: 'space-between' }}>
                         <span>+ {mod.name}</span>
-                        {mod.price_delta !== 0 && <span>{formatPrice(mod.price_delta, currency)}</span>}
+                        {mod.price_delta !== 0 && <span>{formatCurrency(mod.price_delta, currency)}</span>}
                       </div>
                     ))}
                   </div>
@@ -135,24 +132,24 @@ export function OrderTracking({ tracking, settings, onBack, onRefresh }: OrderTr
             {tracking.promo_discount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a' }}>
                 <span>Discount</span>
-                <span>−{formatPrice(tracking.promo_discount, currency)}</span>
+                <span>−{formatCurrency(tracking.promo_discount, currency)}</span>
               </div>
             )}
             {tracking.tax_amount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6b7280' }}>
                 <span>Tax</span>
-                <span>{formatPrice(tracking.tax_amount, currency)}</span>
+                <span>{formatCurrency(tracking.tax_amount, currency)}</span>
               </div>
             )}
             {tracking.tip_amount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Tip</span>
-                <span>{formatPrice(tracking.tip_amount, currency)}</span>
+                <span>{formatCurrency(tracking.tip_amount, currency)}</span>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1rem' }}>
               <span>Total</span>
-              <span>{formatPrice(tracking.total, currency)}</span>
+              <span>{formatCurrency(tracking.total, currency)}</span>
             </div>
           </div>
         </div>

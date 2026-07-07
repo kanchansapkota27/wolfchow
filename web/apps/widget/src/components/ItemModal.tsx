@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { PublicMenuItem, PublicVariant, CartModifier } from '../types'
+import { formatCurrency } from '@wolfchow/utils'
 
 interface ItemModalProps {
   item: PublicMenuItem
@@ -7,10 +8,6 @@ interface ItemModalProps {
   showModifiers: boolean
   onAdd: (variantId: string | null, variantName: string | null, basePrice: number, modifiers: CartModifier[], quantity: number, notes: string) => void
   onClose: () => void
-}
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
 export function ItemModal({ item, currency, showModifiers, onAdd, onClose }: ItemModalProps) {
@@ -146,7 +143,7 @@ export function ItemModal({ item, currency, showModifiers, onAdd, onClose }: Ite
                     {!v.available && <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>(Sold out)</span>}
                   </div>
                   <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
-                    {formatPrice(v.price, currency)}
+                    {formatCurrency(v.price, currency)}
                   </span>
                 </label>
               ))}
@@ -193,7 +190,7 @@ export function ItemModal({ item, currency, showModifiers, onAdd, onClose }: Ite
                   </div>
                   {opt.price_delta !== 0 && (
                     <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                      {opt.price_delta > 0 ? '+' : ''}{formatPrice(opt.price_delta, currency)}
+                      {opt.price_delta > 0 ? '+' : ''}{formatCurrency(opt.price_delta, currency)}
                     </span>
                   )}
                 </label>
@@ -280,7 +277,7 @@ export function ItemModal({ item, currency, showModifiers, onAdd, onClose }: Ite
             }}
           >
             <span>Add to Cart</span>
-            <span>{formatPrice(totalPrice, currency)}</span>
+            <span>{formatCurrency(totalPrice, currency)}</span>
           </button>
         </div>
       </div>
