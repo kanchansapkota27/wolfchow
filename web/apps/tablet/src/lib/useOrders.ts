@@ -31,9 +31,19 @@ export function useOrders() {
   const autoRejectTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const initialScheduleDone = useRef(false)
 
+  // This query only ever gets fresh data via the realtime handlers below and
+  // mutation onSuccess writes -- never via a passive refetch. The one-shot
+  // initialScheduleDone guard above assumes the initial fetch is the only
+  // unscheduled entry point for new orders; a background refetch (window
+  // focus / reconnect / stale remount) would silently introduce an order the
+  // realtime channel missed, bypassing the schedule guard entirely.
   const { data: orders = [], isLoading: loading } = useQuery({
     queryKey: ORDERS_QUERY_KEY,
     queryFn: () => api.orders.listActive(),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 
   const setOrders = useCallback(
