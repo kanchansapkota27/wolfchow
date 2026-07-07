@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
+import type { ReactElement } from 'react'
 import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { WidgetSettings } from './types'
 import { App } from './App'
 import { injectCssVars, mountWidgetInShadow } from './bootstrap'
+
+function renderWithQuery(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+}
 
 const SETTINGS: WidgetSettings = {
   slug: 'acme',
@@ -68,14 +75,14 @@ describe('STORY-074 · Widget scaffold & theme loading', () => {
   })
 
   it('error state: shows error message and retry button when fetch fails', () => {
-    render(<App state="error" settings={null} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="error" settings={null} apiBase="http://localhost:8789" slug="acme" />)
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(screen.getByText('Menu unavailable')).toBeTruthy()
     expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
   })
 
   it('loading state: shows skeleton placeholder', () => {
-    render(<App state="loading" settings={null} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="loading" settings={null} apiBase="http://localhost:8789" slug="acme" />)
     expect(screen.getByTestId('skeleton')).toBeTruthy()
   })
 })

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type {
   WidgetSettings,
-  PublicMenuCategory,
   PublicMenuItem,
   CartItem,
   CheckoutForm,
@@ -71,8 +71,6 @@ function generateId(): string {
 export function App({ state: loadState, settings: initialSettings, apiBase, slug }: AppProps) {
   const [view, setView] = useState<WidgetView>('menu')
   const [settings, setSettings] = useState<WidgetSettings | null>(initialSettings)
-  const [menu, setMenu] = useState<PublicMenuCategory[]>([])
-  const [menuLoaded, setMenuLoaded] = useState(false)
   const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [form, setForm] = useState<CheckoutForm>(DEFAULT_FORM)
@@ -90,15 +88,11 @@ export function App({ state: loadState, settings: initialSettings, apiBase, slug
   }, [initialSettings])
 
   // Load menu once settings are ready
-  useEffect(() => {
-    if (loadState !== 'ready' || menuLoaded) return
-    api.getMenu()
-      .then((cats) => {
-        setMenu(cats)
-        setMenuLoaded(true)
-      })
-      .catch(() => setMenuLoaded(true))
-  }, [loadState, menuLoaded])
+  const { data: menu = [], isPending: menuPending } = useQuery({
+    queryKey: ['widget-menu', slug],
+    queryFn: () => api.getMenu(),
+    enabled: loadState === 'ready',
+  })
 
   // Set default payment method
   useEffect(() => {
@@ -319,7 +313,7 @@ export function App({ state: loadState, settings: initialSettings, apiBase, slug
               </div>
             </div>
           )}
-          {!menuLoaded ? (
+          {menuPending ? (
             <Skeleton />
           ) : (
             <Menu

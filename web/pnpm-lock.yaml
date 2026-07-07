@@ -246,6 +246,9 @@ importers:
       '@stripe/stripe-js':
         specifier: ^9.8.0
         version: 9.8.0
+      '@tanstack/react-query':
+        specifier: ^5.101.0
+        version: 5.101.0(react@19.2.7)
       '@wolfchow/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
