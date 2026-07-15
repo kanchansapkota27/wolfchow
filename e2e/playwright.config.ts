@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm --dir .. dev', // wrangler dev, from repo root
-      url: BACKEND_URL,
+      url: `${BACKEND_URL}/health`, // root "/" 404s (no route); readiness check needs a 2xx
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
