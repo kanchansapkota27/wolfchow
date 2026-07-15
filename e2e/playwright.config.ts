@@ -52,10 +52,52 @@ export default defineConfig({
     },
   ],
   projects: [
-    { name: 'admin-desktop', use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' } },
-    { name: 'superadmin-desktop', use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' } },
-    { name: 'tablet-ipad', use: { ...devices['iPad Pro 12.9'], baseURL: 'http://localhost:5175' } },
-    { name: 'widget-mobile', use: { ...devices['iPhone 14'], baseURL: 'http://localhost:5176' } },
-    { name: 'tracking-mobile', use: { ...devices['iPhone 14'], baseURL: 'http://localhost:5177' } },
+    {
+      name: 'admin-desktop',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' },
+      // Every scenario whose primary actor is the admin app, plus E2E-07's
+      // fixme placeholder (project doesn't matter, it never runs) and E2E-08
+      // (opens its own explicit contexts per app, admin is just where it starts).
+      testMatch: [
+        'e2e-01-signup-invite.spec.ts',
+        'e2e-02-menu-management.spec.ts',
+        'e2e-05-pause-resume.spec.ts',
+        'e2e-06-promo-code.spec.ts',
+        'e2e-07-realtime-availability.spec.ts',
+        'e2e-08-refund.spec.ts',
+      ],
+    },
+    {
+      name: 'superadmin-desktop',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' },
+      testMatch: ['e2e-09-suspend-restaurant.spec.ts'],
+    },
+    {
+      name: 'widget-mobile',
+      use: { ...devices['iPhone 14'], baseURL: 'http://localhost:5176' },
+      // Cross-app order-flow scenarios — widget is the primary actor; each
+      // opens its own explicit admin/tablet/tracking contexts with their own
+      // baseURLs, so only the widget-facing steps use this project's default.
+      testMatch: [
+        'e2e-03-card-order-flow.spec.ts',
+        'e2e-04-pickup-order-flow.spec.ts',
+        'e2e-10-tablet-permissions.spec.ts',
+      ],
+    },
+    // No spec files currently target tablet-ipad or tracking-mobile directly
+    // as their PRIMARY project (every tablet/tracking interaction happens via
+    // an explicitly-created context inside a widget-mobile or admin-desktop
+    // test) — kept registered for `--project` ad-hoc runs and future scenarios,
+    // but excluded from a plain `npx playwright test` via an empty testMatch.
+    {
+      name: 'tablet-ipad',
+      use: { ...devices['iPad Pro 12.9'], baseURL: 'http://localhost:5175' },
+      testMatch: [],
+    },
+    {
+      name: 'tracking-mobile',
+      use: { ...devices['iPhone 14'], baseURL: 'http://localhost:5177' },
+      testMatch: [],
+    },
   ],
 })

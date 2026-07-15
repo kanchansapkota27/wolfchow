@@ -16,7 +16,10 @@ import { waitForIncomingOrder } from '../fixtures/tablet'
  * to PREPARING.
  */
 test.describe('E2E-10 · device permissions gate tablet actions', () => {
-  test.setTimeout(120_000)
+  // Same environment-slowness reality as E2E-04 (3 apps, device
+  // provisioning, reload-polling on the realtime-less tablet connection) —
+  // 120s wasn't enough on a slower run.
+  test.setTimeout(180_000)
 
   test('device without accept/reject permission cannot accept orders', async ({ browser }) => {
     const seed = await readSeed()
