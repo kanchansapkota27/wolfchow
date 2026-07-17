@@ -33,7 +33,15 @@ function Providers() {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <ApiProvider client={client}>
-          <AuthProvider client={client} session={session} navigator={authNavigator}>
+          <AuthProvider
+            client={client}
+            session={session}
+            navigator={authNavigator}
+            probeSuspended={async () => {
+              const restaurant = await client.admin.getRestaurant()
+              return restaurant.active === false
+            }}
+          >
             <App />
           </AuthProvider>
         </ApiProvider>

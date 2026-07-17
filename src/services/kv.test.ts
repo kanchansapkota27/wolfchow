@@ -66,14 +66,14 @@ describe('STORY-040 · KV cache service', () => {
     expect(await cache.get('menu:r1')).toBeNull()
   })
 
-  it('invalidateAll: all 8 key types deleted', async () => {
+  it('invalidateAll: every restaurant-scoped key type deleted', async () => {
     const kv = makeKv()
     const cache = new KvCache(kv.ns)
     await cache.invalidateAll('r1')
     expect(kv.deletes.sort()).toEqual(
       RESTAURANT_SCOPED_TYPES.map((t) => buildKey(t, 'r1')).sort(),
     )
-    expect(kv.deletes).toHaveLength(8)
+    expect(kv.deletes).toHaveLength(RESTAURANT_SCOPED_TYPES.length)
   })
 
   it('getOrFetch: stale value returned, background revalidation fired', async () => {

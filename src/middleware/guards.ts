@@ -1,5 +1,6 @@
 import { createMiddleware } from 'hono/factory'
 import type { HonoEnv } from '../types'
+import { KvCache, buildKey } from '../services/kv'
 
 /**
  * Permission guards. All run *after* `jwtMiddleware` and read the verified
@@ -68,6 +69,30 @@ export function requireMFA() {
     }
     if (!jwt.amr.some((m) => m.method === 'totp')) {
       return c.json({ error: 'mfa_required' }, 403)
+    }
+    await next()
+  })
+}
+
+/**
+ * Reject requests for a suspended restaurant, else pass through. Reads the
+ * `suspended:{restaurant_id}` KV flag — written by the superadmin
+ * suspend/reactivate/PATCH-active actions (see STORY-083) — rather than
+ * querying Postgres on every request. Intentionally fails open: an absent or
+ * unreadable KV entry allows the request through, matching pre-STORY-083
+ * behaviour rather than risking a false-positive lockout from a cache miss.
+ * Must run after `requireRestaurant()`, which guarantees `restaurant_id`.
+ */
+export function requireActiveRestaurant() {
+  return createMiddleware<HonoEnv>(async (c, next) => {
+    const jwt = c.get('jwt')
+    if (!jwt) return c.json({ error: 'unauthorized' }, 401)
+    if (jwt.restaurant_id) {
+      const cache = new KvCache(c.env.SETTINGS_CACHE)
+      const suspended = await cache.get<boolean>(buildKey('suspended', jwt.restaurant_id))
+      if (suspended === true) {
+        return c.json({ error: 'restaurant_suspended', code: 'restaurant_suspended' }, 403)
+      }
     }
     await next()
   })

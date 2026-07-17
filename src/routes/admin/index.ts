@@ -1,7 +1,7 @@
 import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { jwtMiddleware } from '../../middleware/jwt'
-import { requireRestaurant, requireRole } from '../../middleware/guards'
+import { requireActiveRestaurant, requireRestaurant, requireRole } from '../../middleware/guards'
 import { registerRestaurantAdminRoutes, type RestaurantAdminDeps } from './restaurant'
 import { registerCategoryRoutes, type CategoryRouteDeps } from './categories'
 import { registerItemRoutes, type ItemRouteDeps } from './items'
@@ -30,6 +30,7 @@ export interface AdminDeps extends RestaurantAdminDeps, CategoryRouteDeps, ItemR
  * - JWT verification
  * - `restaurant_owner` role only (kitchen-role users use the /tablet/* routes)
  * - A non-null restaurant_id claim
+ * - The restaurant not being suspended (STORY-083)
  *
  * `deps` is injectable for testing (e.g. swap out the R2 presigned URL generator).
  */
@@ -39,6 +40,7 @@ export function registerAdminRoutes(app: Hono<HonoEnv>, deps: AdminDeps = {}): v
     jwtMiddleware,
     requireRole('restaurant_owner'),
     requireRestaurant(),
+    requireActiveRestaurant(),
   )
 
   registerRestaurantAdminRoutes(app, deps)
