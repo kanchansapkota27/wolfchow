@@ -118,7 +118,7 @@ export function registerSchedulingRoutes(app: Hono<HonoEnv>): void {
 
     // Fetch hours (KV cache or DB)
     const cache = new KvCache(c.env.SETTINGS_CACHE)
-    let hours: HoursRow[] = []
+    let hours: HoursRow[]
     const cachedHours = await cache.get<HoursRow[]>(buildKey('hours', restaurantId))
     if (cachedHours) {
       hours = cachedHours

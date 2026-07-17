@@ -55,7 +55,7 @@ export function registerPublicSlotsRoutes(app: Hono<HonoEnv>): void {
     if (cached) return c.json({ slots: cached })
 
     // Fetch operating hours (try KV first, fall back to DB)
-    let hours: HoursRow[] = []
+    let hours: HoursRow[]
     const cachedHours = await cache.get<HoursRow[]>(buildKey('hours', restaurantId))
     if (cachedHours) {
       hours = cachedHours

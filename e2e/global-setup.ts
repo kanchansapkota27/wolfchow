@@ -7,9 +7,8 @@ const OWNER_EMAIL = 'e2e-owner@wolfchow.test'
 const OWNER_PASSWORD = 'E2e-owner-pass-1!'
 
 async function ensureSuperadmin(admin: ReturnType<typeof createSupabaseAdmin>): Promise<void> {
-  let userId: string | null = null
   const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
-  userId = list?.users.find((u) => u.email?.toLowerCase() === SUPERADMIN_EMAIL)?.id ?? null
+  let userId = list?.users.find((u) => u.email?.toLowerCase() === SUPERADMIN_EMAIL)?.id ?? null
 
   if (!userId) {
     const { data, error } = await admin.auth.admin.createUser({
