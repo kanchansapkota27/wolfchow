@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Button, Input } from '@wolfchow/ui'
 import { ApiError } from '@wolfchow/api-client'
+import { useAuth } from '@wolfchow/auth'
 import { COUNTRIES, CURRENCIES } from '@wolfchow/utils'
 import { useApi } from '../lib/api'
 
@@ -193,6 +194,7 @@ export function Signup() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const api = useApi()
+  const auth = useAuth()
 
   const inviteToken = params.get('invite') ?? ''
 
@@ -247,7 +249,12 @@ export function Signup() {
           currency: step2.currency,
         },
       })
-      void navigate('/')
+      // POST /auth/signup returns session tokens directly, but AuthProvider's
+      // state derivation only reacts to its own session store — sign in with
+      // the same credentials (the standard path LoginPage uses) rather than
+      // hand-rolling storeSession() here, so the account row and the client
+      // session are established through one consistent path.
+      await auth.signInWithPassword(step1.email, step1.password)
     } catch (err) {
       setError(err instanceof ApiError ? String(err.message) : 'Signup failed. Please try again.')
     } finally {
