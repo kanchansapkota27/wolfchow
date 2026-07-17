@@ -129,6 +129,6 @@ describe('STORY-075 · Public tracking token-only endpoint', () => {
     expect(res.status).toBe(200)
     const body = await res.json() as { items: Array<Record<string, unknown>> }
     expect(body.items[0]).not.toHaveProperty('unit_price')
-    expect(body.items[0].modifiers).toEqual([{ name: 'Extra cheese' }])
+    expect(body.items[0]?.modifiers).toEqual([{ name: 'Extra cheese' }])
   })
 })

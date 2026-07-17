@@ -20,6 +20,10 @@ export default tseslint.config(
     rules: {
       // Non-negotiable per project rules: never use `any`.
       '@typescript-eslint/no-explicit-any': 'error',
+      // Codebase convention: prefix an intentionally-unused binding with `_`
+      // (e.g. a destructured field kept for documentation, a callback param
+      // required by a signature but not read).
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
   {

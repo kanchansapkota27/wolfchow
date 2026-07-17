@@ -15,11 +15,6 @@ const PROTECTED_FIELDS = new Set([
   'active',
 ])
 
-async function readJson(c: Parameters<typeof createAdminClient>[0] extends unknown ? unknown : never): Promise<unknown> {
-  // This is typed via the route context below; kept here to avoid repetition.
-  return null
-}
-
 /** Read and parse JSON body; returns null on malformed/empty input. */
 async function parseBody(req: Request): Promise<unknown> {
   try {

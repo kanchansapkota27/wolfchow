@@ -136,14 +136,14 @@ describe('STORY-007 · invite link generation', () => {
     expect(((await res.json()) as { error: string }).error).toBe('invite_used')
   })
 
-  it('DELETE invite: subsequent validate returns 409', async () => {
+  it('POST /revoke: subsequent validate returns 409', async () => {
     const created = (await (
       await req('POST', '/superadmin/invites', SUPERADMIN, { plan_id: planId })
     ).json()) as { id: string; token: string }
     createdInviteIds.push(created.id)
 
-    const del = await req('DELETE', `/superadmin/invites/${created.id}`, SUPERADMIN)
-    expect(del.status).toBe(204)
+    const revoke = await req('POST', `/superadmin/invites/${created.id}/revoke`, SUPERADMIN)
+    expect(revoke.status).toBe(204)
 
     const res = await req('GET', `/auth/invite/${created.token}`)
     expect(res.status).toBe(409)

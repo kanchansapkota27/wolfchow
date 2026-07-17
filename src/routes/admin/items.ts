@@ -15,7 +15,6 @@ const ALLOWED_TAGS = new Set([
 ])
 
 const AVAILABILITY_STATES = ['available', 'unavailable', 'scheduled', 'out_of_stock'] as const
-type AvailabilityState = (typeof AVAILABILITY_STATES)[number]
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 

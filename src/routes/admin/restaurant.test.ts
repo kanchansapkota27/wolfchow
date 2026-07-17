@@ -148,7 +148,7 @@ describe('STORY-013 · Restaurant profile management', () => {
     expect(body.restaurant.display_name).toBe('Burger Palace')
 
     // KV invalidation: both settings: and theme: deleted
-    const deletedKeys = mockKv.delete.mock.calls.map(([k]: [string]) => k)
+    const deletedKeys = mockKv.delete.mock.calls.map(([k]: string[]) => k)
     expect(deletedKeys).toContain(`settings:${RESTAURANT_ID}`)
     expect(deletedKeys).toContain(`theme:${RESTAURANT_ID}`)
   })

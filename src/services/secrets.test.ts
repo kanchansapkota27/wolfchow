@@ -21,18 +21,6 @@ const env = {
   SUPABASE_SERVICE_ROLE_KEY: 'service',
 } as unknown as Env
 
-function schemaChain(opts: { data?: unknown; error?: unknown } = {}) {
-  const resolved = { data: opts.data ?? null, error: opts.error ?? null }
-  const inner = {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue(resolved),
-    then: vi.fn((resolve: (v: typeof resolved) => unknown) => Promise.resolve(resolve(resolved))),
-  }
-  return inner
-}
-
 function fromChain(opts: { data?: unknown; error?: unknown } = {}) {
   const resolved = { data: opts.data ?? null, error: opts.error ?? null }
   return {
