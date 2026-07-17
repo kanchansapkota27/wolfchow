@@ -89,7 +89,7 @@ describe('STORY-034 · Tablet pause/unpause', () => {
       env,
     )
     expect(res.status).toBe(200)
-    const body = await res.json() as typeof pausedManual & { pause_until: string }
+    const body = await res.json() as Omit<typeof pausedManual, 'pause_until'> & { pause_until: string }
     expect(body.orders_paused).toBe(true)
     expect(body.pause_until).toBe(expectedUntil)
     expect(mockKv.delete).toHaveBeenCalledWith(`settings:${RESTAURANT_ID}`)
