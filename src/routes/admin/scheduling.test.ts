@@ -157,6 +157,7 @@ describe('STORY-019 · Scheduling configuration', () => {
       .mockReturnValueOnce(chain({ data: { base_prep_minutes: 15, scheduling_interval: 30, future_days_allowed: 7 } }))  // restaurant config
       .mockReturnValueOnce(chain({ data: [] }))  // special_closures (none)
     mockKv.get
+      .mockResolvedValueOnce(null)                                                     // requireActiveRestaurant (not suspended)
       .mockResolvedValueOnce({ feature_flags: { scheduled_orders_enabled: true } })  // resolvePlan
       .mockResolvedValueOnce(alwaysOpenHours)                                          // hours read
 
@@ -182,6 +183,7 @@ describe('STORY-019 · Scheduling configuration', () => {
       .mockReturnValueOnce(chain({ data: { base_prep_minutes: 10, scheduling_interval: interval, future_days_allowed: 7 } }))  // restaurant config
       .mockReturnValueOnce(chain({ data: [] }))  // special_closures (none)
     mockKv.get
+      .mockResolvedValueOnce(null)                                                     // requireActiveRestaurant (not suspended)
       .mockResolvedValueOnce({ feature_flags: { scheduled_orders_enabled: true } })  // resolvePlan
       .mockResolvedValueOnce(alwaysOpenHours)                                          // hours read
 

@@ -2,18 +2,32 @@ import { describe, it, expect, vi, type MockedFunction } from 'vitest'
 import { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createRestaurantUserSchema } from './schemas'
-import { registerRestaurantRoutes } from './restaurants'
+import { registerRestaurantRoutes, type RestaurantRouteDeps } from './restaurants'
 import { createAdminClient } from '../../services/supabase'
 
 // ── Minimal env stub ────────────────────────────────────────────────────────
-const MOCK_ENV = {
-  SUPABASE_URL: 'http://localhost:54321',
-  SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
-  SUPABASE_JWT_SECRET: 'test-secret-at-least-32-characters-long!!',
-  MENU_CACHE: {} as KVNamespace,
-  FLAGS_CACHE: {} as KVNamespace,
-  SETTINGS_CACHE: {} as KVNamespace,
-} as unknown as HonoEnv['Bindings']
+function makeKvNamespace() {
+  const store = new Map<string, string>()
+  return {
+    get: vi.fn(async (key: string) => store.get(key) ?? null),
+    put: vi.fn(async (key: string, value: string) => void store.set(key, value)),
+    delete: vi.fn(async (key: string) => void store.delete(key)),
+    _store: store,
+  } as unknown as KVNamespace & { _store: Map<string, string> }
+}
+
+function makeMockEnv() {
+  return {
+    SUPABASE_URL: 'http://localhost:54321',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    SUPABASE_JWT_SECRET: 'test-secret-at-least-32-characters-long!!',
+    MENU_CACHE: makeKvNamespace(),
+    FLAGS_CACHE: makeKvNamespace(),
+    SETTINGS_CACHE: makeKvNamespace(),
+  } as unknown as HonoEnv['Bindings'] & { SETTINGS_CACHE: ReturnType<typeof makeKvNamespace> }
+}
+
+const MOCK_ENV = makeMockEnv()
 
 // ── Superadmin JWT (pre-verified by middleware) ──────────────────────────────
 const SUPERADMIN_JWT = {
@@ -34,14 +48,14 @@ vi.mock('../../services/supabase', () => ({
 
 const mockCreateAdminClient = createAdminClient as MockedFunction<typeof createAdminClient>
 
-function buildApp(adminClient: ReturnType<typeof createAdminClient>) {
+function buildApp(adminClient: ReturnType<typeof createAdminClient>, deps: RestaurantRouteDeps = {}) {
   mockCreateAdminClient.mockReturnValue(adminClient)
   const app = new Hono<HonoEnv>()
   app.use('*', async (c, next) => {
     c.set('jwt', SUPERADMIN_JWT)
     await next()
   })
-  registerRestaurantRoutes(app)
+  registerRestaurantRoutes(app, deps)
   return app
 }
 
@@ -255,5 +269,126 @@ describe('STORY-057 · superadmin create restaurant owner', () => {
       expect(json.error).toBe('create_failed')
       expect(deleteUser).toHaveBeenCalledWith(USER_ID)
     })
+  })
+})
+
+describe('STORY-083 · suspension enforcement flag sync', () => {
+  const RESTAURANT_ID = '00000000-0000-0000-0000-000000000003'
+
+  function makeSuspendAdminClient() {
+    const restaurantChain = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: RESTAURANT_ID }, error: null }),
+    }
+    const auditChain = { insert: vi.fn().mockResolvedValue({ error: null }) }
+    return {
+      from: vi.fn((table: string) => {
+        if (table === 'restaurants') return restaurantChain
+        if (table === 'audit_log') return auditChain
+        return {}
+      }),
+    } as unknown as ReturnType<typeof createAdminClient>
+  }
+
+  const fakeBroadcast = vi.fn()
+  const deps: RestaurantRouteDeps = { broadcaster: () => ({ broadcast: fakeBroadcast }) }
+
+  it('POST /suspend: writes suspended:{id}=true to SETTINGS_CACHE', async () => {
+    const env = makeMockEnv()
+    const client = makeSuspendAdminClient()
+    const app = buildApp(client, deps)
+
+    const res = await app.request(
+      `/superadmin/restaurants/${RESTAURANT_ID}/suspend`,
+      { method: 'POST' },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(env.SETTINGS_CACHE.put).toHaveBeenCalledWith(
+      `suspended:${RESTAURANT_ID}`,
+      JSON.stringify(true),
+      undefined,
+    )
+  })
+
+  it('POST /reactivate: deletes suspended:{id} from SETTINGS_CACHE', async () => {
+    const env = makeMockEnv()
+    env.SETTINGS_CACHE._store.set(`suspended:${RESTAURANT_ID}`, JSON.stringify(true))
+    const client = makeSuspendAdminClient()
+    const app = buildApp(client, deps)
+
+    const res = await app.request(
+      `/superadmin/restaurants/${RESTAURANT_ID}/reactivate`,
+      { method: 'POST' },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(env.SETTINGS_CACHE.delete).toHaveBeenCalledWith(`suspended:${RESTAURANT_ID}`)
+  })
+
+  it('PATCH with active:false: sets the suspension flag', async () => {
+    const env = makeMockEnv()
+    const client = makeSuspendAdminClient()
+    const app = buildApp(client, deps)
+
+    const res = await app.request(
+      `/superadmin/restaurants/${RESTAURANT_ID}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(env.SETTINGS_CACHE.put).toHaveBeenCalledWith(
+      `suspended:${RESTAURANT_ID}`,
+      JSON.stringify(true),
+      undefined,
+    )
+  })
+
+  it('PATCH with active:true: clears the suspension flag', async () => {
+    const env = makeMockEnv()
+    const client = makeSuspendAdminClient()
+    const app = buildApp(client, deps)
+
+    const res = await app.request(
+      `/superadmin/restaurants/${RESTAURANT_ID}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: true }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(env.SETTINGS_CACHE.delete).toHaveBeenCalledWith(`suspended:${RESTAURANT_ID}`)
+  })
+
+  it('PATCH without active field: suspension flag untouched', async () => {
+    const env = makeMockEnv()
+    const client = makeSuspendAdminClient()
+    const app = buildApp(client, deps)
+
+    const res = await app.request(
+      `/superadmin/restaurants/${RESTAURANT_ID}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billing_note: 'VIP account' }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(env.SETTINGS_CACHE.put).not.toHaveBeenCalled()
+    expect(env.SETTINGS_CACHE.delete).not.toHaveBeenCalled()
   })
 })
