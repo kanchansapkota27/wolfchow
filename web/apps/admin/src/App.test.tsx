@@ -1,24 +1,34 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from './App'
 
 const mockApiFetch = vi.fn()
 const mockNavigate = vi.fn()
 const mockGetQueryParam = vi.fn()
+const mockLogout = vi.fn()
+let mockIsSuspended = false
 
 vi.mock('@wolfchow/auth', () => ({
   LoginPage: () => <div data-testid="login-page">Login</div>,
   RequireRole: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SuspendedPage: () => (
+    <div role="alert">
+      <h1>Account suspended</h1>
+      <button onClick={() => void mockLogout()}>Log out</button>
+    </div>
+  ),
   useAuth: () => ({
     user: { email: 'owner@test.com', role: 'restaurant_owner' },
     role: 'restaurant_owner',
     restaurantId: 'r1',
     permissions: [],
     isImpersonating: false,
+    isSuspended: mockIsSuspended,
     isLoading: false,
-    logout: vi.fn(),
+    logout: mockLogout,
     navigate: mockNavigate,
     getQueryParam: mockGetQueryParam,
     hasPermission: () => false,
@@ -50,13 +60,17 @@ vi.mock('@wolfchow/ui', () => ({
 beforeEach(() => {
   vi.resetAllMocks()
   mockGetQueryParam.mockReturnValue(null)
+  mockIsSuspended = false
 })
 
 function renderApp(initialPath = '/') {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <App />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
@@ -121,8 +135,32 @@ describe('STORY-056 · Admin panel scaffold & signup', () => {
     ))
   })
 
-  it('dashboard route: renders dashboard heading', () => {
+  it('dashboard route: renders dashboard greeting', () => {
     renderApp('/')
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeTruthy()
+    expect(screen.getByText(/here's what's happening with your restaurant today/i)).toBeTruthy()
+  })
+})
+
+describe('STORY-083 · suspended restaurant blocks the admin panel', () => {
+  it('isSuspended true: SuspendedPage rendered instead of the dashboard', () => {
+    mockIsSuspended = true
+    renderApp('/')
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.getByText('Account suspended')).toBeTruthy()
+    expect(screen.queryByText(/here's what's happening/i)).toBeNull()
+  })
+
+  it('isSuspended false: dashboard renders normally', () => {
+    mockIsSuspended = false
+    renderApp('/')
+    expect(screen.getByText(/here's what's happening with your restaurant today/i)).toBeTruthy()
+    expect(screen.queryByText('Account suspended')).toBeNull()
+  })
+
+  it('SuspendedPage log out button: calls logout', () => {
+    mockIsSuspended = true
+    renderApp('/')
+    fireEvent.click(screen.getByText('Log out'))
+    expect(mockLogout).toHaveBeenCalled()
   })
 })
