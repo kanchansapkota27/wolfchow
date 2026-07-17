@@ -53,7 +53,7 @@ INSERT INTO auth.users (
   '{}',
   now(),
   now()
-) ON CONFLICT (email) DO NOTHING;
+) ON CONFLICT (email) WHERE is_sso_user = false DO NOTHING;
 
 -- ── Seed restaurant ───────────────────────────────────────────────────────────
 INSERT INTO restaurants (
