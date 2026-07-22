@@ -4,6 +4,7 @@ import { createAdminClient } from '../../services/supabase'
 import { buildKey, KvCache, KV_TTLS } from '../../services/kv'
 
 export interface WidgetSettings {
+  restaurant_id: string
   slug: string
   display_name: string
   logo_url: string | null
@@ -144,6 +145,7 @@ export function registerPublicSettingsRoutes(app: Hono<HonoEnv>): void {
     const schedulingEnabled = flags?.scheduled_orders_enabled ?? false
 
     const settings: WidgetSettings = {
+      restaurant_id: r.id as string,
       slug: r.slug as string,
       display_name: r.display_name as string,
       logo_url: logoUrl,

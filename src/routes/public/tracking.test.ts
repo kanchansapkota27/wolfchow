@@ -70,7 +70,7 @@ describe('STORY-075 · Public tracking token-only endpoint', () => {
   it('GET /public/track/:token returns order data', async () => {
     mockFrom
       .mockReturnValueOnce(chain({ data: makeOrderRow() }))
-      .mockReturnValueOnce(chain({ data: { base_prep_minutes: 20, plan_id: 'plan-1' } }))
+      .mockReturnValueOnce(chain({ data: { display_name: 'The Burger Place', base_prep_minutes: 20, plan_id: 'plan-1' } }))
       .mockReturnValueOnce(chain({ data: { feature_flags: { order_tracking_page: true } } }))
       .mockReturnValueOnce(itemsChain([
         { id: 'item-1', item_id: 'menu-1', item_name: 'Burger', variant_name: null, quantity: 2, modifiers: [], notes: null },
@@ -84,6 +84,8 @@ describe('STORY-075 · Public tracking token-only endpoint', () => {
     expect(body.status).toBe('preparing')
     expect(body.tracking_token).toBe(TOKEN)
     expect(body.total).toBe(25.5)
+    expect(body.restaurant_id).toBe(RESTAURANT_ID)
+    expect(body.restaurant_name).toBe('The Burger Place')
     expect(Array.isArray(body.items)).toBe(true)
     expect((body.items as unknown[]).length).toBe(1)
   })
@@ -130,5 +132,36 @@ describe('STORY-075 · Public tracking token-only endpoint', () => {
     const body = await res.json() as { items: Array<Record<string, unknown>> }
     expect(body.items[0]).not.toHaveProperty('unit_price')
     expect(body.items[0]?.modifiers).toEqual([{ name: 'Extra cheese' }])
+  })
+})
+
+describe('STORY-075 · Public tracking slug+token endpoint', () => {
+  const SLUG = 'the-burger-place'
+
+  it('GET /public/:slug/orders/:token returns order data with restaurant_id/name', async () => {
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { id: RESTAURANT_ID, display_name: 'The Burger Place', base_prep_minutes: 20, plan_id: 'plan-1' } }))
+      .mockReturnValueOnce(chain({ data: { feature_flags: { order_tracking_page: true } } }))
+      .mockReturnValueOnce(chain({ data: makeOrderRow() }))
+      .mockReturnValueOnce(itemsChain([
+        { id: 'item-1', item_id: 'menu-1', item_name: 'Burger', variant_name: null, quantity: 1, modifiers: [], notes: null },
+      ]))
+
+    const res = await app.request(`/public/${SLUG}/orders/${TOKEN}`, {}, env)
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.order_id).toBe(ORDER_ID)
+    expect(body.restaurant_id).toBe(RESTAURANT_ID)
+    expect(body.restaurant_name).toBe('The Burger Place')
+  })
+
+  it('GET /public/:slug/orders/:token with unknown restaurant returns 404', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: null }))
+
+    const res = await app.request(`/public/${SLUG}/orders/${TOKEN}`, {}, env)
+    expect(res.status).toBe(404)
+    const body = await res.json() as { error: string }
+    expect(body.error).toBe('restaurant_not_found')
   })
 })

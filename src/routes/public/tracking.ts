@@ -31,7 +31,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
     // Check feature flag via restaurant's plan
     const { data: restaurant } = await admin
       .from('restaurants')
-      .select('base_prep_minutes, plan_id')
+      .select('display_name, base_prep_minutes, plan_id')
       .eq('id', restaurantId)
       .eq('active', true)
       .maybeSingle()
@@ -67,6 +67,8 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
     return c.json({
       order_id: or.id as string,
       tracking_token: trackingToken,
+      restaurant_id: restaurantId,
+      restaurant_name: r.display_name as string,
       status: or.status as string,
       payment_method: or.payment_method as string,
       customer_name: or.customer_name as string,
@@ -107,7 +109,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
     // was written the feature flag check would produce a stale result.
     const { data: restaurant } = await admin
       .from('restaurants')
-      .select('id, base_prep_minutes, plan_id')
+      .select('id, display_name, base_prep_minutes, plan_id')
       .eq('slug', slug)
       .eq('active', true)
       .maybeSingle()
@@ -164,6 +166,8 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
     return c.json({
       order_id: or.id as string,
       tracking_token: trackingToken,
+      restaurant_id: restaurantId,
+      restaurant_name: r.display_name as string,
       status: or.status as string,
       payment_method: or.payment_method as string,
       customer_name: or.customer_name as string,

@@ -166,15 +166,15 @@ importers:
 
   apps/tablet:
     dependencies:
-      '@supabase/supabase-js':
-        specifier: ^2.49.8
-        version: 2.108.2
       '@wolfchow/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
       '@wolfchow/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@wolfchow/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@wolfchow/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -215,6 +215,9 @@ importers:
       '@wolfchow/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@wolfchow/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@wolfchow/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -246,6 +249,9 @@ importers:
       '@wolfchow/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@wolfchow/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@wolfchow/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -286,6 +292,18 @@ importers:
       '@wolfchow/ui':
         specifier: workspace:*
         version: link:../ui
+      react:
+        specifier: ^19.0.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.7(react@19.2.7)
+
+  packages/realtime:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.49.8
+        version: 2.108.2
       react:
         specifier: ^19.0.0
         version: 19.2.7

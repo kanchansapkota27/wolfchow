@@ -1,6 +1,7 @@
 // ── Public API types (mirrors backend public routes) ─────────────────────────
 
 export interface WidgetSettings {
+  restaurant_id: string
   slug: string
   display_name: string
   logo_url: string | null

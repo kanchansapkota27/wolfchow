@@ -388,7 +388,7 @@ export function Checkout({
       </div>
 
       <div ref={checkoutScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '0 1rem' }}>
-        <Notices notices={settings.notices} location="checkout" />
+        <Notices notices={settings.notices} location="checkout" slug={settings.slug} />
 
         {/* Customer details */}
         <div style={{ marginBottom: '1.25rem' }}>
@@ -819,6 +819,29 @@ export function Checkout({
         </div>
 
         {(() => {
+          const nonCardMethods = settings.payment_methods.filter((m) => m !== 'card')
+          const orderingUnavailable = nonCardMethods.length === 0 && !settings.stripe_publishable_key
+          if (orderingUnavailable) {
+            return (
+              <div style={{
+                padding: '0.875rem 1rem',
+                borderRadius: '0.5rem',
+                background: '#f3f4f6',
+                border: '1px solid #e5e7eb',
+                textAlign: 'center',
+              }}>
+                <p style={{ margin: 0, fontWeight: 600, color: '#374151', fontSize: '0.9375rem' }}>
+                  Online ordering unavailable
+                </p>
+                {settings.pickup_delivery_note && (
+                  <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
+                    {settings.pickup_delivery_note}
+                  </p>
+                )}
+              </div>
+            )
+          }
+
           const cardNotReady = form.payment_method === 'card' && cardStatus !== 'ready' && !!settings.stripe_publishable_key
           const isDisabled = isSubmitting || !form.customer_name || !form.customer_email || cardNotReady
           const label = isSubmitting

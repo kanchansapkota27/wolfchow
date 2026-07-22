@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { formatCurrency } from '@wolfchow/utils'
+import { RealtimeProvider, useRealtime } from '@wolfchow/realtime'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:8789'
 
@@ -17,6 +18,8 @@ interface TrackingItem {
 interface TrackingOrder {
   order_id: string
   tracking_token: string
+  restaurant_id: string
+  restaurant_name: string
   status: string
   payment_method: string
   customer_name: string
@@ -57,6 +60,24 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'rejected', 'missed', 'refunded'])
+
+const STATUS_EMOJI: Record<string, string> = {
+  pending_payment: '⏳',
+  auth_success: '🔵',
+  accepted: '🔵',
+  preparing: '🟡',
+  ready: '🟢',
+  completed: '✅',
+  rejected: '🔴',
+  missed: '🔴',
+  refunded: '🟣',
+}
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  card: 'Card',
+  pickup: 'Pay at pickup',
+  delivery: 'Pay on delivery',
+}
 
 // ── Token extraction ───────────────────────────────────────────────────────────
 
@@ -157,12 +178,16 @@ function StatusStepper({ status }: { status: string }) {
 
 function OrderSummary({ order }: { order: TrackingOrder }) {
   const statusDisplay = STATUS_LABELS[order.status] ?? { label: order.status, color: '#6b7280' }
+  const isScheduledPending =
+    !!order.scheduled_for &&
+    new Date(order.scheduled_for).getTime() > Date.now() &&
+    !TERMINAL_STATUSES.has(order.status)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {/* status badge */}
       <div style={{ textAlign: 'center' }}>
-        <span style={{
+        <span data-testid="order-status" style={{
           display: 'inline-block',
           padding: '0.375rem 1rem',
           borderRadius: '9999px',
@@ -173,7 +198,7 @@ function OrderSummary({ order }: { order: TrackingOrder }) {
         }}>
           {statusDisplay.label}
         </span>
-        {order.status !== 'rejected' && order.status !== 'missed' && order.status !== 'completed' && order.status !== 'refunded' && (
+        {!isScheduledPending && order.status !== 'rejected' && order.status !== 'missed' && order.status !== 'completed' && order.status !== 'refunded' && (
           <p style={{ margin: '0.5rem 0 0', fontSize: '0.8125rem', color: '#6b7280' }}>
             Est. ready by {fmtTime(order.estimated_ready)}
           </p>
@@ -185,9 +210,18 @@ function OrderSummary({ order }: { order: TrackingOrder }) {
         )}
       </div>
 
-      {/* status stepper */}
+      {/* status stepper (or scheduled pre-step) */}
       <div style={{ background: '#fff', borderRadius: '0.75rem', border: '1px solid #e5e7eb', padding: '1.25rem 0.75rem' }}>
-        <StatusStepper status={order.status} />
+        {isScheduledPending ? (
+          <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📅</div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9375rem', color: '#374151' }}>
+              We&apos;ll start preparing closer to your scheduled time.
+            </p>
+          </div>
+        ) : (
+          <StatusStepper status={order.status} />
+        )}
       </div>
 
       {/* items */}
@@ -232,6 +266,10 @@ function OrderSummary({ order }: { order: TrackingOrder }) {
         </div>
 
         <div style={{ borderTop: '1px solid #f3f4f6', padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#6b7280' }}>
+            <span>Payment</span>
+            <span>{PAYMENT_METHOD_LABELS[order.payment_method] ?? order.payment_method}</span>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#6b7280' }}>
             <span>Subtotal</span>
             <span>{fmt(order.subtotal)}</span>
@@ -297,12 +335,19 @@ export function App() {
     fetchOrder()
   }, [fetchOrder])
 
-  // Poll every 10s unless order is in a terminal state
+  // Polling fallback for when Realtime is unavailable (per spec, 15s).
   useEffect(() => {
     if (!order || TERMINAL_STATUSES.has(order.status)) return
-    const id = setInterval(fetchOrder, 10_000)
+    const id = setInterval(fetchOrder, 15_000)
     return () => clearInterval(id)
   }, [order, fetchOrder])
+
+  useEffect(() => {
+    if (!order) return
+    const emoji = STATUS_EMOJI[order.status] ?? ''
+    const label = STATUS_LABELS[order.status]?.label ?? order.status
+    document.title = `${emoji} ${label} — Your Order | Wolfchow`.trim()
+  }, [order?.status])
 
   const containerStyle: React.CSSProperties = {
     minHeight: '100dvh',
@@ -388,31 +433,68 @@ export function App() {
   }
 
   return (
-    <div style={containerStyle}>
-      <div style={cardStyle}>
-        <Header>
-          {!TERMINAL_STATUSES.has(order!.status) && (
-            <button
-              onClick={fetchOrder}
-              title={`Last updated ${fmtTime(lastRefresh.toISOString())}`}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.8125rem', fontWeight: 600, padding: 0 }}
-            >
-              Refresh
-            </button>
-          )}
-        </Header>
-        <OrderSummary order={order!} />
+    <RealtimeProvider restaurantId={order!.restaurant_id}>
+      <RealtimeStatusSync
+        orderId={order!.order_id}
+        onStatusChange={(newStatus) => setOrder((o) => o && { ...o, status: newStatus })}
+      />
+      <div style={containerStyle}>
+        <div style={cardStyle}>
+          <Header restaurantName={order!.restaurant_name}>
+            {!TERMINAL_STATUSES.has(order!.status) && (
+              <button
+                onClick={fetchOrder}
+                title={`Last updated ${fmtTime(lastRefresh.toISOString())}`}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.8125rem', fontWeight: 600, padding: 0 }}
+              >
+                Refresh
+              </button>
+            )}
+          </Header>
+          <OrderSummary order={order!} />
+        </div>
       </div>
-    </div>
+    </RealtimeProvider>
   )
 }
 
-function Header({ children }: { children?: React.ReactNode }) {
+/**
+ * Renders nothing — just wires the order_status_changed/order_accepted/
+ * order_rejected broadcast events into the order state. The channel is
+ * restaurant-wide (other customers' orders flow through it too), so every
+ * handler filters to `payload.order_id === orderId` before acting.
+ */
+function RealtimeStatusSync({ orderId, onStatusChange }: { orderId: string; onStatusChange: (status: string) => void }) {
+  const { subscribe } = useRealtime()
+
+  useEffect(() => {
+    const unsubStatusChanged = subscribe('order_status_changed', (_event, payload) => {
+      if (payload.order_id !== orderId) return
+      const newStatus = payload.new_status
+      if (typeof newStatus === 'string') onStatusChange(newStatus)
+    })
+    const unsubAccepted = subscribe('order_accepted', (_event, payload) => {
+      if (payload.order_id === orderId) onStatusChange('accepted')
+    })
+    const unsubRejected = subscribe('order_rejected', (_event, payload) => {
+      if (payload.order_id === orderId) onStatusChange('rejected')
+    })
+    return () => {
+      unsubStatusChanged()
+      unsubAccepted()
+      unsubRejected()
+    }
+  }, [orderId, subscribe, onStatusChange])
+
+  return null
+}
+
+function Header({ restaurantName, children }: { restaurantName?: string; children?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingBottom: '0.875rem', borderBottom: '1px solid #e5e7eb' }}>
       <div>
         <h1 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>
-          Wolfchow
+          {restaurantName ?? 'Wolfchow'}
         </h1>
         <p style={{ margin: 0, fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}>
           Order Tracking
