@@ -164,17 +164,56 @@ describe('STORY-048 · auth flows', () => {
       imp: true,
       imp_by: 'admin-1',
     })
-    const { wrapper, navigator, session } = makeHarness({
-      token,
-      role: 'restaurant_owner',
-      initialToken: token,
-    })
+    const fetchSpy = authFetch(token, 'restaurant_owner')
+    const session = createMemorySession({ access_token: token, refresh_token: 'r-seed' })
+    const client = createApiClient({ baseUrl: BASE, session, fetch: fetchSpy })
+    const navigator = fakeNavigator()
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <AuthProvider client={client} session={session} navigator={navigator}>
+        {children}
+      </AuthProvider>
+    )
     render(<ImpersonationBanner restaurantName="Joe's Diner" />, { wrapper })
 
     const exit = await screen.findByRole('button', { name: /exit/i })
     expect(screen.getByText(/viewing as joe's diner/i)).toBeInTheDocument()
 
     await userEvent.click(exit)
+    expect(session.getAccessToken()).toBeNull()
+    expect(navigator.navigate).toHaveBeenCalledWith('/superadmin')
+    // Exiting impersonation must hit /auth/logout so the backend logs
+    // IMPERSONATION_END — a client-side-only session.clear() leaves no
+    // audit trail of when the impersonation session ended.
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/logout'),
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: `Bearer ${token}` }) }),
+    )
+  })
+
+  it('exitImpersonation: backend logout failure does not block local exit', async () => {
+    const token = makeToken({
+      sub: 'r-owner',
+      role: 'restaurant_owner',
+      restaurant_id: 'r1',
+      permissions: [],
+      imp: true,
+      imp_by: 'admin-1',
+    })
+    const session = createMemorySession({ access_token: token, refresh_token: 'r-seed' })
+    const failingFetch = vi.fn(async () => new Response(null, { status: 500 })) as unknown as typeof fetch
+    const client = createApiClient({ baseUrl: BASE, session, fetch: failingFetch })
+    const navigator = fakeNavigator()
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <AuthProvider client={client} session={session} navigator={navigator}>
+        {children}
+      </AuthProvider>
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await act(async () => {
+      await result.current.exitImpersonation()
+    })
     expect(session.getAccessToken()).toBeNull()
     expect(navigator.navigate).toHaveBeenCalledWith('/superadmin')
   })
