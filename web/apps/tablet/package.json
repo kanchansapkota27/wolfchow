@@ -10,9 +10,9 @@
     "deploy": "wrangler pages deploy ./dist --project-name=wolfchow-tablet"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.8",
     "@wolfchow/api-client": "workspace:*",
     "@wolfchow/auth": "workspace:*",
+    "@wolfchow/realtime": "workspace:*",
     "@wolfchow/types": "workspace:*",
     "@wolfchow/ui": "workspace:*",
     "@wolfchow/utils": "workspace:*",

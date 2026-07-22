@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@wolfchow/api-client": "workspace:*",
+    "@wolfchow/realtime": "workspace:*",
     "@wolfchow/types": "workspace:*",
     "@wolfchow/ui": "workspace:*",
     "@wolfchow/utils": "workspace:*",

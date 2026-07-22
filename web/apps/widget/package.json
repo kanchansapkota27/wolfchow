@@ -12,6 +12,7 @@
   "dependencies": {
     "@stripe/stripe-js": "^9.8.0",
     "@wolfchow/api-client": "workspace:*",
+    "@wolfchow/realtime": "workspace:*",
     "@wolfchow/types": "workspace:*",
     "@wolfchow/ui": "workspace:*",
     "@wolfchow/utils": "workspace:*",
