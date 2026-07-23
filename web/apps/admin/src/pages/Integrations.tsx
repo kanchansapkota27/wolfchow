@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Eye, Monitor, Smartphone, Globe, Code2, CheckCircle2, Palette, ArrowRight } from 'lucide-react'
+import { Eye, Monitor, Smartphone, Code2, CheckCircle2, Palette, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { useApi } from '../lib/api'
 
@@ -106,22 +106,6 @@ export function Integrations() {
                   className="absolute right-3 top-3 rounded-md bg-white/10 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-white/20"
                 >
                   {copied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-
-              {/* Allowed Domains */}
-              <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100">
-                    <Globe size={15} className="text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Allowed Domains</p>
-                    <p className="text-xs text-gray-500">Restricts widget to specific websites for security.</p>
-                  </div>
-                </div>
-                <button className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-bold tracking-wider text-gray-700 hover:border-gray-300">
-                  CONFIGURE
                 </button>
               </div>
             </div>
