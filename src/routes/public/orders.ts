@@ -7,6 +7,7 @@ import { getStripeClient } from '../../services/secrets'
 import { KvCache, buildKey } from '../../services/kv'
 import { RealtimeService } from '../../services/realtime'
 import { getNextOrderNumber } from '../../services/orderNumber'
+import { isOpenNow, type HoursRow, type ClosureRow } from '../../services/slots'
 import type { NotificationService, NotificationOrderItem } from '../../services/notifications'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -96,6 +97,52 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
 
     if (r.orders_paused) {
       return c.json({ error: 'orders_paused', reason: r.pause_reason as string | null }, 503)
+    }
+
+    // ASAP orders only — a scheduled order is validated against future
+    // availability separately (via scheduled_for-must-be-future below, and
+    // GET /public/:slug/slots only ever offers valid future slots).
+    if (!input.scheduled_for) {
+      const { data: hoursData } = await admin
+        .from('operating_hours')
+        .select('day_of_week, open_time, close_time, active, last_order_offset_minutes, crosses_midnight')
+        .eq('restaurant_id', restaurantId)
+
+      const hours: HoursRow[] = (hoursData ?? []).map((row: Record<string, unknown>) => ({
+        day_of_week: row.day_of_week as number,
+        open_time: (row.open_time as string).slice(0, 5),
+        close_time: (row.close_time as string).slice(0, 5),
+        active: row.active as boolean,
+        last_order_offset_minutes: row.last_order_offset_minutes as number,
+        crosses_midnight: row.crosses_midnight as boolean,
+      }))
+
+      const today = new Date().toISOString().slice(0, 10)
+      const { data: closuresData } = await admin
+        .from('special_closures')
+        .select('closure_type, date, partial_open, partial_close, recurring')
+        .eq('restaurant_id', restaurantId)
+        .gte('date', today)
+
+      const closures: ClosureRow[] = (closuresData ?? []).map((row: Record<string, unknown>) => ({
+        closure_type: row.closure_type as string,
+        date: row.date as string,
+        partial_open: row.partial_open as string | null,
+        partial_close: row.partial_close as string | null,
+        recurring: row.recurring as boolean,
+      }))
+
+      const timezone = (r.timezone as string | null) || 'UTC'
+      const basePrepMinutes = (r.base_prep_minutes as number | null) ?? 20
+      const { open, next_open } = isOpenNow(
+        Date.now(),
+        { base_prep_minutes: basePrepMinutes, interval_minutes: 15, future_days: 7, timezone },
+        hours,
+        closures,
+      )
+      if (!open) {
+        return c.json({ error: 'restaurant_closed', next_open }, 503)
+      }
     }
 
     // Check plan: payment methods and features

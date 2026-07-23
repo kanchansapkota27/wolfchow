@@ -175,3 +175,39 @@ export function computeSlots(
 
   return slots
 }
+
+// ── Is-open-now check ────────────────────────────────────────────────────────
+
+export interface OpenNowResult {
+  open: boolean
+  /** ISO 8601 UTC time of the next moment orders will be accepted; null when open, or when no configured hours means "always open". */
+  next_open: string | null
+}
+
+/**
+ * Is the restaurant currently accepting ASAP orders? Reuses `computeSlots`'
+ * hours/closures logic (including the last-order cutoff) with a 1-minute
+ * interval for precision, rather than re-deriving the same rules — "open"
+ * here means "now is a valid order slot", the same test the scheduling
+ * endpoint already applies to future slots.
+ */
+export function isOpenNow(
+  nowMs: number,
+  config: SlotConfig,
+  hours: HoursRow[],
+  closures: ClosureRow[],
+): OpenNowResult {
+  if (hours.length === 0) return { open: true, next_open: null }
+
+  const slots = computeSlots(
+    nowMs,
+    { ...config, interval_minutes: 1, future_days: Math.max(config.future_days, 7) },
+    hours,
+    closures,
+  )
+  if (slots.length === 0) return { open: false, next_open: null }
+
+  const first = new Date(slots[0]!).getTime()
+  const open = first - nowMs < 60_000
+  return { open, next_open: open ? null : slots[0]! }
+}
