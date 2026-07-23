@@ -71,6 +71,11 @@ export async function runAutoReject(env: Env, ctx: ExecutionContext): Promise<vo
       .eq('restaurant_id', restaurantId)
       .eq('status', 'auth_success')
       .lte('created_at', cutoff)
+      // Exempt scheduled orders whose slot hasn't arrived yet — created_at is
+      // not a meaningful "staff should have acted by now" signal for an order
+      // placed hours/days ahead of its pickup time. Once scheduled_for passes,
+      // the normal created_at cutoff applies again.
+      .or(`scheduled_for.is.null,scheduled_for.lte.${now.toISOString()}`)
 
     if (!orders?.length) continue
 

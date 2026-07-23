@@ -148,7 +148,7 @@ describe('STORY-013 · Restaurant profile management', () => {
     expect(body.restaurant.display_name).toBe('Burger Palace')
 
     // KV invalidation: both settings: and theme: deleted
-    const deletedKeys = mockKv.delete.mock.calls.map(([k]: [string]) => k)
+    const deletedKeys = mockKv.delete.mock.calls.map(([k]: string[]) => k)
     expect(deletedKeys).toContain(`settings:${RESTAURANT_ID}`)
     expect(deletedKeys).toContain(`theme:${RESTAURANT_ID}`)
   })
@@ -209,6 +209,48 @@ describe('STORY-013 · Restaurant profile management', () => {
     // Path format: {restaurant_id}/logo/{randomId}.webp
     expect(body.r2_key).toMatch(new RegExp(`^${RESTAURANT_ID}/logo/[a-z0-9]{21}\\.webp$`))
     expect(body.upload_url).toContain(body.r2_key)
+  })
+
+  it('PATCH /admin/restaurant with logo_r2_key: persisted after a valid own-restaurant key', async () => {
+    const key = `${RESTAURANT_ID}/logo/abc123.webp`
+    mockFrom.mockReturnValueOnce(
+      chain({ data: { ...fakeRestaurant, logo_r2_key: key }, error: null }),
+    )
+
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/restaurant',
+      { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify({ logo_r2_key: key }) },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const updateArgs = mockFrom.mock.results[0]?.value.update.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(updateArgs).toHaveProperty('logo_r2_key', key)
+  })
+
+  it('PATCH /admin/restaurant with logo_r2_key: rejects a key scoped to a different restaurant (IDOR)', async () => {
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/restaurant',
+      { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify({ logo_r2_key: 'someone-elses-restaurant/logo/abc123.webp' }) },
+      env,
+    )
+
+    expect(res.status).toBe(422)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('PATCH /admin/restaurant with logo_r2_key: rejects a well-scoped but malformed suffix', async () => {
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/restaurant',
+      { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify({ logo_r2_key: `${RESTAURANT_ID}/../../secrets.env` }) },
+      env,
+    )
+
+    expect(res.status).toBe(422)
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('PATCH /admin/restaurant/profile: name updated, email rejected', async () => {

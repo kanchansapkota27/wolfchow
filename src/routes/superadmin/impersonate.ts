@@ -18,6 +18,11 @@ const IMPERSONATION_TTL_SECONDS = 30 * 60
  */
 export function registerImpersonateRoutes(app: Hono<HonoEnv>): void {
   app.post('/superadmin/restaurants/:id/impersonate', async (c) => {
+    // Impersonation tokens are always HS256, minted by this Worker.
+    if (!c.env.SUPABASE_JWT_SECRET) {
+      return c.json({ error: 'impersonation_not_configured' }, 500)
+    }
+
     const restaurantId = c.req.param('id')
     const caller = c.get('jwt')
     const admin = createAdminClient(c.env)

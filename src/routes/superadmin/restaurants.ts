@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
-import { KvCache } from '../../services/kv'
+import { KvCache, buildKey } from '../../services/kv'
 import { RealtimeService, type Broadcaster } from '../../services/realtime'
 import { createRestaurantDirectSchema, updateRestaurantSchema, createRestaurantUserSchema } from './schemas'
 
@@ -58,6 +58,22 @@ async function invalidateRestaurantKv(env: Env, restaurantId: string): Promise<v
     new KvCache(env.FLAGS_CACHE).invalidateAll(restaurantId),
     new KvCache(env.SETTINGS_CACHE).invalidateAll(restaurantId),
   ])
+}
+
+/**
+ * Write the `suspended:{id}` enforcement flag that `requireActiveRestaurant`
+ * (STORY-083) reads on every /admin/* and /tablet/* request. `active: false`
+ * sets the flag; `active: true` clears it (rather than writing `false`) so a
+ * cache miss and an explicit reactivation are indistinguishable — both allow
+ * the request through.
+ */
+async function syncSuspensionFlag(env: Env, restaurantId: string, active: boolean): Promise<void> {
+  const cache = new KvCache(env.SETTINGS_CACHE)
+  if (active) {
+    await cache.delete(buildKey('suspended', restaurantId))
+  } else {
+    await cache.set(buildKey('suspended', restaurantId), true, 0)
+  }
 }
 
 /**
@@ -273,6 +289,12 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
       await new KvCache(c.env.SETTINGS_CACHE).invalidate(id, 'plan')
     }
 
+    // Direct active toggle via PATCH (suspend/reactivate are the dedicated
+    // endpoints below, but this field is also settable here per the schema).
+    if (parsed.data.active !== undefined) {
+      await syncSuspensionFlag(c.env, id, parsed.data.active)
+    }
+
     return c.json({ restaurant: data })
   })
 
@@ -293,6 +315,9 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
     // Tell live clients to stop, clear all caches, and audit.
     makeBroadcaster(c.env).broadcast(id, 'suspension', { restaurant_id: id }, execCtx(c))
     await invalidateRestaurantKv(c.env, id)
+    // invalidateRestaurantKv above clears the 'suspended' key too, so the
+    // enforcement flag must be (re)written after it, not before.
+    await syncSuspensionFlag(c.env, id, false)
     await admin.from('audit_log').insert({
       restaurant_id: id,
       table_name: 'restaurants',
@@ -318,6 +343,7 @@ export function registerRestaurantRoutes(app: Hono<HonoEnv>, deps: RestaurantRou
     if (error) return c.json({ error: 'update_failed' }, 500)
     if (!data) return c.json({ error: 'restaurant_not_found' }, 404)
 
+    await syncSuspensionFlag(c.env, id, true)
     await admin.from('audit_log').insert({
       restaurant_id: id,
       table_name: 'restaurants',

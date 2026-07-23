@@ -576,7 +576,7 @@ export function createApiClient(config: ApiClientConfig) {
   const admin = {
     getRestaurant: () =>
       apiFetch<{ restaurant: Restaurant }>('/admin/restaurant').then((r) => r.restaurant),
-    patchRestaurant: (data: Partial<Pick<Restaurant, 'display_name' | 'business_name' | 'address' | 'cuisine_type' | 'services_offered'>>) =>
+    patchRestaurant: (data: Partial<Pick<Restaurant, 'display_name' | 'business_name' | 'address' | 'cuisine_type' | 'services_offered' | 'logo_r2_key'>>) =>
       apiFetch<{ restaurant: Partial<Restaurant> }>('/admin/restaurant', { method: 'PATCH', body: data }).then((r) => r.restaurant),
     saveIntegrations: (data: { brand_colors?: Restaurant['brand_colors']; social_links?: Record<string, string>; delivery_links?: Record<string, string> }) =>
       apiFetch<{ restaurant: Partial<Restaurant> }>('/admin/restaurant', { method: 'PATCH', body: data }).then((r) => r.restaurant),
@@ -754,7 +754,39 @@ export function createApiClient(config: ApiClientConfig) {
       }>('/admin/plan'),
   }
 
-  return { apiFetch, auth, superadmin, admin, menu, orders }
+  /**
+   * PUTs a file to a presigned/local-dev upload URL (from an endpoint like
+   * POST /admin/restaurant/logo or POST /admin/menu/items/:id/image), with
+   * upload progress.
+   *
+   * The access token is attached ONLY when the upload URL is same-origin as
+   * our own API — the local-dev PUT /r2/:key path, which sits behind
+   * jwtMiddleware and needs it. In production the upload URL is a presigned
+   * R2 URL on a third-party origin (Cloudflare's R2 S3-compatible endpoint);
+   * it authenticates via its own query-string signature and does not need
+   * our token, so the token must never be sent there — even though R2 would
+   * likely just ignore it (its signature only covers the `host` header, see
+   * generatePresignedPutUrl), an internal session token has no business
+   * leaving our own origin.
+   */
+  function uploadFile(url: string, file: File, onProgress?: (percent: number) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && onProgress) onProgress(Math.round((ev.loaded / ev.total) * 100))
+      }
+      xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`)))
+      xhr.onerror = () => reject(new Error('Network error'))
+      xhr.open('PUT', url)
+      xhr.setRequestHeader('Content-Type', file.type)
+      const sameOrigin = new URL(url, baseUrl).origin === new URL(baseUrl).origin
+      const token = sameOrigin ? session.getAccessToken() : null
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.send(file)
+    })
+  }
+
+  return { apiFetch, auth, superadmin, admin, menu, orders, uploadFile }
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>

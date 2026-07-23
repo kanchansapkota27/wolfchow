@@ -28,7 +28,7 @@ export interface AuthContextValue extends AuthState {
   signInWithPassword(email: string, password: string): Promise<void>
   signInWithDeviceToken(deviceToken: string, options?: { device_uuid?: string; platform?: string }): Promise<void>
   logout(): Promise<void>
-  exitImpersonation(): void
+  exitImpersonation(): Promise<void>
   /** Re-derive state from the stored token (e.g. after a background refresh). */
   refresh(): void
   navigate(to: string): void
@@ -153,11 +153,19 @@ export function AuthProvider({
     }
   }, [client, session, navigator])
 
-  const exitImpersonation = useCallback(() => {
-    session.clear()
+  const exitImpersonation = useCallback(async () => {
+    try {
+      // Hits /auth/logout so the backend logs IMPERSONATION_END. That call's
+      // own `.finally()` clears the local session whether it succeeds or
+      // fails, so a failed request (e.g. offline) still lets the operator
+      // exit locally — it just misses the audit row.
+      await client.auth.logout()
+    } catch {
+      // already handled by client.auth.logout()'s finally
+    }
     setState({ ...EMPTY, isLoading: false })
     navigator.navigate('/superadmin')
-  }, [session, navigator])
+  }, [client, navigator])
 
   const refresh = useCallback(() => {
     void deriveAndSet()

@@ -11,11 +11,13 @@
  */
 
 /** Cacheable resource kinds. All but `slug` are keyed by `restaurant_id`. */
-export type KvKeyType = 'menu' | 'settings' | 'flags' | 'hours' | 'promos' | 'plan' | 'theme' | 'slug' | 'slots'
+export type KvKeyType = 'menu' | 'settings' | 'flags' | 'hours' | 'promos' | 'plan' | 'theme' | 'slug' | 'slots' | 'suspended'
 
 /**
  * Per-type TTL in seconds. `slug` maps a slug → restaurant_id and never changes,
- * so it is cached forever (no `expirationTtl` passed to KV).
+ * so it is cached forever (no `expirationTtl` passed to KV). `suspended` is
+ * explicitly written/cleared by the superadmin suspend/reactivate actions
+ * (see STORY-083), so it also never needs a TTL.
  */
 export const KV_TTLS: Record<KvKeyType, number | null> = {
   menu: 300,
@@ -27,6 +29,7 @@ export const KV_TTLS: Record<KvKeyType, number | null> = {
   theme: 600,
   slug: null,
   slots: 300,
+  suspended: null,
 }
 
 /** Resource types scoped to a restaurant — everything `invalidateAll` clears. */
@@ -39,6 +42,7 @@ export const RESTAURANT_SCOPED_TYPES: ReadonlyArray<Exclude<KvKeyType, 'slug'>> 
   'plan',
   'theme',
   'slots',
+  'suspended',
 ]
 
 /** Build a canonical KV key: `{type}:{id}` where id is a restaurant_id (or slug). */

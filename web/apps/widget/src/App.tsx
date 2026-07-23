@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { RealtimeProvider, useRealtime } from '@wolfchow/realtime'
 import type {
   WidgetSettings,
   PublicMenuItem,
@@ -68,7 +69,15 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-export function App({ state: loadState, settings: initialSettings, apiBase, slug }: AppProps) {
+export function App(props: AppProps) {
+  return (
+    <RealtimeProvider restaurantId={props.settings?.restaurant_id ?? null}>
+      <AppContent {...props} />
+    </RealtimeProvider>
+  )
+}
+
+function AppContent({ state: loadState, settings: initialSettings, apiBase, slug }: AppProps) {
   const [view, setView] = useState<WidgetView>('menu')
   const [settings, setSettings] = useState<WidgetSettings | null>(initialSettings)
   const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null)
@@ -80,6 +89,8 @@ export function App({ state: loadState, settings: initialSettings, apiBase, slug
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const confirmCardRef = useRef<((clientSecret: string) => Promise<string>) | null>(null)
+  const { subscribe } = useRealtime()
+  const qc = useQueryClient()
 
   const api = createWidgetApi(apiBase, slug)
 
@@ -93,6 +104,78 @@ export function App({ state: loadState, settings: initialSettings, apiBase, slug
     queryFn: () => api.getMenu(),
     enabled: loadState === 'ready',
   })
+
+  // Realtime: menu availability changes elsewhere → refetch the menu.
+  useEffect(() => {
+    return subscribe('menu_availability_changed', () => {
+      api.getMenu().then((m) => qc.setQueryData(['widget-menu', slug], m)).catch(() => undefined)
+    })
+  }, [subscribe, qc, slug])
+
+  // Realtime: pause/unpause → update local settings in place, no refetch needed.
+  useEffect(() => {
+    return subscribe('pause_state_changed', (_event, payload) => {
+      setSettings((s) => s && {
+        ...s,
+        orders_paused: payload.paused === true,
+        pause_reason: (payload.reason as string | null | undefined) ?? null,
+      })
+    })
+  }, [subscribe])
+
+  // Realtime: notices created/edited/removed elsewhere → update local settings in
+  // place. `notice_created` is broadcast for both create and edit (the backend
+  // has no separate 'notice_updated' event) with the raw DB row, so re-derive
+  // storefront relevance the same way GET /public/:slug/settings does — an edit
+  // that deactivates/expires/reschedules a notice removes it, not just upserts.
+  useEffect(() => {
+    const unsubCreated = subscribe('notice_created', (_event, payload) => {
+      const row = payload as {
+        id: string
+        type: string
+        message: string
+        display_locations: string[]
+        priority: number
+        active?: boolean
+        starts_at?: string | null
+        expires_at?: string | null
+      }
+      if (!row?.id) return
+
+      const now = new Date().toISOString()
+      const qualifies =
+        row.active !== false &&
+        !(row.starts_at && row.starts_at > now) &&
+        !(row.expires_at && row.expires_at < now) &&
+        (row.display_locations?.some((l) => l === 'storefront' || l === 'checkout') ?? false)
+
+      setSettings((s) => {
+        if (!s) return s
+        const withoutThis = s.notices.filter((n) => n.id !== row.id)
+        return {
+          ...s,
+          notices: qualifies
+            ? [...withoutThis, {
+                id: row.id,
+                type: row.type,
+                message: row.message,
+                display_locations: row.display_locations,
+                priority: row.priority,
+              }]
+            : withoutThis,
+        }
+      })
+    })
+    const unsubRemoved = subscribe('notice_removed', (_event, payload) => {
+      const noticeId = payload.id as string | undefined
+      if (!noticeId) return
+      setSettings((s) => s && { ...s, notices: s.notices.filter((n) => n.id !== noticeId) })
+    })
+    return () => {
+      unsubCreated()
+      unsubRemoved()
+    }
+  }, [subscribe])
 
   // Set default payment method
   useEffect(() => {
@@ -302,7 +385,7 @@ export function App({ state: loadState, settings: initialSettings, apiBase, slug
         <>
           {settings.notices.length > 0 && (
             <div style={{ padding: '0.75rem 1rem 0', flexShrink: 0 }}>
-              <Notices notices={settings.notices} location="storefront" />
+              <Notices notices={settings.notices} location="storefront" slug={slug} />
             </div>
           )}
           {settings.orders_paused && (

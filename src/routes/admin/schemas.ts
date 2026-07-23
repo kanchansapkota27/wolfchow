@@ -23,6 +23,10 @@ export const patchRestaurantSchema = z.object({
   services_offered: z.array(z.string()).optional(),
   social_links: z.record(z.string(), z.string()).optional(),
   delivery_links: z.record(z.string(), z.string()).optional(),
+  // Set after a successful PUT to the presigned URL from POST
+  // /admin/restaurant/logo. The route handler validates this is actually the
+  // caller's own key (not just any string) before persisting it.
+  logo_r2_key: z.string().optional(),
 })
 
 export const patchProfileSchema = z.object({

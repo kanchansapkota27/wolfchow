@@ -84,7 +84,7 @@ describe('STORY-028 · Notices & announcements', () => {
     expect(res.status).toBe(200)
     const body = await res.json() as { notices: typeof notices }
     expect(body.notices).toHaveLength(1)
-    expect(body.notices[0].type).toBe('informational')
+    expect(body.notices[0]?.type).toBe('informational')
   })
 
   it('create notice: 201 + broadcasts notice_created', async () => {

@@ -6,12 +6,17 @@ import { createLocalStorageSession } from '@wolfchow/api-client'
 import { ToastProvider } from '@wolfchow/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ApiProvider, buildApiClient } from './lib/api'
+import { ImpersonationHandoff } from './lib/impersonationHandoff'
 import { App } from './App'
 import './index.css'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
 })
+
+const SUPERADMIN_ORIGIN = new URL(
+  (import.meta.env.VITE_SUPERADMIN_URL as string | undefined) ?? 'http://localhost:5173',
+).origin
 
 function Providers() {
   const navigate = useNavigate()
@@ -33,7 +38,16 @@ function Providers() {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <ApiProvider client={client}>
-          <AuthProvider client={client} session={session} navigator={authNavigator}>
+          <AuthProvider
+            client={client}
+            session={session}
+            navigator={authNavigator}
+            probeSuspended={async () => {
+              const restaurant = await client.admin.getRestaurant()
+              return restaurant.active === false
+            }}
+          >
+            <ImpersonationHandoff session={session} superadminOrigin={SUPERADMIN_ORIGIN} />
             <App />
           </AuthProvider>
         </ApiProvider>

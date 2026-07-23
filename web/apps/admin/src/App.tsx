@@ -1,5 +1,5 @@
 import { Route, Routes } from 'react-router'
-import { LoginPage, RequireRole } from '@wolfchow/auth'
+import { LoginPage, RequireRole, SuspendedPage, useAuth } from '@wolfchow/auth'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Signup } from './pages/Signup'
@@ -16,6 +16,8 @@ import { SmtpSettings } from './pages/SmtpSettings'
 import { Devices } from './pages/Devices'
 
 function ProtectedLayout() {
+  const { isSuspended, isLoading } = useAuth()
+  if (!isLoading && isSuspended) return <SuspendedPage />
   return (
     <RequireRole
       roles={['restaurant_owner']}

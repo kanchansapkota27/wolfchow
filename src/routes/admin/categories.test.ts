@@ -30,6 +30,11 @@ const mockKv = {
   put: vi.fn(),
   delete: vi.fn(),
 }
+// Distinct from mockKv/SETTINGS_CACHE: the public menu route reads/writes the
+// 'menu:' cache key via MENU_CACHE specifically (src/routes/public/menu.ts) —
+// keeping these separate here so a regression (invalidating the wrong
+// binding) fails this suite instead of passing unnoticed.
+const mockMenuKv = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
 
 const env = {
   SUPABASE_URL: 'http://unused',
@@ -37,6 +42,7 @@ const env = {
   SUPABASE_SERVICE_ROLE_KEY: 'service',
   SUPABASE_JWT_SECRET: 'test-secret-at-least-32-characters-long-xx',
   SETTINGS_CACHE: mockKv,
+  MENU_CACHE: mockMenuKv,
   MEDIA_BUCKET: {},
   R2_ACCOUNT_ID: 'acc',
   R2_ACCESS_KEY_ID: 'key',
@@ -106,6 +112,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   mockKv.get.mockResolvedValue({}) // empty plan from KV → no cap, no feature lock
   mockKv.delete.mockResolvedValue(undefined)
+  mockMenuKv.delete.mockResolvedValue(undefined)
 })
 
 describe('STORY-014 · Menu categories', () => {
@@ -235,7 +242,7 @@ describe('STORY-014 · Menu categories', () => {
     )
 
     // menu:{restaurant_id} deleted
-    expect(mockKv.delete).toHaveBeenCalledWith(`menu:${RESTAURANT_ID}`)
+    expect(mockMenuKv.delete).toHaveBeenCalledWith(`menu:${RESTAURANT_ID}`)
     // broadcaster called with correct event
     expect(mockBroadcast).toHaveBeenCalledWith(
       RESTAURANT_ID,

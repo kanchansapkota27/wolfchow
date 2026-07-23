@@ -52,15 +52,7 @@ function ImageUploadZone({ itemId, existingKey, onUploaded, locked, upgradeMessa
     setProgress(0)
     try {
       const { upload_url, r2_key } = await api.admin.getItemImageUrl(itemId)
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.upload.onprogress = (e) => { if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100)) }
-        xhr.onload = () => { xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`)) }
-        xhr.onerror = () => reject(new Error('Network error'))
-        xhr.open('PUT', upload_url)
-        xhr.setRequestHeader('Content-Type', file.type)
-        xhr.send(file)
-      })
+      await api.uploadFile(upload_url, file, setProgress)
       setPreview(URL.createObjectURL(file))
       setProgress(null)
       onUploaded(r2_key)

@@ -25,7 +25,7 @@ export default defineConfig({
           environment: 'jsdom',
           globals: true,
           include: [
-            'packages/{ui,auth,api-client}/src/**/*.test.tsx',
+            'packages/{ui,auth,realtime,api-client}/src/**/*.test.tsx',
             'apps/*/src/**/*.test.tsx',
             'apps/*/src/**/*.test.ts',
           ],

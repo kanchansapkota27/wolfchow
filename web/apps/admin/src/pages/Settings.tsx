@@ -147,19 +147,13 @@ function RestaurantProfileContent({ restaurant, onSave }: {
   async function uploadLogo(file: File) {
     setUploadError(null); setUploading(true); setUploadProgress(0)
     try {
-      const { upload_url } = await api.admin.getLogoUploadUrl()
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.upload.onprogress = (ev) => {
-          if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100))
-        }
-        xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error('Upload failed')))
-        xhr.onerror = () => reject(new Error('Upload failed'))
-        xhr.open('PUT', upload_url)
-        xhr.setRequestHeader('Content-Type', file.type)
-        xhr.send(file)
-      })
+      const { upload_url, r2_key } = await api.admin.getLogoUploadUrl()
+      await api.uploadFile(upload_url, file, setUploadProgress)
+      // Persist the key so it survives a reload — the upload above only
+      // stores the file in R2, it doesn't tell the backend to use it.
+      await api.admin.patchRestaurant({ logo_r2_key: r2_key })
       setPreviewUrl(URL.createObjectURL(file))
+      onSave()
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed.')
     } finally {

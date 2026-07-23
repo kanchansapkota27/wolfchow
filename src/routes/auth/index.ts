@@ -121,7 +121,7 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
     // If a valid impersonation access token is presented, log IMPERSONATION_END
     // and return — these tokens have no refresh token to revoke.
     const header = c.req.header('Authorization')
-    if (header?.startsWith('Bearer ')) {
+    if (header?.startsWith('Bearer ') && c.env.SUPABASE_JWT_SECRET) {
       const claims = await verifyJwt(header.slice('Bearer '.length).trim(), c.env.SUPABASE_JWT_SECRET)
       if (claims?.imp === true) {
         const admin = createAdminClient(c.env)
@@ -142,7 +142,7 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
     }
 
     // Extract caller identity from the access token for the audit entry.
-    const logoutClaims = header?.startsWith('Bearer ')
+    const logoutClaims = header?.startsWith('Bearer ') && c.env.SUPABASE_JWT_SECRET
       ? await verifyJwt(header.slice('Bearer '.length).trim(), c.env.SUPABASE_JWT_SECRET)
       : null
 
@@ -171,6 +171,12 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
   })
 
   app.post('/auth/device', async (c) => {
+    // Device tokens are always HS256, minted by this Worker — unlike regular
+    // user sessions, which may be ES256 tokens issued by Supabase itself.
+    if (!c.env.SUPABASE_JWT_SECRET) {
+      return c.json({ error: 'device_auth_not_configured' }, 500)
+    }
+
     const parsed = deviceSchema.safeParse(await readJson(c))
     if (!parsed.success) {
       return c.json({ error: 'invalid_request', code: 'validation' }, 400)
@@ -335,7 +341,7 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
         cache.set(buildKey('slug', slug), restaurantId, KV_TTLS['slug'] ?? 0),
         // plan:{restaurant_id} → plan flags (1h TTL)
         plan
-          ? cache.set(buildKey('plan', restaurantId), plan, KV_TTLS['plan'])
+          ? cache.set(buildKey('plan', restaurantId), plan, KV_TTLS['plan'] ?? 3600)
           : Promise.resolve(),
       ])
 
