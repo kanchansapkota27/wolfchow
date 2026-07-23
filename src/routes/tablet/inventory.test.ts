@@ -95,6 +95,25 @@ describe('STORY-033 · Inventory management (tablet)', () => {
     )
   })
 
+  it('restore item to in-stock (restore_at: null explicitly sent): 200, DB cleared', async () => {
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { id: 'item-1', restaurant_id: RESTAURANT_ID } })) // scope check
+      .mockReturnValueOnce(chain({ data: { id: 'item-1', name: 'Pizza', availability_state: 'available', restore_at: null } })) // update
+    const token = await makeToken(['inventory:write'])
+    const res = await app.fetch(
+      new Request('http://localhost/tablet/inventory/items/item-1', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ availability_state: 'available', restore_at: null }),
+      }),
+      env,
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json() as { availability_state: string; restore_at: string | null }
+    expect(body.availability_state).toBe('available')
+    expect(body.restore_at).toBeNull()
+  })
+
   it('without inventory:write permission: 403 on item patch', async () => {
     const token = await makeToken([])
     const res = await app.fetch(

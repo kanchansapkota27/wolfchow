@@ -386,6 +386,27 @@ describe('STORY-015 · Menu items', () => {
     expect(mockMenuKv.delete).toHaveBeenCalledWith(`menu:${RESTAURANT_ID}`)
   })
 
+  it('restore to available with restore_at: null explicitly sent: 200, cleared', async () => {
+    const updatedItem = { ...fakeItem, availability_state: 'available', restore_at: null }
+    mockFrom.mockReturnValueOnce(chain({ data: updatedItem }))
+
+    const token = await ownerToken()
+    const res = await app.request(
+      `/admin/menu/items/${ITEM_ID}/availability`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ state: 'available', restore_at: null }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as { availability_state: string; restore_at: string | null }
+    expect(body.availability_state).toBe('available')
+    expect(body.restore_at).toBeNull()
+  })
+
   // ── Variants ────────────────────────────────────────────────────────────────
 
   it('add first variant: has_variants becomes true on parent item', async () => {
