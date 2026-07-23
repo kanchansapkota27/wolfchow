@@ -142,6 +142,7 @@ export interface Restaurant {
   auto_accept: boolean
   auto_reject_enabled: boolean
   auto_reject_minutes: number
+  menu_image_display: 'off' | 'desktop' | 'mobile' | 'both'
   orders_paused: boolean
   pause_until: string | null
   pause_reason: string | null

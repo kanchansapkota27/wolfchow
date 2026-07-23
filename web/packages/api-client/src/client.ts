@@ -570,7 +570,7 @@ export function createApiClient(config: ApiClientConfig) {
   const admin = {
     getRestaurant: () =>
       apiFetch<{ restaurant: Restaurant }>('/admin/restaurant').then((r) => r.restaurant),
-    patchRestaurant: (data: Partial<Pick<Restaurant, 'display_name' | 'business_name' | 'address' | 'cuisine_type' | 'services_offered' | 'logo_r2_key'>>) =>
+    patchRestaurant: (data: Partial<Pick<Restaurant, 'display_name' | 'business_name' | 'address' | 'cuisine_type' | 'services_offered' | 'logo_r2_key' | 'menu_image_display'>>) =>
       apiFetch<{ restaurant: Partial<Restaurant> }>('/admin/restaurant', { method: 'PATCH', body: data }).then((r) => r.restaurant),
     saveIntegrations: (data: { brand_colors?: Restaurant['brand_colors']; social_links?: Record<string, string>; delivery_links?: Record<string, string> }) =>
       apiFetch<{ restaurant: Partial<Restaurant> }>('/admin/restaurant', { method: 'PATCH', body: data }).then((r) => r.restaurant),

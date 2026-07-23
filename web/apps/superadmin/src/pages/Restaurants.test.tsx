@@ -89,6 +89,7 @@ function restaurant(over: Partial<Restaurant> = {}): Restaurant {
     auto_accept: false,
     auto_reject_enabled: false,
     auto_reject_minutes: 10,
+    menu_image_display: 'both',
     orders_paused: false,
     pause_until: null,
     pause_reason: null,
