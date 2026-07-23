@@ -21,6 +21,8 @@ export interface WidgetSettings {
   tax: { enabled: boolean; rate: number; inclusive: boolean }
   orders_paused: boolean
   pause_reason: string | null
+  /** Where menu item photos are shown, independent of the menu_photos plan flag. */
+  menu_image_display: 'off' | 'desktop' | 'mobile' | 'both'
   features: {
     menu_photos: boolean
     item_modifiers: boolean

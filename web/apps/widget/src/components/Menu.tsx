@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { PublicMenuCategory, PublicMenuItem, CartItem, WidgetSettings } from '../types'
 import { formatCurrency } from '@wolfchow/utils'
+import { shouldShowMenuImages, useIsMobileViewport } from '../menuImages'
 
 const TAG_LABELS: Record<string, string> = {
   vegan: '🌱 Vegan',
@@ -162,6 +163,8 @@ function ItemCard({
 export function Menu({ categories, settings, cartCount, cartTotal, onSelectItem, onViewCart, onAddSimpleItem }: MenuProps) {
   const [activeCat, setActiveCat] = useState(categories[0]?.id ?? '')
   const currency = settings.currency
+  const isMobile = useIsMobileViewport()
+  const showPhotos = shouldShowMenuImages(settings, isMobile)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -208,7 +211,7 @@ export function Menu({ categories, settings, cartCount, cartTotal, onSelectItem,
                   key={item.id}
                   item={item}
                   currency={currency}
-                  showPhotos={settings.features.menu_photos}
+                  showPhotos={showPhotos}
                   onSelect={() => onSelectItem(item)}
                   onAddSimple={() => onAddSimpleItem(item)}
                 />
