@@ -6,6 +6,7 @@ import { resolvePlan } from '../../services/plan'
 import { getStripeClient } from '../../services/secrets'
 import { KvCache, buildKey } from '../../services/kv'
 import { RealtimeService } from '../../services/realtime'
+import { getNextOrderNumber } from '../../services/orderNumber'
 import type { NotificationService, NotificationOrderItem } from '../../services/notifications'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
       .from('restaurants')
       .select(`
         id, slug, currency, orders_paused, pause_reason,
-        auto_accept, base_prep_minutes,
+        auto_accept, base_prep_minutes, timezone,
         tax_enabled, tax_rate, tax_inclusive
       `)
       .eq('slug', slug)
@@ -332,9 +333,15 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
       }
     }
 
+    // Human-readable per-restaurant daily order number (e.g. #101), assigned
+    // atomically via TenantCounterDO. Best-effort: a failure here shouldn't
+    // block the order — the tracking token remains the source of truth.
+    const orderNumber = await getNextOrderNumber(c.env, restaurantId, (r.timezone as string) ?? 'UTC').catch(() => null)
+
     const orderInsert: Record<string, unknown> = {
       restaurant_id: restaurantId,
       tracking_token: trackingToken,
+      order_number: orderNumber,
       status: initialStatus,
       payment_method: input.payment_method,
       payment_status: initialPaymentStatus,
@@ -359,7 +366,7 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
     const { data: order, error: orderError } = await admin
       .from('orders')
       .insert(orderInsert)
-      .select('id, tracking_token')
+      .select('id, tracking_token, order_number, created_at')
       .single()
 
     if (orderError || !order) {
@@ -484,6 +491,8 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
     return c.json({
       order_id: orderId,
       tracking_token: trackingToken,
+      order_number: or.order_number as number | null,
+      created_at: or.created_at as string,
       client_secret: clientSecret,
       total,
       currency,
@@ -517,7 +526,7 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
 
     const { data: order } = await admin
       .from('orders')
-      .select('id, status, stripe_intent_id, total, tracking_token, customer_name, customer_email, payment_method, notes, scheduled_for, auto_accept')
+      .select('id, status, stripe_intent_id, total, tracking_token, order_number, created_at, customer_name, customer_email, payment_method, notes, scheduled_for, auto_accept')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .maybeSingle()
@@ -594,6 +603,8 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
       return c.json({
         order_id: orderId,
         tracking_token: or.tracking_token as string,
+        order_number: or.order_number as number | null,
+        created_at: or.created_at as string,
         status: shouldAutoAccept ? 'accepted' : 'auth_success',
       })
     } catch {

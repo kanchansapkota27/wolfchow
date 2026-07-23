@@ -18,6 +18,7 @@ interface TrackingItem {
 interface TrackingOrder {
   order_id: string
   tracking_token: string
+  order_number: number | null
   restaurant_id: string
   restaurant_name: string
   status: string
@@ -96,6 +97,10 @@ function fmt(n: number) {
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
 // ── Components ────────────────────────────────────────────────────────────────
@@ -231,7 +236,7 @@ function OrderSummary({ order }: { order: TrackingOrder }) {
             Order Summary
           </span>
           <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-            #{order.order_id.slice(0, 8).toUpperCase()}
+            {order.order_number !== null ? `#${order.order_number}` : `#${order.order_id.slice(0, 8).toUpperCase()}`} · {fmtDate(order.created_at)}
           </span>
         </div>
 

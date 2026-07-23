@@ -4,6 +4,10 @@ function formatPrice(amount: number, currency: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
 interface SuccessProps {
   orderResult: CreateOrderResult
   settings: WidgetSettings
@@ -51,8 +55,8 @@ export function Success({ orderResult, settings, onTrackOrder, onNewOrder }: Suc
           <span style={{ color: '#6b7280' }}>Order Total</span>
           <span style={{ fontWeight: 700 }}>{formatPrice(orderResult.total, currency)}</span>
         </div>
-        <div style={{ fontSize: '0.75rem', color: '#9ca3af', wordBreak: 'break-all' }}>
-          Ref: {orderResult.tracking_token}
+        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+          {orderResult.order_number !== null ? `Order #${orderResult.order_number}` : 'Order confirmed'} · {formatDate(orderResult.created_at)}
         </div>
       </div>
 

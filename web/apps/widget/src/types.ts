@@ -141,6 +141,9 @@ export interface PromoValidation {
 export interface CreateOrderResult {
   order_id: string
   tracking_token: string
+  /** Short per-restaurant daily order number (e.g. 101 → shown as "#101"). Null for the rare case the counter DO call failed at creation time. */
+  order_number: number | null
+  created_at: string
   client_secret: string | null
   total: number
   currency: string
@@ -149,6 +152,7 @@ export interface CreateOrderResult {
 export interface OrderTrackingResult {
   order_id: string
   tracking_token: string
+  order_number: number | null
   status: string
   payment_method: string
   customer_name: string
@@ -160,13 +164,14 @@ export interface OrderTrackingResult {
   created_at: string
   scheduled_for: string | null
   estimated_ready: string
+  // No per-item/modifier price fields — the backend deliberately omits them
+  // (SEC-010: no itemized price leakage from this token-only public endpoint).
   items: Array<{
     id: string
     item_name: string | null
     variant_name: string | null
     quantity: number
-    unit_price: number
-    modifiers: Array<{ name: string; price_delta: number }>
+    modifiers: Array<{ name: string }>
     notes: string | null
   }>
 }
