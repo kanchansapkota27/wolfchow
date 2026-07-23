@@ -153,6 +153,42 @@ describe('STORY-013 · Restaurant profile management', () => {
     expect(deletedKeys).toContain(`theme:${RESTAURANT_ID}`)
   })
 
+  it('PATCH menu_image_display: updated to a valid scope', async () => {
+    mockFrom.mockReturnValueOnce(
+      chain({ data: { ...fakeRestaurant, menu_image_display: 'mobile' }, error: null }),
+    )
+
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/restaurant',
+      {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ menu_image_display: 'mobile' }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as { restaurant: { menu_image_display: string } }
+    expect(body.restaurant.menu_image_display).toBe('mobile')
+  })
+
+  it('PATCH menu_image_display: rejects an invalid scope value', async () => {
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/restaurant',
+      {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ menu_image_display: 'everywhere' }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(422)
+  })
+
   it('PATCH timezone: field stripped, not forwarded to DB', async () => {
     mockFrom.mockReturnValueOnce(
       chain({ data: { ...fakeRestaurant, display_name: 'Updated' }, error: null }),

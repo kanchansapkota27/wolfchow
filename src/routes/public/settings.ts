@@ -24,6 +24,8 @@ export interface WidgetSettings {
   tax: { enabled: boolean; rate: number; inclusive: boolean }
   orders_paused: boolean
   pause_reason: string | null
+  /** Where menu item photos are shown, independent of the menu_photos plan flag. */
+  menu_image_display: 'off' | 'desktop' | 'mobile' | 'both'
   features: {
     menu_photos: boolean
     item_modifiers: boolean
@@ -70,7 +72,8 @@ export function registerPublicSettingsRoutes(app: Hono<HonoEnv>): void {
         tips_enabled, tip_presets, allow_custom_tip, show_no_tip,
         tax_enabled, tax_rate, tax_inclusive,
         orders_paused, pause_reason,
-        base_prep_minutes, scheduling_interval
+        base_prep_minutes, scheduling_interval,
+        menu_image_display
       `)
       .eq('slug', slug)
       .eq('active', true)
@@ -176,6 +179,7 @@ export function registerPublicSettingsRoutes(app: Hono<HonoEnv>): void {
       },
       orders_paused: r.orders_paused as boolean,
       pause_reason: r.pause_reason as string | null,
+      menu_image_display: (r.menu_image_display as 'off' | 'desktop' | 'mobile' | 'both' | null) ?? 'both',
       features: {
         menu_photos: flags?.menu_photos ?? false,
         item_modifiers: flags?.item_modifiers ?? false,
