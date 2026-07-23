@@ -85,6 +85,37 @@ describe('STORY-029 · Transaction history & refunds', () => {
     expect(body.total).toBe(1)
   })
 
+  it('list transactions: selects full order detail including items/modifiers, not just summary fields', async () => {
+    const orderRow = {
+      id: ORDER_ID,
+      status: 'completed',
+      total: 25,
+      subtotal: 22,
+      tax_amount: 2,
+      tip_amount: 1,
+      notes: 'no onions',
+      payment_method: 'card',
+      items: [{ id: 'item-1', item_name: 'Burger', modifiers: [{ name: 'Extra cheese' }], notes: null }],
+    }
+    mockFrom.mockReturnValueOnce(chain({ data: [orderRow], count: 1 }))
+
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?page=1', { headers: authHeaders(token) }, env)
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as { transactions: Array<typeof orderRow> }
+    expect(body.transactions[0]).toHaveProperty('tax_amount', 2)
+    expect(body.transactions[0]).toHaveProperty('tip_amount', 1)
+    expect(body.transactions[0]).toHaveProperty('notes', 'no onions')
+    expect(body.transactions[0]?.items).toHaveLength(1)
+    expect(body.transactions[0]?.items[0]?.modifiers).toEqual([{ name: 'Extra cheese' }])
+
+    // Confirm the actual SELECT string requests the full row + items join,
+    // not the old narrow field list.
+    const selectCall = mockFrom.mock.results[0]?.value.select.mock.calls[0]?.[0] as string
+    expect(selectCall).toContain('items:order_items(*)')
+  })
+
   it('get single order: found', async () => {
     const order = { id: ORDER_ID, status: 'completed', total_cents: 2500, restaurant_id: RESTAURANT_ID }
     mockFrom.mockReturnValueOnce(chain({ data: order }))

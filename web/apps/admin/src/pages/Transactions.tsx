@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@wolfchow/ui'
 import { useApi } from '../lib/api'
+import { OrderDetailBreakdown } from '../components/orders/OrderDetailBreakdown'
 import type { TransactionRow, RefundInput, RefundReason } from '@wolfchow/api-client'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -161,6 +162,9 @@ function DetailPanel({ tx, onRefund, onClose }: DetailPanelProps) {
             </div>
           )}
         </dl>
+        <div className="border-t border-gray-100 pt-3">
+          <OrderDetailBreakdown order={tx} />
+        </div>
         <div className="pt-2">
           {!isCard ? (
             <p className="text-sm text-gray-500 italic">Cash order — no refund available</p>
@@ -209,9 +213,11 @@ export function Transactions() {
   }, [txs, search, fromDate, toDate])
 
   async function handleRefund(id: string, data: RefundInput) {
-    const updated = await api.admin.refundTransaction(id, data)
-    setTxs((prev) => prev.map((t) => t.id === id ? updated : t))
-    if (selected?.id === id) setSelected(updated)
+    // The backend only returns the changed fields — merge into the existing
+    // row rather than replace it, or items/tax/tip/notes would be wiped out.
+    const partial = await api.admin.refundTransaction(id, data)
+    setTxs((prev) => prev.map((t) => t.id === id ? { ...t, ...partial } : t))
+    if (selected?.id === id) setSelected((s) => s && { ...s, ...partial })
   }
 
   if (loading) return <div className="p-8 text-gray-500">Loading…</div>

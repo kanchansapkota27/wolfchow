@@ -202,14 +202,8 @@ export interface PauseInput {
 
 export type RefundReason = 'duplicate' | 'fraudulent' | 'requested_by_customer'
 
-export interface TransactionRow {
-  id: string
-  status: string
-  total: number
-  stripe_intent_id: string | null
-  created_at: string
-  customer_name: string
-  customer_email: string
+/** Full order detail (items, modifiers, tax/tip breakdown, notes) plus refund state. */
+export interface TransactionRow extends Order {
   refund_id: string | null
   refunded_at: string | null
 }
@@ -734,8 +728,11 @@ export function createApiClient(config: ApiClientConfig) {
       apiFetch<TransactionListResponse>(`/admin/transactions?page=${page}`),
     getTransaction: (id: string) =>
       apiFetch<Record<string, unknown>>(`/admin/transactions/${id}`),
+    // Backend intentionally returns only the changed fields (state transition
+    // confirmation), not the full order — callers should merge into the
+    // existing row, not replace it.
     refundTransaction: (id: string, data: RefundInput) =>
-      apiFetch<TransactionRow>(`/admin/transactions/${id}/refund`, { method: 'POST', body: data }),
+      apiFetch<Pick<TransactionRow, 'id' | 'status' | 'refund_id' | 'refunded_at' | 'total' | 'payment_method'>>(`/admin/transactions/${id}/refund`, { method: 'POST', body: data }),
     // ── Notices ──────────────────────────────────────────────────────────────
     listNotices: () =>
       apiFetch<{ notices: Notice[] }>('/admin/notices').then((r) => r.notices),
