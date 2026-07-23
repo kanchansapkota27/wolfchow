@@ -27,6 +27,7 @@ export const patchRestaurantSchema = z.object({
   // /admin/restaurant/logo. The route handler validates this is actually the
   // caller's own key (not just any string) before persisting it.
   logo_r2_key: z.string().optional(),
+  menu_image_display: z.enum(['off', 'desktop', 'mobile', 'both']).optional(),
 })
 
 export const patchProfileSchema = z.object({

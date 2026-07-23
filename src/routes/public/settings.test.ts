@@ -47,6 +47,7 @@ function makeRestaurantRow() {
     pause_reason: null,
     base_prep_minutes: 20,
     scheduling_interval: 15,
+    menu_image_display: 'mobile',
   }
 }
 
@@ -82,6 +83,28 @@ describe('STORY-074 · Public widget settings', () => {
     const body = await res.json() as Record<string, unknown>
     expect(body.restaurant_id).toBe(RESTAURANT_ID)
     expect(body.slug).toBe(SLUG)
+  })
+
+  it('GET /public/:slug/settings returns menu_image_display, defaulting to "both" when unset', async () => {
+    mockFrom
+      .mockReturnValueOnce(chain({ data: makeRestaurantRow() }))
+      .mockReturnValueOnce(chain({ data: { feature_flags: {}, payment_methods_allowed: null } }))
+      .mockReturnValueOnce(chain({ data: { stripe_publishable_key: null, payment_methods_enabled: ['pickup'], pickup_delivery_note: null } }))
+      .mockReturnValueOnce(chain({ data: [] }))
+
+    const res = await app.request(`/public/${SLUG}/settings`, {}, env)
+    const body = await res.json() as { menu_image_display: string }
+    expect(body.menu_image_display).toBe('mobile')
+
+    mockFrom
+      .mockReturnValueOnce(chain({ data: { ...makeRestaurantRow(), menu_image_display: undefined } }))
+      .mockReturnValueOnce(chain({ data: { feature_flags: {}, payment_methods_allowed: null } }))
+      .mockReturnValueOnce(chain({ data: { stripe_publishable_key: null, payment_methods_enabled: ['pickup'], pickup_delivery_note: null } }))
+      .mockReturnValueOnce(chain({ data: [] }))
+
+    const res2 = await app.request(`/public/${SLUG}/settings`, {}, env)
+    const body2 = await res2.json() as { menu_image_display: string }
+    expect(body2.menu_image_display).toBe('both')
   })
 
   it('GET /public/:slug/settings with unknown slug returns 404', async () => {

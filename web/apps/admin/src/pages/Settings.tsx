@@ -17,6 +17,7 @@ import { Card } from '../components/settings/Card'
 import { SectionHeader } from '../components/settings/SectionHeader'
 import { LinkField } from '../components/settings/LinkField'
 import { BrandColorsCard } from '../components/settings/BrandColorsCard'
+import { MenuImageDisplayCard } from '../components/settings/MenuImageDisplayCard'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -301,6 +302,10 @@ function RestaurantProfileContent({ restaurant, onSave }: {
 
       <PlanLocked locked={plan?.feature_flags.custom_brand_color === false} upgradeMessage={upgradeMessage} label="Custom brand colors require a higher plan">
         <BrandColorsCard restaurant={restaurant} onSave={onSave} />
+      </PlanLocked>
+
+      <PlanLocked locked={plan?.feature_flags.menu_photos === false} upgradeMessage={upgradeMessage} label="Menu item photos require a higher plan">
+        <MenuImageDisplayCard restaurant={restaurant} onSave={onSave} />
       </PlanLocked>
 
       <Card>

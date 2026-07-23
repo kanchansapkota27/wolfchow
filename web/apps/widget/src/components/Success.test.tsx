@@ -19,6 +19,7 @@ const SETTINGS: WidgetSettings = {
   tax: { enabled: false, rate: 0, inclusive: false },
   orders_paused: false,
   pause_reason: null,
+  menu_image_display: 'both',
   features: {
     menu_photos: false,
     item_modifiers: false,
