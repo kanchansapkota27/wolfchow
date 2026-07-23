@@ -228,6 +228,7 @@ function EditItemDrawer({ item, categories, selectedCategoryId, onClose, onSave,
     item?.variants?.map((v) => ({ name: v.name, price: v.price, is_default: v.is_default, available: v.available })) ?? []
   )
   const [imageKey, setImageKey] = useState<string | null>(item?.image_r2_key ?? null)
+  const [specialRequests, setSpecialRequests] = useState<boolean | null>(item?.special_requests_enabled ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -251,6 +252,7 @@ function EditItemDrawer({ item, categories, selectedCategoryId, onClose, onSave,
         restore_at: availability === 'out_of_stock' && restoreAt ? restoreAt : null,
         has_variants: hasVariants,
         image_r2_key: imageKey ?? undefined,
+        special_requests_enabled: specialRequests,
         ...(hasVariants ? { variants } : {}),
       })
       onClose()
@@ -413,6 +415,21 @@ function EditItemDrawer({ item, categories, selectedCategoryId, onClose, onSave,
                     </button>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Special instructions</label>
+                <select
+                  className={FIELD}
+                  value={specialRequests === null ? 'default' : specialRequests ? 'on' : 'off'}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setSpecialRequests(v === 'default' ? null : v === 'on')
+                  }}
+                >
+                  <option value="default">Use restaurant default</option>
+                  <option value="on">Always allow</option>
+                  <option value="off">Never allow</option>
+                </select>
               </div>
               {item?.id && (
                 <ImageUploadZone

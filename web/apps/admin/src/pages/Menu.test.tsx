@@ -81,6 +81,7 @@ const ITEM1: MenuItem = {
   name: 'Bruschetta', description: null, price: 850,
   availability_state: 'available', restore_at: null, image_r2_key: null,
   tags: ['vegan'], has_variants: false, sort_order: 0, variants: [],
+  special_requests_enabled: null,
 }
 
 beforeEach(() => {

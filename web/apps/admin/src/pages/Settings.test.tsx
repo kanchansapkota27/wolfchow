@@ -66,6 +66,7 @@ const RESTAURANT: Restaurant = {
   auto_reject_enabled: false,
   auto_reject_minutes: 15,
   menu_image_display: 'both',
+  special_requests_enabled: true,
   orders_paused: false,
   pause_until: null,
   pause_reason: null,
