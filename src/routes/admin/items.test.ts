@@ -27,6 +27,11 @@ registerAdminRoutes(app, {
 // ── Fake env ──────────────────────────────────────────────────────────────────
 
 const mockKv = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
+// Distinct from mockKv/SETTINGS_CACHE: the public menu route reads/writes the
+// 'menu:' cache key via MENU_CACHE specifically (src/routes/public/menu.ts) —
+// keeping these separate here so a regression (invalidating the wrong
+// binding) fails this suite instead of passing unnoticed.
+const mockMenuKv = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
 
 const env = {
   SUPABASE_URL: 'http://unused',
@@ -34,6 +39,7 @@ const env = {
   SUPABASE_SERVICE_ROLE_KEY: 'service',
   SUPABASE_JWT_SECRET: 'test-secret-at-least-32-characters-long-xx',
   SETTINGS_CACHE: mockKv,
+  MENU_CACHE: mockMenuKv,
   MEDIA_BUCKET: {},
   R2_ACCOUNT_ID: 'acc', R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'secret', R2_BUCKET_NAME: 'media',
@@ -108,6 +114,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   mockKv.get.mockResolvedValue({}) // empty plan from KV → no cap, no feature lock
   mockKv.delete.mockResolvedValue(undefined)
+  mockMenuKv.delete.mockResolvedValue(undefined)
 })
 
 describe('STORY-015 · Menu items', () => {
@@ -270,6 +277,46 @@ describe('STORY-015 · Menu items', () => {
     expect(body.upload_url).toContain(body.r2_key)
   })
 
+  it('PATCH item with image_r2_key: persisted after a valid own-item key', async () => {
+    const key = `${RESTAURANT_ID}/${ITEM_ID}/abc123.webp`
+    mockFrom.mockReturnValueOnce(chain({ data: { ...fakeItem, image_r2_key: key } }))
+
+    const token = await ownerToken()
+    const res = await app.request(
+      `/admin/menu/items/${ITEM_ID}`,
+      { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify({ image_r2_key: key }) },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const updateArgs = mockFrom.mock.results[0]?.value.update.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(updateArgs).toHaveProperty('image_r2_key', key)
+  })
+
+  it('PATCH item with image_r2_key: rejects a key scoped to a different item (IDOR)', async () => {
+    const token = await ownerToken()
+    const res = await app.request(
+      `/admin/menu/items/${ITEM_ID}`,
+      { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify({ image_r2_key: `${RESTAURANT_ID}/some-other-item-id/abc123.webp` }) },
+      env,
+    )
+
+    expect(res.status).toBe(422)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('PATCH item with image_r2_key: rejects a key scoped to a different restaurant (IDOR)', async () => {
+    const token = await ownerToken()
+    const res = await app.request(
+      `/admin/menu/items/${ITEM_ID}`,
+      { method: 'PATCH', headers: authHeaders(token), body: JSON.stringify({ image_r2_key: `some-other-restaurant/${ITEM_ID}/abc123.webp` }) },
+      env,
+    )
+
+    expect(res.status).toBe(422)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
   // ── Availability ────────────────────────────────────────────────────────────
 
   it('set out_of_stock with restore_at: stored, KV invalidated', async () => {
@@ -290,7 +337,7 @@ describe('STORY-015 · Menu items', () => {
     expect(res.status).toBe(200)
     const body = await res.json() as { availability_state: string }
     expect(body.availability_state).toBe('out_of_stock')
-    expect(mockKv.delete).toHaveBeenCalledWith(`menu:${RESTAURANT_ID}`)
+    expect(mockMenuKv.delete).toHaveBeenCalledWith(`menu:${RESTAURANT_ID}`)
   })
 
   // ── Variants ────────────────────────────────────────────────────────────────
