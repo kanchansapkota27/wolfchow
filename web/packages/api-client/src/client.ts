@@ -754,7 +754,34 @@ export function createApiClient(config: ApiClientConfig) {
       }>('/admin/plan'),
   }
 
-  return { apiFetch, auth, superadmin, admin, menu, orders }
+  /**
+   * PUTs a file to a presigned/local-dev upload URL (from an endpoint like
+   * POST /admin/restaurant/logo or POST /admin/menu/items/:id/image), with
+   * upload progress and — critically — the current access token attached.
+   *
+   * The token is required in local dev, where the upload URL is our own
+   * PUT /r2/:key route sitting behind jwtMiddleware; in production it's a
+   * presigned R2 URL whose signature only covers the `host` header (see
+   * generatePresignedPutUrl), so an extra Authorization header is harmless
+   * there — R2 ignores it.
+   */
+  function uploadFile(url: string, file: File, onProgress?: (percent: number) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && onProgress) onProgress(Math.round((ev.loaded / ev.total) * 100))
+      }
+      xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`)))
+      xhr.onerror = () => reject(new Error('Network error'))
+      xhr.open('PUT', url)
+      xhr.setRequestHeader('Content-Type', file.type)
+      const token = session.getAccessToken()
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.send(file)
+    })
+  }
+
+  return { apiFetch, auth, superadmin, admin, menu, orders, uploadFile }
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>

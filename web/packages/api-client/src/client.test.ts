@@ -114,4 +114,72 @@ describe('STORY-047 · api-client', () => {
 
     expect(refreshCount).toBe(1)
   })
+
+  // ── uploadFile ────────────────────────────────────────────────────────────
+
+  interface FakeXhrCall {
+    method: string
+    url: string
+    headers: Record<string, string>
+    body: unknown
+  }
+
+  function stubXhr(status: number): { calls: FakeXhrCall[] } {
+    const calls: FakeXhrCall[] = []
+    class FakeXhr {
+      upload = { onprogress: null as ((ev: { lengthComputable: boolean; loaded: number; total: number }) => void) | null }
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      status = status
+      private call: FakeXhrCall = { method: '', url: '', headers: {}, body: undefined }
+      open(method: string, url: string) { this.call.method = method; this.call.url = url }
+      setRequestHeader(name: string, value: string) { this.call.headers[name] = value }
+      send(body: unknown) {
+        this.call.body = body
+        calls.push(this.call)
+        this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 })
+        this.onload?.()
+      }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXhr)
+    return { calls }
+  }
+
+  it('uploadFile: attaches the current access token as a bearer header', async () => {
+    const session = createMemorySession({ access_token: 'tok-upload', refresh_token: 'r-1' })
+    const client = createApiClient({ baseUrl: BASE, session, fetch: vi.fn() })
+    const { calls } = stubXhr(204)
+    const file = new File(['x'], 'logo.webp', { type: 'image/webp' })
+
+    await client.uploadFile('https://upload.test/key', file)
+
+    expect(calls[0]?.method).toBe('PUT')
+    expect(calls[0]?.headers['Authorization']).toBe('Bearer tok-upload')
+    expect(calls[0]?.headers['Content-Type']).toBe('image/webp')
+    vi.unstubAllGlobals()
+  })
+
+  it('uploadFile: no session token → no Authorization header sent (does not crash)', async () => {
+    const session = createMemorySession()
+    const client = createApiClient({ baseUrl: BASE, session, fetch: vi.fn() })
+    const { calls } = stubXhr(204)
+    const file = new File(['x'], 'logo.webp', { type: 'image/webp' })
+
+    await client.uploadFile('https://upload.test/key', file)
+
+    expect(calls[0]?.headers['Authorization']).toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+
+  it('uploadFile: reports progress and rejects on a non-2xx status', async () => {
+    const session = createMemorySession({ access_token: 'tok-upload', refresh_token: 'r-1' })
+    const client = createApiClient({ baseUrl: BASE, session, fetch: vi.fn() })
+    stubXhr(500)
+    const file = new File(['x'], 'logo.webp', { type: 'image/webp' })
+    const progress: number[] = []
+
+    await expect(client.uploadFile('https://upload.test/key', file, (p) => progress.push(p))).rejects.toThrow()
+    expect(progress).toEqual([50])
+    vi.unstubAllGlobals()
+  })
 })
