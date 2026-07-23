@@ -8,6 +8,27 @@ import { getStripeClient } from '../../services/secrets'
 const DEFAULT_HISTORY_DAYS = 30
 const PAGE_SIZE = 50
 
+const ORDER_STATUSES = ['auth_success', 'accepted', 'preparing', 'ready', 'completed', 'rejected', 'missed', 'refunded'] as const
+const PAYMENT_METHODS = ['card', 'pickup', 'delivery'] as const
+const DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?Z?)?$/
+
+const historyQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  q: z.string().trim().min(1).max(200).optional(),
+  status: z
+    .string()
+    .optional()
+    .transform((v) => v?.split(',').map((s) => s.trim()).filter(Boolean))
+    .refine((arr) => !arr || arr.every((s) => (ORDER_STATUSES as readonly string[]).includes(s)), 'invalid status value'),
+  payment_method: z
+    .string()
+    .optional()
+    .transform((v) => v?.split(',').map((s) => s.trim()).filter(Boolean))
+    .refine((arr) => !arr || arr.every((s) => (PAYMENT_METHODS as readonly string[]).includes(s)), 'invalid payment_method value'),
+  from: z.string().regex(DATE_RE, 'from must be YYYY-MM-DD or ISO 8601').optional(),
+  to: z.string().regex(DATE_RE, 'to must be YYYY-MM-DD or ISO 8601').optional(),
+})
+
 export interface TransactionRouteDeps {
   refundStripePayment?: (paymentIntentId: string, amountCents?: number) => Promise<{ id: string }>
 }
@@ -25,24 +46,44 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
   app.get('/admin/transactions', async (c) => {
     const restaurantId = c.get('jwt').restaurant_id!
 
+    const parsed = historyQuerySchema.safeParse(c.req.query())
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_request', issues: parsed.error.issues }, 422)
+    }
+    const { page, q, status, payment_method: paymentMethod, from: fromDate, to: toDate } = parsed.data
+
     const plan = await resolvePlan(c.env, restaurantId)
     const historyDays = (plan?.transaction_history_days as number | undefined) ?? DEFAULT_HISTORY_DAYS
 
-    const pageParam = c.req.query('page')
-    const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1
-    const from = (page - 1) * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
+    const rangeFrom = (page - 1) * PAGE_SIZE
+    const rangeTo = rangeFrom + PAGE_SIZE - 1
 
-    const since = new Date(Date.now() - historyDays * 86_400_000).toISOString()
+    // The plan's history window is a hard floor — a caller-supplied `from`
+    // narrower than it is honored, but one reaching further back is clamped.
+    const planFloor = new Date(Date.now() - historyDays * 86_400_000)
+    const since = fromDate && new Date(fromDate) > planFloor ? fromDate : planFloor.toISOString()
 
     const admin = createAdminClient(c.env)
-    const { data, error, count } = await admin
+    let query = admin
       .from('orders')
       .select('*, items:order_items(*)', { count: 'exact' })
       .eq('restaurant_id', restaurantId)
       .gte('created_at', since)
+
+    if (toDate) query = query.lte('created_at', toDate)
+    if (status?.length) query = query.in('status', status)
+    if (paymentMethod?.length) query = query.in('payment_method', paymentMethod)
+    if (q) {
+      const escaped = q.replace(/[%_]/g, (m) => `\\${m}`)
+      const clauses = [`customer_name.ilike.%${escaped}%`, `customer_email.ilike.%${escaped}%`]
+      const asNumber = Number(q)
+      if (Number.isInteger(asNumber)) clauses.push(`order_number.eq.${asNumber}`)
+      query = query.or(clauses.join(','))
+    }
+
+    const { data, error, count } = await query
       .order('created_at', { ascending: false })
-      .range(from, to)
+      .range(rangeFrom, rangeTo)
 
     if (error) return c.json({ error: 'fetch_failed' }, 500)
 

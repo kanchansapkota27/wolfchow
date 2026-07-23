@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@wolfchow/ui'
 import { useAuth } from '@wolfchow/auth'
 import { useApi } from '../lib/api'
@@ -6,6 +6,8 @@ import { subscribeToOrders } from '../lib/realtime'
 import { OrderDetailBreakdown } from '../components/orders/OrderDetailBreakdown'
 import type { Order } from '@wolfchow/types'
 import type { PauseState, PauseMode } from '@wolfchow/api-client'
+
+const HISTORY_STATUSES = ['completed', 'rejected', 'missed', 'refunded'] as const
 
 const STATUS_COLORS: Record<string, string> = {
   auth_success: 'bg-amber-100 text-amber-700',
@@ -209,10 +211,27 @@ export function Orders() {
   const { restaurantId } = useAuth()
   const [activeOrders, setActiveOrders] = useState<Order[]>([])
   const [historyOrders, setHistoryOrders] = useState<Order[]>([])
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyPageSize, setHistoryPageSize] = useState(50)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historySearchInput, setHistorySearchInput] = useState('')
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyStatus, setHistoryStatus] = useState('')
+  const [historyPaymentMethod, setHistoryPaymentMethod] = useState('')
+  const [historyFrom, setHistoryFrom] = useState('')
+  const [historyTo, setHistoryTo] = useState('')
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pauseState, setPauseState] = useState<PauseState | null>(null)
   const [automationConfig, setAutomationConfig] = useState<{ auto_accept: boolean; auto_reject_enabled: boolean } | null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'live' | 'history'>('live')
+
+  function onHistorySearchChange(value: string) {
+    setHistorySearchInput(value)
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    searchDebounce.current = setTimeout(() => setHistorySearch(value), 350)
+  }
 
   const handleOrderEvent = useCallback((event: { eventType: string; new: Order }) => {
     if (event.eventType === 'INSERT') {
@@ -249,16 +268,34 @@ export function Orders() {
     return unsubscribe
   }, [restaurantId, handleOrderEvent])
 
+  const fetchHistory = useCallback(async (page: number) => {
+    setHistoryLoading(true)
+    try {
+      const res = await api.admin.listTransactions({
+        page,
+        q: historySearch || undefined,
+        status: historyStatus ? [historyStatus] : undefined,
+        payment_method: historyPaymentMethod ? [historyPaymentMethod] : undefined,
+        from: historyFrom || undefined,
+        to: historyTo || undefined,
+      })
+      setHistoryOrders(res.transactions)
+      setHistoryTotal(res.total)
+      setHistoryPageSize(res.page_size)
+      setHistoryPage(res.page)
+    } catch {
+      setHistoryOrders([])
+      setHistoryTotal(0)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [api, historySearch, historyStatus, historyPaymentMethod, historyFrom, historyTo])
+
   useEffect(() => {
     if (view !== 'history') return
-    void api.admin.listTransactions(1).then((res) => {
-      const completed = res.transactions
-        .filter((t) => ['completed', 'rejected', 'refunded', 'missed'].includes(t.status))
-        .slice(0, 50)
-      setHistoryOrders(completed)
-    })
+    void fetchHistory(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view])
+  }, [view, historySearch, historyStatus, historyPaymentMethod, historyFrom, historyTo])
 
   async function handleAccept(id: string) {
     const updated = await api.admin.acceptOrder(id)
@@ -266,9 +303,9 @@ export function Orders() {
   }
 
   async function handleReject(id: string) {
-    const updated = await api.admin.rejectOrder(id)
+    await api.admin.rejectOrder(id)
     setActiveOrders((prev) => prev.filter((o) => o.id !== id))
-    setHistoryOrders((prev) => [updated, ...prev])
+    if (view === 'history') void fetchHistory(historyPage)
   }
 
   async function handlePause(mode: PauseMode, minutes?: number) {
@@ -351,14 +388,91 @@ export function Orders() {
       {/* ── History ── */}
       {view === 'history' && (
         <div className="space-y-3">
-          {historyOrders.length === 0 ? (
+          {/* Search + filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={historySearchInput}
+              onChange={(e) => onHistorySearchChange(e.target.value)}
+              placeholder="Search order #, name, or email"
+              className="min-w-48 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              aria-label="Search order history"
+            />
+            <select
+              value={historyStatus}
+              onChange={(e) => setHistoryStatus(e.target.value)}
+              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              aria-label="Filter by status"
+            >
+              <option value="">All statuses</option>
+              {HISTORY_STATUSES.map((s) => (
+                <option key={s} value={s}>{s[0]!.toUpperCase() + s.slice(1)}</option>
+              ))}
+            </select>
+            <select
+              value={historyPaymentMethod}
+              onChange={(e) => setHistoryPaymentMethod(e.target.value)}
+              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              aria-label="Filter by payment method"
+            >
+              <option value="">All payment methods</option>
+              {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={historyFrom}
+              onChange={(e) => setHistoryFrom(e.target.value)}
+              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              aria-label="From date"
+            />
+            <input
+              type="date"
+              value={historyTo}
+              onChange={(e) => setHistoryTo(e.target.value)}
+              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              aria-label="To date"
+            />
+          </div>
+
+          {historyLoading ? (
+            <div className="rounded-xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
+              Loading…
+            </div>
+          ) : historyOrders.length === 0 ? (
             <div className="rounded-xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
               No order history
             </div>
           ) : (
-            historyOrders.map((order) => (
-              <OrderCard key={order.id} order={order} />
-            ))
+            <>
+              {historyOrders.map((order) => (
+                <OrderCard key={order.id} order={order} />
+              ))}
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-xs text-gray-500">
+                  Showing {(historyPage - 1) * historyPageSize + 1}–{Math.min(historyPage * historyPageSize, historyTotal)} of {historyTotal}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void fetchHistory(historyPage - 1)}
+                    disabled={historyPage <= 1 || historyLoading}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => void fetchHistory(historyPage + 1)}
+                    disabled={historyPage * historyPageSize >= historyTotal || historyLoading}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}
