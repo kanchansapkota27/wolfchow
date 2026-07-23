@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useAuth } from '@wolfchow/auth'
 import { useApi } from '../lib/api'
 import { useRealtime } from '../lib/realtime'
 
@@ -26,19 +27,30 @@ const STATE_CFG: Record<string, { label: string; bg: string; color: string; bord
   scheduled:    { label: 'Scheduled',    bg: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: 'rgba(59,130,246,0.3)' },
 }
 
-const TIMED_OPTIONS: Array<{ label: string; minutesFromNow: number | null }> = [
-  { label: '1 hour',    minutesFromNow: 60 },
-  { label: '2 hours',   minutesFromNow: 120 },
-  { label: '4 hours',   minutesFromNow: 240 },
-  { label: 'Rest of day', minutesFromNow: null },
-]
-
 function restOfDayIso(): string {
   const d = new Date(); d.setHours(23, 59, 0, 0); return d.toISOString()
 }
 function minutesIso(m: number): string {
   return new Date(Date.now() + m * 60_000).toISOString()
 }
+/** Saturday 23:59 local time of the current week (weeks run Sun–Sat elsewhere in this app). */
+function endOfWeekIso(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + (6 - d.getDay()))
+  d.setHours(23, 59, 0, 0)
+  return d.toISOString()
+}
+/** "YYYY-MM-DDTHH:mm" in local time, for the datetime-local input's `min`. */
+function nowLocalInputValue(): string {
+  const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+  return d.toISOString().slice(0, 16)
+}
+
+const TIMED_OPTIONS: Array<{ label: string; getIso: () => string }> = [
+  { label: '1 hour', getIso: () => minutesIso(60) },
+  { label: 'Rest of the day', getIso: restOfDayIso },
+  { label: 'End of this week', getIso: endOfWeekIso },
+]
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
 
@@ -95,16 +107,27 @@ function ItemRow({ item, onTap }: { item: InventoryItem; onTap: () => void }) {
 interface SheetProps {
   name: string
   currentState: string
+  canEdit: boolean
   onSelect: (state: string, restoreAt?: string | null) => Promise<void>
   onClose: () => void
 }
 
-function AvailabilitySheet({ name, currentState, onSelect, onClose }: SheetProps) {
+function AvailabilitySheet({ name, currentState, canEdit, onSelect, onClose }: SheetProps) {
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [customDate, setCustomDate] = useState('')
 
   async function pick(state: string, restoreAt?: string | null) {
     setBusy(true)
-    try { await onSelect(state, restoreAt); onClose() } finally { setBusy(false) }
+    setError(null)
+    try {
+      await onSelect(state, restoreAt)
+      onClose()
+    } catch {
+      setError('Could not update availability. Please try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -125,55 +148,90 @@ function AvailabilitySheet({ name, currentState, onSelect, onClose }: SheetProps
         <div className="mx-auto mb-5 h-1 w-12 rounded-full" style={{ background: '#334155' }} />
         <p className="mb-5 text-lg font-bold text-white">{name}</p>
 
-        <div className="space-y-2.5">
-          {/* In stock */}
-          <button
-            onClick={() => void pick('available', null)}
-            disabled={busy}
-            className="w-full rounded-2xl py-4 text-sm font-bold transition-colors disabled:opacity-40"
-            style={
-              currentState === 'available'
-                ? { background: '#065f46', color: '#34d399', border: '1px solid #10b981' }
-                : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
-            }
-          >
-            ✓ In Stock
-          </button>
+        {error && (
+          <p className="mb-4 rounded-xl px-3 py-2.5 text-sm font-medium" style={{ background: '#7f1d1d', color: '#fca5a5' }}>
+            {error}
+          </p>
+        )}
 
-          {/* Out of stock — permanent */}
-          <button
-            onClick={() => void pick('out_of_stock', null)}
-            disabled={busy}
-            className="w-full rounded-2xl py-4 text-sm font-bold transition-colors disabled:opacity-40"
-            style={
-              currentState === 'out_of_stock'
-                ? { background: '#7f1d1d', color: '#f87171', border: '1px solid #ef4444' }
-                : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
-            }
-          >
-            ✕ Out of Stock
-          </button>
+        {!canEdit ? (
+          <p className="rounded-xl px-3 py-3 text-sm" style={{ background: '#1e293b', color: '#94a3b8' }}>
+            You don't have permission to change item availability. Ask a manager to update your device's permissions.
+          </p>
+        ) : (
+          <div className="space-y-2.5">
+            {/* In stock */}
+            <button
+              onClick={() => void pick('available', null)}
+              disabled={busy}
+              className="w-full rounded-2xl py-4 text-sm font-bold transition-colors disabled:opacity-40"
+              style={
+                currentState === 'available'
+                  ? { background: '#065f46', color: '#34d399', border: '1px solid #10b981' }
+                  : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+              }
+            >
+              ✓ In Stock
+            </button>
 
-          {/* Timed out-of-stock */}
-          <div className="pt-1">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#475569' }}>
-              Out of stock until…
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {TIMED_OPTIONS.map(({ label, minutesFromNow }) => (
+            {/* Out of stock — permanent */}
+            <button
+              onClick={() => void pick('out_of_stock', null)}
+              disabled={busy}
+              className="w-full rounded-2xl py-4 text-sm font-bold transition-colors disabled:opacity-40"
+              style={
+                currentState === 'out_of_stock'
+                  ? { background: '#7f1d1d', color: '#f87171', border: '1px solid #ef4444' }
+                  : { background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }
+              }
+            >
+              ✕ Out of Stock
+            </button>
+
+            {/* Timed out-of-stock */}
+            <div className="pt-1">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#475569' }}>
+                Out of stock until…
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {TIMED_OPTIONS.map(({ label, getIso }) => (
+                  <button
+                    key={label}
+                    onClick={() => void pick('out_of_stock', getIso())}
+                    disabled={busy}
+                    className="rounded-2xl py-3 text-sm font-medium transition-colors disabled:opacity-40"
+                    style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <p className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#475569' }}>
+                Or pick a date
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="datetime-local"
+                  aria-label="Out of stock until date"
+                  value={customDate}
+                  min={nowLocalInputValue()}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  className="flex-1 rounded-2xl px-3 py-3 text-sm"
+                  style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155' }}
+                />
                 <button
-                  key={label}
-                  onClick={() => void pick('out_of_stock', minutesFromNow === null ? restOfDayIso() : minutesIso(minutesFromNow))}
-                  disabled={busy}
-                  className="rounded-2xl py-3 text-sm font-medium transition-colors disabled:opacity-40"
+                  onClick={() => customDate && void pick('out_of_stock', new Date(customDate).toISOString())}
+                  disabled={busy || !customDate}
+                  className="rounded-2xl px-4 py-3 text-sm font-bold transition-colors disabled:opacity-40"
                   style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }}
                 >
-                  {label}
+                  Set
                 </button>
-              ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   )
@@ -184,6 +242,8 @@ function AvailabilitySheet({ name, currentState, onSelect, onClose }: SheetProps
 export function Inventory() {
   const api = useApi()
   const { subscribe } = useRealtime()
+  const { hasPermission } = useAuth()
+  const canEditInventory = hasPermission('inventory:write')
 
   const [categories, setCategories] = useState<InventoryCategory[]>([])
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -301,6 +361,7 @@ export function Inventory() {
         <AvailabilitySheet
           name={selectedItem.name}
           currentState={selectedItem.availability_state}
+          canEdit={canEditInventory}
           onSelect={(state, restoreAt) => handleItemUpdate(selectedItem.id, state, restoreAt)}
           onClose={() => setSelectedItem(null)}
         />
