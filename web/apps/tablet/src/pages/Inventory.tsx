@@ -238,25 +238,29 @@ export function Inventory() {
     itemsByCategory.set(item.category_id, list)
   }
 
+  // Categories with no items add nothing to check during service — don't
+  // clutter the list with empty sections.
+  const nonEmptyCategories = categories.filter((cat) => (itemsByCategory.get(cat.id) ?? []).length > 0)
+
   return (
     <div className="flex h-full flex-col" style={{ background: '#080d17' }}>
       {/* Page header */}
       <div className="shrink-0 border-b px-4 py-3" style={{ borderColor: '#1e293b' }}>
         <p className="text-sm font-bold text-white">Inventory</p>
         <p className="text-xs mt-0.5" style={{ color: '#475569' }}>
-          {items.length} item{items.length !== 1 ? 's' : ''} across {categories.length} categor{categories.length !== 1 ? 'ies' : 'y'}
+          {items.length} item{items.length !== 1 ? 's' : ''} across {nonEmptyCategories.length} categor{nonEmptyCategories.length !== 1 ? 'ies' : 'y'}
         </p>
       </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
-        {categories.length === 0 ? (
+        {nonEmptyCategories.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center gap-2">
             <span className="text-4xl opacity-20">📦</span>
             <p className="text-sm" style={{ color: '#475569' }}>No inventory items</p>
           </div>
         ) : (
-          categories
+          nonEmptyCategories
             .slice()
             .sort((a, b) => a.position - b.position)
             .map((cat) => {
@@ -284,13 +288,9 @@ export function Inventory() {
                     </span>
                   </div>
 
-                  {catItems.length === 0 ? (
-                    <p className="px-4 py-3 text-xs" style={{ color: '#334155' }}>No items</p>
-                  ) : (
-                    catItems.map((item) => (
-                      <ItemRow key={item.id} item={item} onTap={() => setSelectedItem(item)} />
-                    ))
-                  )}
+                  {catItems.map((item) => (
+                    <ItemRow key={item.id} item={item} onTap={() => setSelectedItem(item)} />
+                  ))}
                 </div>
               )
             })
