@@ -195,7 +195,7 @@ export function Transactions() {
   const [toDate, setToDate] = useState('')
 
   useEffect(() => {
-    void api.admin.listTransactions(1).then((res) => {
+    void api.admin.listTransactions({ page: 1 }).then((res) => {
       setTxs(res.transactions)
       setHistoryDays(res.history_days)
     }).finally(() => setLoading(false))

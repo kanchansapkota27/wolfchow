@@ -216,6 +216,17 @@ export interface TransactionListResponse {
   history_days: number
 }
 
+export interface ListTransactionsOptions {
+  page?: number
+  /** Matches customer name, email, or (if numeric) the order number. */
+  q?: string
+  status?: string[]
+  payment_method?: string[]
+  /** YYYY-MM-DD or ISO 8601. */
+  from?: string
+  to?: string
+}
+
 export interface RefundInput {
   amount_cents?: number
   reason?: RefundReason
@@ -724,8 +735,16 @@ export function createApiClient(config: ApiClientConfig) {
     deletePromotion: (id: string) =>
       apiFetch<void>(`/admin/promotions/${id}`, { method: 'DELETE' }),
     // ── Transactions ─────────────────────────────────────────────────────────
-    listTransactions: (page = 1) =>
-      apiFetch<TransactionListResponse>(`/admin/transactions?page=${page}`),
+    listTransactions: (opts: ListTransactionsOptions = {}) => {
+      const params = new URLSearchParams()
+      params.set('page', String(opts.page ?? 1))
+      if (opts.q) params.set('q', opts.q)
+      if (opts.status?.length) params.set('status', opts.status.join(','))
+      if (opts.payment_method?.length) params.set('payment_method', opts.payment_method.join(','))
+      if (opts.from) params.set('from', opts.from)
+      if (opts.to) params.set('to', opts.to)
+      return apiFetch<TransactionListResponse>(`/admin/transactions?${params.toString()}`)
+    },
     getTransaction: (id: string) =>
       apiFetch<Record<string, unknown>>(`/admin/transactions/${id}`),
     // Backend intentionally returns only the changed fields (state transition
