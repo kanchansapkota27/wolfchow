@@ -20,6 +20,7 @@ import { Checkout } from './components/Checkout'
 import { Success } from './components/Success'
 import { OrderTracking } from './components/OrderTracking'
 import { Notices } from './components/Notices'
+import { mapOrderErrorBody } from './orderErrors'
 
 export type WidgetLoadState = 'loading' | 'ready' | 'error'
 
@@ -286,17 +287,7 @@ function AppContent({ state: loadState, settings: initialSettings, apiBase, slug
     } catch (err) {
       if (err instanceof WidgetApiError) {
         const body = err.body as Record<string, unknown> | undefined
-        if (body?.error === 'orders_paused') {
-          setSubmitError('Orders are currently paused. Please try again later.')
-        } else if (body?.error === 'item_unavailable') {
-          setSubmitError('One or more items in your cart are no longer available.')
-        } else if (body?.error === 'payment_method_not_allowed') {
-          setSubmitError('This payment method is not available.')
-        } else if (body?.error === 'payment_intent_failed') {
-          setSubmitError('Payment could not be processed. Please try again.')
-        } else {
-          setSubmitError('Failed to place order. Please try again.')
-        }
+        setSubmitError(mapOrderErrorBody(body, settings?.timezone || 'UTC'))
       } else if (err instanceof Error) {
         setSubmitError(err.message)
       } else {
