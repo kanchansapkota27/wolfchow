@@ -84,6 +84,7 @@ export interface PublicMenuItem {
   sort_order: number
   variants: PublicVariant[]
   modifier_groups: PublicModifierGroup[]
+  special_requests_enabled: boolean
 }
 
 export interface PublicMenuCategory {
