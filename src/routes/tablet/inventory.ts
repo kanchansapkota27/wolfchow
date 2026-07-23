@@ -9,7 +9,9 @@ const AVAILABILITY_STATES = ['available', 'unavailable', 'scheduled', 'out_of_st
 
 const availabilitySchema = z.object({
   availability_state: z.enum(AVAILABILITY_STATES),
-  restore_at: z.string().datetime().optional(),
+  // Nullable, not just optional — restoring to "available" explicitly sends
+  // restore_at: null to clear any prior timed-restore timestamp.
+  restore_at: z.string().datetime().nullable().optional(),
 })
 
 async function parseBody(req: Request): Promise<unknown> {

@@ -61,7 +61,9 @@ const ITEM_IMAGE_KEY_SUFFIX_RE = /^[a-z0-9]+\.[a-z]{3,4}$/
 
 const availabilitySchema = z.object({
   state: z.enum(AVAILABILITY_STATES),
-  restore_at: z.string().datetime().optional(),
+  // Nullable, not just optional — restoring to "available" explicitly sends
+  // restore_at: null to clear any prior timed-restore timestamp.
+  restore_at: z.string().datetime().nullable().optional(),
 })
 
 const createVariantSchema = z.object({
