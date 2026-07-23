@@ -757,13 +757,17 @@ export function createApiClient(config: ApiClientConfig) {
   /**
    * PUTs a file to a presigned/local-dev upload URL (from an endpoint like
    * POST /admin/restaurant/logo or POST /admin/menu/items/:id/image), with
-   * upload progress and — critically — the current access token attached.
+   * upload progress.
    *
-   * The token is required in local dev, where the upload URL is our own
-   * PUT /r2/:key route sitting behind jwtMiddleware; in production it's a
-   * presigned R2 URL whose signature only covers the `host` header (see
-   * generatePresignedPutUrl), so an extra Authorization header is harmless
-   * there — R2 ignores it.
+   * The access token is attached ONLY when the upload URL is same-origin as
+   * our own API — the local-dev PUT /r2/:key path, which sits behind
+   * jwtMiddleware and needs it. In production the upload URL is a presigned
+   * R2 URL on a third-party origin (Cloudflare's R2 S3-compatible endpoint);
+   * it authenticates via its own query-string signature and does not need
+   * our token, so the token must never be sent there — even though R2 would
+   * likely just ignore it (its signature only covers the `host` header, see
+   * generatePresignedPutUrl), an internal session token has no business
+   * leaving our own origin.
    */
   function uploadFile(url: string, file: File, onProgress?: (percent: number) => void): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -775,7 +779,8 @@ export function createApiClient(config: ApiClientConfig) {
       xhr.onerror = () => reject(new Error('Network error'))
       xhr.open('PUT', url)
       xhr.setRequestHeader('Content-Type', file.type)
-      const token = session.getAccessToken()
+      const sameOrigin = new URL(url, baseUrl).origin === new URL(baseUrl).origin
+      const token = sameOrigin ? session.getAccessToken() : null
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
       xhr.send(file)
     })

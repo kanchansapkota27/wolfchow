@@ -145,17 +145,29 @@ describe('STORY-047 · api-client', () => {
     return { calls }
   }
 
-  it('uploadFile: attaches the current access token as a bearer header', async () => {
+  it('uploadFile: same-origin upload URL (local-dev PUT /r2/:key) attaches the access token', async () => {
     const session = createMemorySession({ access_token: 'tok-upload', refresh_token: 'r-1' })
     const client = createApiClient({ baseUrl: BASE, session, fetch: vi.fn() })
     const { calls } = stubXhr(204)
     const file = new File(['x'], 'logo.webp', { type: 'image/webp' })
 
-    await client.uploadFile('https://upload.test/key', file)
+    await client.uploadFile(`${BASE}/r2/rest-1/logo/abc.webp`, file)
 
     expect(calls[0]?.method).toBe('PUT')
     expect(calls[0]?.headers['Authorization']).toBe('Bearer tok-upload')
     expect(calls[0]?.headers['Content-Type']).toBe('image/webp')
+    vi.unstubAllGlobals()
+  })
+
+  it('uploadFile: cross-origin upload URL (production presigned R2 URL) never sends the access token', async () => {
+    const session = createMemorySession({ access_token: 'tok-upload', refresh_token: 'r-1' })
+    const client = createApiClient({ baseUrl: BASE, session, fetch: vi.fn() })
+    const { calls } = stubXhr(204)
+    const file = new File(['x'], 'logo.webp', { type: 'image/webp' })
+
+    await client.uploadFile('https://acct.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=x', file)
+
+    expect(calls[0]?.headers['Authorization']).toBeUndefined()
     vi.unstubAllGlobals()
   })
 
@@ -165,7 +177,7 @@ describe('STORY-047 · api-client', () => {
     const { calls } = stubXhr(204)
     const file = new File(['x'], 'logo.webp', { type: 'image/webp' })
 
-    await client.uploadFile('https://upload.test/key', file)
+    await client.uploadFile(`${BASE}/r2/rest-1/logo/abc.webp`, file)
 
     expect(calls[0]?.headers['Authorization']).toBeUndefined()
     vi.unstubAllGlobals()
@@ -178,7 +190,7 @@ describe('STORY-047 · api-client', () => {
     const file = new File(['x'], 'logo.webp', { type: 'image/webp' })
     const progress: number[] = []
 
-    await expect(client.uploadFile('https://upload.test/key', file, (p) => progress.push(p))).rejects.toThrow()
+    await expect(client.uploadFile(`${BASE}/r2/rest-1/logo/abc.webp`, file, (p) => progress.push(p))).rejects.toThrow()
     expect(progress).toEqual([50])
     vi.unstubAllGlobals()
   })
