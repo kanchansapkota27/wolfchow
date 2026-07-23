@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RealtimeProvider, useRealtime } from '@wolfchow/realtime'
 import type {
   WidgetSettings,
-  PublicMenuCategory,
   PublicMenuItem,
   CartItem,
   CheckoutForm,
@@ -80,8 +80,6 @@ export function App(props: AppProps) {
 function AppContent({ state: loadState, settings: initialSettings, apiBase, slug }: AppProps) {
   const [view, setView] = useState<WidgetView>('menu')
   const [settings, setSettings] = useState<WidgetSettings | null>(initialSettings)
-  const [menu, setMenu] = useState<PublicMenuCategory[]>([])
-  const [menuLoaded, setMenuLoaded] = useState(false)
   const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [form, setForm] = useState<CheckoutForm>(DEFAULT_FORM)
@@ -92,6 +90,7 @@ function AppContent({ state: loadState, settings: initialSettings, apiBase, slug
   const [submitError, setSubmitError] = useState<string | null>(null)
   const confirmCardRef = useRef<((clientSecret: string) => Promise<string>) | null>(null)
   const { subscribe } = useRealtime()
+  const qc = useQueryClient()
 
   const api = createWidgetApi(apiBase, slug)
 
@@ -100,22 +99,18 @@ function AppContent({ state: loadState, settings: initialSettings, apiBase, slug
   }, [initialSettings])
 
   // Load menu once settings are ready
-  useEffect(() => {
-    if (loadState !== 'ready' || menuLoaded) return
-    api.getMenu()
-      .then((cats) => {
-        setMenu(cats)
-        setMenuLoaded(true)
-      })
-      .catch(() => setMenuLoaded(true))
-  }, [loadState, menuLoaded])
+  const { data: menu = [], isPending: menuPending } = useQuery({
+    queryKey: ['widget-menu', slug],
+    queryFn: () => api.getMenu(),
+    enabled: loadState === 'ready',
+  })
 
   // Realtime: menu availability changes elsewhere → refetch the menu.
   useEffect(() => {
     return subscribe('menu_availability_changed', () => {
-      api.getMenu().then(setMenu).catch(() => undefined)
+      api.getMenu().then((m) => qc.setQueryData(['widget-menu', slug], m)).catch(() => undefined)
     })
-  }, [subscribe])
+  }, [subscribe, qc, slug])
 
   // Realtime: pause/unpause → update local settings in place, no refetch needed.
   useEffect(() => {
@@ -401,7 +396,7 @@ function AppContent({ state: loadState, settings: initialSettings, apiBase, slug
               </div>
             </div>
           )}
-          {!menuLoaded ? (
+          {menuPending ? (
             <Skeleton />
           ) : (
             <Menu

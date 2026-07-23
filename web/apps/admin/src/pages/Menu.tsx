@@ -11,6 +11,9 @@ import { usePlan } from '../lib/usePlan'
 import { PlanLocked, LockIcon, UpgradeModal } from '../components/UpgradeModal'
 import type { UpgradeMessage } from '../components/UpgradeModal'
 import { cn } from '../lib/utils'
+import { formatCurrency } from '@wolfchow/utils'
+import { AvailabilityBadge, AVAIL_OPTIONS } from '../components/menu/AvailabilityBadge'
+import { CategoryModal } from '../components/menu/CategoryModal'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -24,34 +27,7 @@ const DIETARY_TAGS = [
   { value: 'dairy_free',   label: 'Dairy-Free' },
 ]
 
-const AVAIL_OPTIONS: Array<{
-  value: AvailabilityState
-  label: string
-  dot: string
-  badge: string
-}> = [
-  { value: 'available',    label: 'In Stock',     dot: 'bg-green-500', badge: 'bg-green-100 text-green-700' },
-  { value: 'out_of_stock', label: 'Out of Stock', dot: 'bg-red-500',   badge: 'bg-red-100 text-red-700' },
-  { value: 'unavailable',  label: 'Unavailable',  dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-700' },
-  { value: 'scheduled',    label: 'Scheduled',    dot: 'bg-blue-400',  badge: 'bg-blue-100 text-blue-700' },
-]
-
 const FIELD = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400'
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatPrice(cents: number, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100)
-}
-
-function AvailabilityBadge({ state }: { state: string }) {
-  const opt = (AVAIL_OPTIONS.find((o) => o.value === state) ?? AVAIL_OPTIONS[0])!
-  return (
-    <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide', opt.badge)}>
-      {opt.label}
-    </span>
-  )
-}
 
 // ── Image upload zone ──────────────────────────────────────────────────────────
 
@@ -206,7 +182,7 @@ function DrawerModifiers({ itemId }: { itemId: string }) {
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {(group.options ?? []).map((opt) => (
                   <span key={opt.id} className="rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-xs text-gray-500">
-                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatPrice(opt.price_delta)})` : ''}
+                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatCurrency(opt.price_delta / 100, 'USD')})` : ''}
                   </span>
                 ))}
               </div>
@@ -512,76 +488,6 @@ function EditItemDrawer({ item, categories, selectedCategoryId, onClose, onSave,
   )
 }
 
-// ── Category modal ─────────────────────────────────────────────────────────────
-
-function CategoryModal({ category, onClose, onSave }: {
-  category: MenuCategory | null
-  onClose: () => void
-  onSave: (data: { name: string; active: boolean }) => Promise<void>
-}) {
-  const [name, setName] = useState(category?.name ?? '')
-  const [active, setActive] = useState(category?.active ?? true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function submit() {
-    if (!name.trim()) { setError('Name is required.'); return }
-    setSaving(true)
-    try {
-      await onSave({ name: name.trim(), active })
-      onClose()
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 402) {
-        const body = err.body as { error?: string; limit?: number }
-        setError(body?.error === 'plan_limit_reached'
-          ? `Category limit reached (${body.limit ?? 0}). Upgrade your plan to add more.`
-          : 'This feature is not available on your current plan.')
-      } else {
-        setError(err instanceof ApiError ? String(err.message) : 'Save failed.')
-      }
-      setSaving(false)
-    }
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 z-30 bg-black/20" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 z-40 w-96 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-900">{category ? 'Edit Category' : 'Add Category'}</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
-        </div>
-        {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <div className="mb-4">
-          <label className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
-          <input
-            className={FIELD}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-            onKeyDown={(e) => e.key === 'Enter' && void submit()}
-          />
-        </div>
-        <label className="mb-5 flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 rounded border-gray-300 accent-blue-500" />
-          Active (visible to customers)
-        </label>
-        <div className="flex justify-end gap-3">
-          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-gray-300">Cancel</button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void submit()}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : category ? 'Save' : 'Create'}
-          </button>
-        </div>
-      </div>
-    </>
-  )
-}
-
 // ── Delete confirm ─────────────────────────────────────────────────────────────
 
 function DeleteConfirm({ title, body, onClose, onConfirm }: {
@@ -760,7 +666,7 @@ function ModifiersTab() {
               {(group.options ?? []).map((opt) => (
                 <div key={opt.id} className="group/opt flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
                   <span className="text-xs text-gray-600">
-                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatPrice(opt.price_delta)})` : ''}
+                    {opt.name}{opt.price_delta !== 0 ? ` (${opt.price_delta > 0 ? '+' : ''}${formatCurrency(opt.price_delta / 100, 'USD')})` : ''}
                   </span>
                   <button
                     type="button"
@@ -1184,7 +1090,7 @@ export function Menu() {
                               <p className="truncate text-sm font-semibold text-gray-900">{item.name}</p>
                             </div>
                             <p className="mt-0.5 text-sm font-bold text-gray-700">
-                              {hasVariants ? `From ${formatPrice(minPrice)}` : formatPrice(minPrice)}
+                              {hasVariants ? `From ${formatCurrency(minPrice / 100, 'USD')}` : formatCurrency(minPrice / 100, 'USD')}
                             </p>
                             <div className="mt-2">
                               <AvailabilityBadge state={item.availability_state} />

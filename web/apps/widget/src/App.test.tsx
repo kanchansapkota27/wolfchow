@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ReactElement, ReactNode } from 'react'
 import { render, screen, waitFor, act } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { WidgetSettings, PublicMenuCategory } from './types'
 import { App } from './App'
 import { injectCssVars, mountWidgetInShadow } from './bootstrap'
+
+function renderWithQuery(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+}
 
 // ── Realtime mock ────────────────────────────────────────────────────────────
 
@@ -131,14 +137,14 @@ describe('STORY-074 · Widget scaffold & theme loading', () => {
   })
 
   it('error state: shows error message and retry button when fetch fails', () => {
-    render(<App state="error" settings={null} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="error" settings={null} apiBase="http://localhost:8789" slug="acme" />)
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(screen.getByText('Menu unavailable')).toBeTruthy()
     expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
   })
 
   it('loading state: shows skeleton placeholder', () => {
-    render(<App state="loading" settings={null} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="loading" settings={null} apiBase="http://localhost:8789" slug="acme" />)
     expect(screen.getByTestId('skeleton')).toBeTruthy()
   })
 })
@@ -151,7 +157,7 @@ describe('STORY-077 · Widget realtime storefront state', () => {
   })
 
   it('menu_availability_changed: menu is refetched and re-rendered', async () => {
-    render(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
     await waitFor(() => expect(screen.getByText('Original Burger')).toBeTruthy())
 
     mockGetMenu.mockResolvedValue(menuWith('Updated Burger'))
@@ -162,7 +168,7 @@ describe('STORY-077 · Widget realtime storefront state', () => {
   })
 
   it('pause_state_changed (paused): banner shown without a menu refetch', async () => {
-    render(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
     await waitFor(() => expect(screen.getByText('Original Burger')).toBeTruthy())
     expect(screen.queryByText('Orders are currently paused')).toBeNull()
 
@@ -175,7 +181,7 @@ describe('STORY-077 · Widget realtime storefront state', () => {
 
   it('pause_state_changed (unpaused): banner clears', async () => {
     const pausedSettings: WidgetSettings = { ...SETTINGS, orders_paused: true, pause_reason: 'Busy' }
-    render(<App state="ready" settings={pausedSettings} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="ready" settings={pausedSettings} apiBase="http://localhost:8789" slug="acme" />)
     await waitFor(() => expect(screen.getByText('Orders are currently paused')).toBeTruthy())
 
     fireRealtimeEvent('pause_state_changed', { paused: false })
@@ -184,7 +190,7 @@ describe('STORY-077 · Widget realtime storefront state', () => {
   })
 
   it('notice_created: qualifying notice appears without a page reload', async () => {
-    render(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
     await waitFor(() => expect(screen.getByText('Original Burger')).toBeTruthy())
 
     fireRealtimeEvent('notice_created', {
@@ -200,7 +206,7 @@ describe('STORY-077 · Widget realtime storefront state', () => {
   })
 
   it('notice_created: non-qualifying notice (wrong location) is not shown', async () => {
-    render(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="ready" settings={SETTINGS} apiBase="http://localhost:8789" slug="acme" />)
     await waitFor(() => expect(screen.getByText('Original Burger')).toBeTruthy())
 
     fireRealtimeEvent('notice_created', {
@@ -220,7 +226,7 @@ describe('STORY-077 · Widget realtime storefront state', () => {
       ...SETTINGS,
       notices: [{ id: 'notice-1', type: 'informational', message: 'Heads up', display_locations: ['storefront'], priority: 0 }],
     }
-    render(<App state="ready" settings={withNotice} apiBase="http://localhost:8789" slug="acme" />)
+    renderWithQuery(<App state="ready" settings={withNotice} apiBase="http://localhost:8789" slug="acme" />)
     await waitFor(() => expect(screen.getByText('Heads up')).toBeTruthy())
 
     fireRealtimeEvent('notice_removed', { id: 'notice-1' })

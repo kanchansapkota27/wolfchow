@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { PublicMenuCategory, PublicMenuItem, CartItem, WidgetSettings } from '../types'
+import { formatCurrency } from '@wolfchow/utils'
 
 const TAG_LABELS: Record<string, string> = {
   vegan: '🌱 Vegan',
@@ -25,10 +26,6 @@ interface MenuProps {
   onSelectItem: (item: PublicMenuItem) => void
   onViewCart: () => void
   onAddSimpleItem: (item: PublicMenuItem) => void
-}
-
-function formatPrice(cents: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents)
 }
 
 function ItemCard({
@@ -115,8 +112,8 @@ function ItemCard({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', flexShrink: 0 }}>
             <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>
               {item.has_variants
-                ? `From ${formatPrice(Math.min(...item.variants.map((v) => v.price)), currency)}`
-                : formatPrice(item.price, currency)}
+                ? `From ${formatCurrency(Math.min(...item.variants.map((v) => v.price)), currency)}`
+                : formatCurrency(item.price, currency)}
             </span>
             {isUnavailable ? (
               <span style={{ fontSize: '0.75rem', color: '#9ca3af', padding: '0.25rem 0.5rem', border: '1px solid #e5e7eb', borderRadius: '0.375rem' }}>
@@ -249,7 +246,7 @@ export function Menu({ categories, settings, cartCount, cartTotal, onSelectItem,
               {cartCount}
             </span>
             <span>View Cart</span>
-            <span>{formatPrice(cartTotal, currency)}</span>
+            <span>{formatCurrency(cartTotal, currency)}</span>
           </button>
         </div>
       )}

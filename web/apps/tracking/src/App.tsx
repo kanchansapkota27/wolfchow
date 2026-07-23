@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatCurrency } from '@wolfchow/utils'
 import { RealtimeProvider, useRealtime } from '@wolfchow/realtime'
 
@@ -78,6 +79,15 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   card: 'Card',
   pickup: 'Pay at pickup',
   delivery: 'Pay on delivery',
+}
+
+class TrackingNotFoundError extends Error {}
+
+async function fetchTrackingOrder(apiBase: string, token: string): Promise<TrackingOrder> {
+  const res = await fetch(`${apiBase}/public/track/${encodeURIComponent(token)}`)
+  if (res.status === 404) throw new TrackingNotFoundError('Order not found')
+  if (!res.ok) throw new Error(`tracking fetch failed: ${res.status}`)
+  return res.json() as Promise<TrackingOrder>
 }
 
 // ── Token extraction ───────────────────────────────────────────────────────────
@@ -317,35 +327,24 @@ type LoadState = 'loading' | 'error' | 'not_found' | 'ready'
 
 export function App() {
   const token = extractToken()
-  const [state, setState] = useState<LoadState>('loading')
-  const [order, setOrder] = useState<TrackingOrder | null>(null)
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const qc = useQueryClient()
 
-  const fetchOrder = useCallback(async () => {
-    if (!token) return
-    try {
-      const res = await fetch(`${API_BASE}/public/track/${encodeURIComponent(token)}`)
-      if (res.status === 404) { setState('not_found'); return }
-      if (!res.ok) { setState('error'); return }
-      const data = await res.json() as TrackingOrder
-      setOrder(data)
-      setState('ready')
-      setLastRefresh(new Date())
-    } catch {
-      setState('error')
-    }
-  }, [token])
+  const { data: order, isPending, isError, error, dataUpdatedAt, refetch } = useQuery({
+    queryKey: ['tracking-order', token],
+    queryFn: () => fetchTrackingOrder(API_BASE, token!),
+    enabled: !!token,
+    retry: false,
+    refetchInterval: (query) => {
+      const current = query.state.data
+      return current && !TERMINAL_STATUSES.has(current.status) ? 10_000 : false
+    },
+  })
 
-  useEffect(() => {
-    fetchOrder()
-  }, [fetchOrder])
-
-  // Polling fallback for when Realtime is unavailable (per spec, 15s).
-  useEffect(() => {
-    if (!order || TERMINAL_STATUSES.has(order.status)) return
-    const id = setInterval(fetchOrder, 15_000)
-    return () => clearInterval(id)
-  }, [order, fetchOrder])
+  const state: LoadState = !token
+    ? 'ready' // unreachable render path below handles !token before using `state`
+    : isPending ? 'loading'
+    : isError ? (error instanceof TrackingNotFoundError ? 'not_found' : 'error')
+    : 'ready'
 
   useEffect(() => {
     if (!order) return
@@ -426,7 +425,7 @@ export function App() {
             <p style={{ fontWeight: 600, color: '#374151', margin: '0 0 0.5rem' }}>Couldn't load order</p>
             <p style={{ fontSize: '0.875rem', margin: '0 0 1.25rem' }}>Please try again in a moment.</p>
             <button
-              onClick={fetchOrder}
+              onClick={() => refetch()}
               style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.625rem 1.25rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem' }}
             >
               Retry
@@ -441,15 +440,17 @@ export function App() {
     <RealtimeProvider restaurantId={order!.restaurant_id}>
       <RealtimeStatusSync
         orderId={order!.order_id}
-        onStatusChange={(newStatus) => setOrder((o) => o && { ...o, status: newStatus })}
+        onStatusChange={(newStatus) =>
+          qc.setQueryData<TrackingOrder>(['tracking-order', token], (o) => o && { ...o, status: newStatus })
+        }
       />
       <div style={containerStyle}>
         <div style={cardStyle}>
           <Header restaurantName={order!.restaurant_name}>
             {!TERMINAL_STATUSES.has(order!.status) && (
               <button
-                onClick={fetchOrder}
-                title={`Last updated ${fmtTime(lastRefresh.toISOString())}`}
+                onClick={() => refetch()}
+                title={`Last updated ${fmtTime(new Date(dataUpdatedAt).toISOString())}`}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.8125rem', fontWeight: 600, padding: 0 }}
               >
                 Refresh

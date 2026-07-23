@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@wolfchow/ui'
 import { ApiError } from '@wolfchow/api-client'
-import type { Restaurant, BrandColors } from '@wolfchow/types'
+import type { Restaurant } from '@wolfchow/types'
 import type { StripeStatus, PaymentMethods, TipsConfig, TaxConfig, AutomationConfig } from '@wolfchow/api-client'
 import { COUNTRIES } from '@wolfchow/utils'
 import { Zap, ShieldCheck, CreditCard, Store, Clock, Globe, Link2, User } from 'lucide-react'
@@ -11,7 +11,12 @@ import { cn } from '../lib/utils'
 import { useApi } from '../lib/api'
 import { usePlan } from '../lib/usePlan'
 import { PlanLocked } from '../components/UpgradeModal'
+import { StripeKeyGuide } from '../components/StripeKeyGuide'
 import { sanitizeHtml } from '../lib/sanitize'
+import { Card } from '../components/settings/Card'
+import { SectionHeader } from '../components/settings/SectionHeader'
+import { LinkField } from '../components/settings/LinkField'
+import { BrandColorsCard } from '../components/settings/BrandColorsCard'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -67,17 +72,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-
-
-function SectionHeader({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
-  return (
-    <div className="mb-5 flex items-center gap-2">
-      <Icon size={16} className="text-blue-600" />
-      <span className="text-xs font-bold tracking-widest text-gray-700 uppercase">{label}</span>
-    </div>
-  )
-}
-
 function Toggle({ checked, onChange, label, description }: {
   checked: boolean
   onChange: (v: boolean) => void
@@ -101,103 +95,6 @@ function Toggle({ checked, onChange, label, description }: {
         {description && <div className="mt-0.5 text-xs text-gray-500">{description}</div>}
       </div>
     </label>
-  )
-}
-
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('rounded-xl border border-gray-200 bg-white p-6', className)}>
-      {children}
-    </div>
-  )
-}
-
-// ── Link field ────────────────────────────────────────────────────────────────
-
-function LinkField({ label, initial, onSave }: {
-  label: string
-  initial: string
-  onSave: (url: string) => Promise<void>
-}) {
-  const [value, setValue] = useState(initial)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-
-  async function handleSave() {
-    if (value && !/^https?:\/\/.+/.test(value)) { setError('Must be a valid URL'); return }
-    setError(''); setSaving(true)
-    try { await onSave(value); setSaved(true); setTimeout(() => setSaved(false), 2000) }
-    catch { setError('Failed to save') }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-medium text-gray-500">{label}</label>
-      <div className="flex gap-2">
-        <input
-          type="url"
-          value={value}
-          onChange={(e) => { setValue(e.target.value); setError('') }}
-          placeholder="https://…"
-          className={cn(
-            'flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400',
-            error ? 'border-red-300' : 'border-gray-200',
-          )}
-        />
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saving}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900 disabled:opacity-40"
-        >
-          {saved ? 'Saved!' : saving ? '…' : 'Save'}
-        </button>
-      </div>
-      {error && <p className="mt-1 text-xs text-red-600" role="alert">{error}</p>}
-    </div>
-  )
-}
-
-// ── Brand colors card ─────────────────────────────────────────────────────────
-
-function BrandColorsCard({ restaurant, onSave }: { restaurant: Restaurant; onSave: () => void }) {
-  const api = useApi()
-  const [colors, setColors] = useState<BrandColors>(restaurant.brand_colors ?? {})
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function handleChange(key: keyof BrandColors, value: string) {
-    const next = { ...colors, [key]: value }
-    setColors(next)
-    if (debounce.current) clearTimeout(debounce.current)
-    debounce.current = setTimeout(async () => {
-      await api.admin.saveIntegrations({ brand_colors: next })
-      onSave()
-    }, 400)
-  }
-
-  return (
-    <Card>
-      <SectionHeader icon={Globe} label="Widget theme colors" />
-      <p className="mb-4 text-xs text-gray-500">
-        These colors are applied to your embedded ordering widget.
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        {(['primary', 'secondary', 'accent', 'text'] as Array<keyof BrandColors>).map((key) => (
-          <label key={key} className="flex cursor-pointer items-center gap-3">
-            <input
-              type="color"
-              value={colors[key] ?? '#2563eb'}
-              onChange={(e) => handleChange(key, e.target.value)}
-              className="h-9 w-9 cursor-pointer rounded-lg border border-gray-200"
-              aria-label={`${key} colour`}
-            />
-            <span className="text-sm capitalize text-gray-700">{key}</span>
-          </label>
-        ))}
-      </div>
-    </Card>
   )
 }
 
@@ -527,101 +424,6 @@ function AdminProfileFields() {
 
 // ── Payments & Tipping section ─────────────────────────────────────────────────
 
-function StripeKeyGuide({ onClose }: { onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Stripe restricted key setup guide"
-    >
-      <div
-        className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[88vh] overflow-y-auto p-6 space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-base font-semibold text-gray-900">How to create a restricted Stripe key</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none flex-shrink-0" aria-label="Close">×</button>
-        </div>
-
-        <p className="text-sm text-gray-600">
-          Use a <strong>restricted key</strong> instead of your full secret key. If it's ever leaked,
-          an attacker can only interact with existing payments — they cannot access your balance,
-          trigger payouts, or touch account settings.
-        </p>
-
-        <div>
-          <h4 className="text-sm font-medium text-gray-800 mb-2">Steps</h4>
-          <ol className="space-y-1.5 text-sm text-gray-700 list-decimal list-inside">
-            <li>Open <strong>Stripe Dashboard → Developers → API keys</strong></li>
-            <li>Click <strong>+ Create restricted key</strong></li>
-            <li>Name it something like <em>"WolfChow POS"</em></li>
-            <li>Set only the permissions listed below — leave everything else as <em>None</em></li>
-            <li>Click <strong>Create key</strong> and paste it here</li>
-          </ol>
-        </div>
-
-        <div>
-          <h4 className="text-sm font-medium text-gray-800 mb-2">Required permissions</h4>
-          <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Resource</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Level</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Reason</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              <tr>
-                <td className="px-3 py-2 text-gray-800 font-medium">Payment Intents</td>
-                <td className="px-3 py-2"><span className="text-amber-700 font-semibold">Write</span></td>
-                <td className="px-3 py-2 text-gray-500">Create &amp; capture card payments</td>
-              </tr>
-              <tr>
-                <td className="px-3 py-2 text-gray-800 font-medium">Charges</td>
-                <td className="px-3 py-2"><span className="text-blue-700 font-semibold">Read</span></td>
-                <td className="px-3 py-2 text-gray-500">Verify charge status on orders</td>
-              </tr>
-              <tr>
-                <td className="px-3 py-2 text-gray-800 font-medium">Refunds</td>
-                <td className="px-3 py-2"><span className="text-amber-700 font-semibold">Write</span></td>
-                <td className="px-3 py-2 text-gray-500">Refund card on rejected orders</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm font-medium text-red-800 mb-1.5">Leave all of these as None:</p>
-          <ul className="text-sm text-red-700 grid grid-cols-2 gap-x-4 gap-y-0.5 list-disc list-inside">
-            <li>Payouts</li>
-            <li>Balance</li>
-            <li>Account settings</li>
-            <li>Connected accounts</li>
-            <li>Customers</li>
-            <li>Products &amp; Prices</li>
-            <li>Webhook endpoints</li>
-            <li>Disputes</li>
-          </ul>
-        </div>
-
-        <p className="text-xs text-gray-400">
-          Worst case if leaked: an attacker could cancel or refund orders already in flight.
-          They cannot move money out of your Stripe account.
-        </p>
-
-        <button
-          onClick={onClose}
-          className="w-full text-sm bg-gray-900 hover:bg-gray-800 text-white rounded-lg px-4 py-2"
-        >
-          Got it
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function StripeBlock({ status, onSave, onRemove }: {
   status: StripeStatus
   onSave: (data: { secret_key: string; publishable_key: string }) => Promise<void>
@@ -660,7 +462,7 @@ function StripeBlock({ status, onSave, onRemove }: {
 
   return (
     <>
-      {showGuide && <StripeKeyGuide onClose={() => setShowGuide(false)} />}
+      {showGuide && <StripeKeyGuide onClose={() => setShowGuide(false)} buttonClassName="bg-gray-900 hover:bg-gray-800" />}
     <Card className="mb-4">
       <SectionHeader icon={CreditCard} label="Stripe Integration" />
       {connected ? (

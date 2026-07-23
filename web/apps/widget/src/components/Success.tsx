@@ -1,8 +1,5 @@
 import type { CreateOrderResult, WidgetSettings } from '../types'
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
-}
+import { formatCurrency } from '@wolfchow/utils'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
@@ -53,7 +50,7 @@ export function Success({ orderResult, settings, onTrackOrder, onNewOrder }: Suc
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem', fontSize: '0.875rem' }}>
           <span style={{ color: '#6b7280' }}>Order Total</span>
-          <span style={{ fontWeight: 700 }}>{formatPrice(orderResult.total, currency)}</span>
+          <span style={{ fontWeight: 700 }}>{formatCurrency(orderResult.total, currency)}</span>
         </div>
         <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
           {orderResult.order_number !== null ? `Order #${orderResult.order_number}` : 'Order confirmed'} · {formatDate(orderResult.created_at)}

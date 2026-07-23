@@ -1,8 +1,5 @@
 import type { OrderTrackingResult, WidgetSettings } from '../types'
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
-}
+import { formatCurrency } from '@wolfchow/utils'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
@@ -165,24 +162,24 @@ export function OrderTracking({ tracking, settings, onBack, onRefresh }: OrderTr
             {tracking.promo_discount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a' }}>
                 <span>Discount</span>
-                <span>−{formatPrice(tracking.promo_discount, currency)}</span>
+                <span>−{formatCurrency(tracking.promo_discount, currency)}</span>
               </div>
             )}
             {tracking.tax_amount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6b7280' }}>
                 <span>Tax</span>
-                <span>{formatPrice(tracking.tax_amount, currency)}</span>
+                <span>{formatCurrency(tracking.tax_amount, currency)}</span>
               </div>
             )}
             {tracking.tip_amount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Tip</span>
-                <span>{formatPrice(tracking.tip_amount, currency)}</span>
+                <span>{formatCurrency(tracking.tip_amount, currency)}</span>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1rem' }}>
               <span>Total</span>
-              <span>{formatPrice(tracking.total, currency)}</span>
+              <span>{formatCurrency(tracking.total, currency)}</span>
             </div>
           </div>
         </div>

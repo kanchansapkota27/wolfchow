@@ -1,10 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { WidgetSettings } from './types'
 import { App } from './App'
 import { WIDGET_HOST_ID, injectCssVars, mountWidgetInShadow } from './bootstrap'
 
 const ENV_API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'https://api.wolfchow.com'
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } })
 
 async function fetchSettings(apiBase: string, slug: string): Promise<WidgetSettings> {
   const res = await fetch(`${apiBase}/public/${slug}/settings`)
@@ -45,7 +47,9 @@ async function bootstrap(): Promise<void> {
 
   root.render(
     <StrictMode>
-      <App state="loading" settings={null} apiBase={API_BASE} slug={slug} />
+      <QueryClientProvider client={queryClient}>
+        <App state="loading" settings={null} apiBase={API_BASE} slug={slug} />
+      </QueryClientProvider>
     </StrictMode>,
   )
 
@@ -54,13 +58,17 @@ async function bootstrap(): Promise<void> {
     injectCssVars(host, settings as Parameters<typeof injectCssVars>[1])
     root.render(
       <StrictMode>
-        <App state="ready" settings={settings} apiBase={API_BASE} slug={slug} />
+        <QueryClientProvider client={queryClient}>
+          <App state="ready" settings={settings} apiBase={API_BASE} slug={slug} />
+        </QueryClientProvider>
       </StrictMode>,
     )
   } catch {
     root.render(
       <StrictMode>
-        <App state="error" settings={null} apiBase={API_BASE} slug={slug} />
+        <QueryClientProvider client={queryClient}>
+          <App state="error" settings={null} apiBase={API_BASE} slug={slug} />
+        </QueryClientProvider>
       </StrictMode>,
     )
   }

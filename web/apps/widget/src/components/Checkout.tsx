@@ -1,100 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Stripe, StripeCardElement } from '@stripe/stripe-js'
 import type { CartItem, CheckoutForm, PromoValidation, WidgetSettings } from '../types'
+import { formatCurrency } from '@wolfchow/utils'
 import { Notices } from './Notices'
-
-// Load Stripe.js from CDN (more reliable than @stripe/stripe-js in bundled IIFE context)
-function createStripeInstance(publishableKey: string): Promise<Stripe> {
-  if (!publishableKey.startsWith('pk_test_') && !publishableKey.startsWith('pk_live_')) {
-    return Promise.reject(
-      new Error(`Stripe key must start with pk_test_ or pk_live_ — got "${publishableKey.slice(0, 12)}…". ` +
-        'Set your Stripe publishable key (not the secret key) in Admin → Payments.'),
-    )
-  }
-
-  return new Promise((resolve, reject) => {
-    const win = window as unknown as Record<string, unknown>
-
-    const init = () => {
-      const Constructor = win['Stripe'] as ((key: string) => Stripe) | undefined
-      if (Constructor) {
-        try { resolve(Constructor(publishableKey)) }
-        catch (e) { reject(e) }
-      } else {
-        reject(new Error('Stripe.js loaded but window.Stripe is not available'))
-      }
-    }
-
-    if (win['Stripe']) { init(); return }
-
-    let script = document.querySelector<HTMLScriptElement>('script[src="https://js.stripe.com/v3/"]')
-    const alreadyInDom = !!script
-
-    if (!script) {
-      script = document.createElement('script')
-      script.src = 'https://js.stripe.com/v3/'
-      script.async = true
-      document.head.appendChild(script)
-    }
-
-    script.addEventListener('load', init, { once: true })
-    script.addEventListener('error', () =>
-      reject(new Error('Failed to fetch https://js.stripe.com/v3/ — check internet connection or CSP headers')),
-    { once: true })
-
-    // Already in DOM but not yet initialised → listeners above handle it.
-    // Already in DOM AND script already ran (Stripe set synchronously before our listener) → call init now.
-    if (alreadyInDom && win['Stripe']) init()
-  })
-}
-
-// ── Slot helpers (timezone-aware) ─────────────────────────────────────────────
-
-function localDateOf(isoStr: string, tz: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(isoStr))
-}
-
-function groupSlotsByDate(slots: string[], tz: string): Map<string, string[]> {
-  const now = Date.now()
-  const groups = new Map<string, string[]>()
-  for (const slot of slots) {
-    if (new Date(slot).getTime() <= now) continue  // filter already-past slots
-    const d = localDateOf(slot, tz)
-    const arr = groups.get(d) ?? []
-    arr.push(slot)
-    groups.set(d, arr)
-  }
-  return groups
-}
-
-function formatDateChip(dateStr: string, firstSlotInDay: string, tz: string): string {
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date())
-  const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(
-    new Date(Date.now() + 86400000),
-  )
-  if (dateStr === today) return 'Today'
-  if (dateStr === tomorrow) return 'Tomorrow'
-  // Use the slot timestamp displayed in restaurant tz to get the correct weekday/date
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(firstSlotInDay))
-}
-
-function formatSlotTime(isoStr: string, tz: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(new Date(isoStr))
-}
-
-function formatPrice(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
-}
+import { createStripeInstance } from './checkout/stripeLoader'
+import { groupSlotsByDate, formatDateChip, formatSlotTime } from './checkout/slotHelpers'
 
 interface CheckoutProps {
   items: CartItem[]
@@ -682,7 +592,7 @@ export function Checkout({
             </div>
             {promo && (
               <p style={{ margin: '0.375rem 0 0', fontSize: '0.8125rem', color: promo.valid ? '#16a34a' : '#dc2626' }}>
-                {promo.valid ? `✓ ${promo.title} — ${formatPrice(promo.discount_amount ?? 0, currency)} off` : promo.message}
+                {promo.valid ? `✓ ${promo.title} — ${formatCurrency(promo.discount_amount ?? 0, currency)} off` : promo.message}
               </p>
             )}
           </div>
@@ -727,7 +637,7 @@ export function Checkout({
                       fontWeight: 500,
                     }}
                   >
-                    {pct}% ({formatPrice(tipVal, currency)})
+                    {pct}% ({formatCurrency(tipVal, currency)})
                   </button>
                 )
               })}
@@ -796,25 +706,25 @@ export function Checkout({
       <div style={{ padding: '0.875rem 1rem', borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.875rem', fontSize: '0.875rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Subtotal</span><span>{formatPrice(subtotal, currency)}</span>
+            <span>Subtotal</span><span>{formatCurrency(subtotal, currency)}</span>
           </div>
           {promo?.valid && promo.discount_amount ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a' }}>
-              <span>Promo</span><span>−{formatPrice(promo.discount_amount, currency)}</span>
+              <span>Promo</span><span>−{formatCurrency(promo.discount_amount, currency)}</span>
             </div>
           ) : null}
           {settings.tax.enabled && (
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6b7280' }}>
-              <span>Tax</span><span>{formatPrice(taxAmount, currency)}</span>
+              <span>Tax</span><span>{formatCurrency(taxAmount, currency)}</span>
             </div>
           )}
           {tipAmount > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Tip</span><span>{formatPrice(tipAmount, currency)}</span>
+              <span>Tip</span><span>{formatCurrency(tipAmount, currency)}</span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1rem', paddingTop: '0.375rem', borderTop: '1px solid #f3f4f6' }}>
-            <span>Total</span><span>{formatPrice(total, currency)}</span>
+            <span>Total</span><span>{formatCurrency(total, currency)}</span>
           </div>
         </div>
 
@@ -848,7 +758,7 @@ export function Checkout({
             ? 'Placing Order…'
             : cardStatus === 'loading' && form.payment_method === 'card'
               ? 'Loading card form…'
-              : `Place Order · ${formatPrice(total, currency)}`
+              : `Place Order · ${formatCurrency(total, currency)}`
           return (
             <button
               onClick={onSubmit}
