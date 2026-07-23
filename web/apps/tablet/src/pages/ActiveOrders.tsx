@@ -106,6 +106,12 @@ function DetailCard({ order, completing, onAdvance }: DetailCardProps) {
         <p className="text-sm font-bold text-white">${Number(order.total).toFixed(2)}</p>
       </div>
 
+      {order.scheduled_for && (
+        <p className="px-4 pb-3 text-xs font-medium" style={{ color: '#60a5fa' }}>
+          📅 Scheduled {new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
+
       {/* Divider */}
       <div className="mx-4 border-t" style={{ borderColor: '#1e293b' }} />
 
