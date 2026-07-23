@@ -104,6 +104,7 @@ function menuWith(itemName: string): PublicMenuCategory[] {
       sort_order: 0,
       variants: [],
       modifier_groups: [],
+      special_requests_enabled: true,
     }],
   }]
 }

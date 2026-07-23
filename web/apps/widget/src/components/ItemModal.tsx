@@ -199,28 +199,30 @@ export function ItemModal({ item, currency, showModifiers, onAdd, onClose }: Ite
           ))}
 
           {/* Notes */}
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9375rem', marginBottom: '0.375rem' }}>
-              Special instructions
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g., no onions, extra sauce..."
-              maxLength={500}
-              rows={2}
-              style={{
-                width: '100%',
-                padding: '0.625rem 0.75rem',
-                borderRadius: '0.5rem',
-                border: '1.5px solid #e5e7eb',
-                fontSize: '0.875rem',
-                resize: 'none',
-                fontFamily: 'inherit',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+          {item.special_requests_enabled && (
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9375rem', marginBottom: '0.375rem' }}>
+                Special instructions
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g., no onions, extra sauce..."
+                maxLength={500}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '0.625rem 0.75rem',
+                  borderRadius: '0.5rem',
+                  border: '1.5px solid #e5e7eb',
+                  fontSize: '0.875rem',
+                  resize: 'none',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Footer */}

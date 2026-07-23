@@ -143,6 +143,7 @@ export interface Restaurant {
   auto_reject_enabled: boolean
   auto_reject_minutes: number
   menu_image_display: 'off' | 'desktop' | 'mobile' | 'both'
+  special_requests_enabled: boolean
   orders_paused: boolean
   pause_until: string | null
   pause_reason: string | null
@@ -288,6 +289,8 @@ export interface MenuItem {
   sort_order: number
   variants?: ItemVariant[]
   modifier_groups?: Array<{ id: string; name: string }>
+  /** Null inherits the restaurant's special_requests_enabled default. */
+  special_requests_enabled: boolean | null
 }
 
 export type ModifierGroupType = 'single' | 'multi'

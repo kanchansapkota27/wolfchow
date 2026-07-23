@@ -144,6 +144,52 @@ describe('STORY-015 · Menu items', () => {
     expect(body.restaurant_id).toBe(RESTAURANT_ID)
   })
 
+  it('create item with special_requests_enabled=false: 201, persisted', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: { ...fakeItem, special_requests_enabled: false } }))
+
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/menu/items',
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          name: 'Classic Burger',
+          price: 12.00,
+          category_id: CATEGORY_ID,
+          special_requests_enabled: false,
+        }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(201)
+    const body = await res.json() as { special_requests_enabled: boolean }
+    expect(body.special_requests_enabled).toBe(false)
+
+    const insertArgs = mockFrom.mock.results[0]?.value.insert.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(insertArgs.special_requests_enabled).toBe(false)
+  })
+
+  it('PATCH item special_requests_enabled=null: reverts to restaurant default', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: { ...fakeItem, special_requests_enabled: null } }))
+
+    const token = await ownerToken()
+    const res = await app.request(
+      `/admin/menu/items/${ITEM_ID}`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ special_requests_enabled: null }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const updateArgs = mockFrom.mock.results[0]?.value.update.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(updateArgs).toHaveProperty('special_requests_enabled', null)
+  })
+
   it('create at item cap: 402 with limit and current', async () => {
     mockKv.get.mockResolvedValue({ item_cap: 3 })
     mockFrom.mockReturnValueOnce(chain({ count: 3 })) // count query hits cap

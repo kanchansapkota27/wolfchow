@@ -41,6 +41,7 @@ export interface PublicMenuItem {
   sort_order: number
   variants: PublicVariant[]
   modifier_groups: PublicModifierGroup[]
+  special_requests_enabled: boolean
 }
 
 export interface PublicMenuCategory {
@@ -70,14 +71,16 @@ export function registerPublicMenuRoutes(app: Hono<HonoEnv>): void {
     // Resolve restaurant by slug
     const { data: restaurant } = await admin
       .from('restaurants')
-      .select('id, slug')
+      .select('id, slug, special_requests_enabled')
       .eq('slug', slug)
       .eq('active', true)
       .maybeSingle()
 
     if (!restaurant) return c.json({ error: 'restaurant_not_found' }, 404)
 
-    const restaurantId = (restaurant as Record<string, unknown>).id as string
+    const restaurantRow = restaurant as Record<string, unknown>
+    const restaurantId = restaurantRow.id as string
+    const specialRequestsDefault = restaurantRow.special_requests_enabled as boolean
 
     const menuCache = new KvCache(c.env.MENU_CACHE)
     const cacheKey = buildKey('menu', restaurantId)
@@ -107,7 +110,7 @@ export function registerPublicMenuRoutes(app: Hono<HonoEnv>): void {
     // Load all items for these categories
     const { data: rawItems } = await admin
       .from('menu_items')
-      .select('id, category_id, name, description, price, availability_state, image_r2_key, tags, has_variants, sort_order')
+      .select('id, category_id, name, description, price, availability_state, image_r2_key, tags, has_variants, sort_order, special_requests_enabled')
       .in('category_id', categoryIds)
       .order('sort_order', { ascending: true })
 
@@ -244,6 +247,7 @@ export function registerPublicMenuRoutes(app: Hono<HonoEnv>): void {
         sort_order: item.sort_order as number,
         variants: variantsByItem.get(item.id as string) ?? [],
         modifier_groups: modifiersByItem.get(item.id as string) ?? [],
+        special_requests_enabled: (item.special_requests_enabled as boolean | null) ?? specialRequestsDefault,
       })
     }
 

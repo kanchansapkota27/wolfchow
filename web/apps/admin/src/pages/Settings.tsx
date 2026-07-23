@@ -18,6 +18,7 @@ import { SectionHeader } from '../components/settings/SectionHeader'
 import { LinkField } from '../components/settings/LinkField'
 import { BrandColorsCard } from '../components/settings/BrandColorsCard'
 import { MenuImageDisplayCard } from '../components/settings/MenuImageDisplayCard'
+import { SpecialRequestsCard } from '../components/settings/SpecialRequestsCard'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -307,6 +308,8 @@ function RestaurantProfileContent({ restaurant, onSave }: {
       <PlanLocked locked={plan?.feature_flags.menu_photos === false} upgradeMessage={upgradeMessage} label="Menu item photos require a higher plan">
         <MenuImageDisplayCard restaurant={restaurant} onSave={onSave} />
       </PlanLocked>
+
+      <SpecialRequestsCard restaurant={restaurant} onSave={onSave} />
 
       <Card>
         <SectionHeader icon={Globe} label="Social links" />

@@ -189,6 +189,27 @@ describe('STORY-013 · Restaurant profile management', () => {
     expect(res.status).toBe(422)
   })
 
+  it('PATCH special_requests_enabled: updated', async () => {
+    mockFrom.mockReturnValueOnce(
+      chain({ data: { ...fakeRestaurant, special_requests_enabled: false }, error: null }),
+    )
+
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/restaurant',
+      {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ special_requests_enabled: false }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as { restaurant: { special_requests_enabled: boolean } }
+    expect(body.restaurant.special_requests_enabled).toBe(false)
+  })
+
   it('PATCH timezone: field stripped, not forwarded to DB', async () => {
     mockFrom.mockReturnValueOnce(
       chain({ data: { ...fakeRestaurant, display_name: 'Updated' }, error: null }),
