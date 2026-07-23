@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from './App'
+
+function renderWithQuery(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+}
 
 // ── Realtime mock ────────────────────────────────────────────────────────────
 
@@ -79,7 +85,7 @@ beforeEach(() => {
 describe('STORY-078 · Tracking page realtime status updates', () => {
   it('order_status_changed for this order: stepper advances without a refetch', async () => {
     mockFetchOnce(baseOrder({ status: 'accepted' }))
-    render(<App />)
+    renderWithQuery(<App />)
     await waitFor(() => expect(screen.getByTestId('order-status').textContent).toBe('Accepted'))
 
     const fetchSpy = fetch as unknown as ReturnType<typeof vi.fn>
@@ -93,7 +99,7 @@ describe('STORY-078 · Tracking page realtime status updates', () => {
 
   it('event for a different order_id: state unchanged', async () => {
     mockFetchOnce(baseOrder({ status: 'accepted' }))
-    render(<App />)
+    renderWithQuery(<App />)
     await waitFor(() => expect(screen.getByTestId('order-status').textContent).toBe('Accepted'))
 
     fireRealtimeEvent('order_status_changed', { order_id: 'some-other-order', previous_status: 'accepted', new_status: 'preparing' })
@@ -103,7 +109,7 @@ describe('STORY-078 · Tracking page realtime status updates', () => {
 
   it('order_accepted for this order: status becomes accepted', async () => {
     mockFetchOnce(baseOrder({ status: 'auth_success' }))
-    render(<App />)
+    renderWithQuery(<App />)
     await waitFor(() => expect(screen.getByTestId('order-status').textContent).toBe('Awaiting confirmation'))
 
     fireRealtimeEvent('order_accepted', { order_id: ORDER_ID })
@@ -113,7 +119,7 @@ describe('STORY-078 · Tracking page realtime status updates', () => {
 
   it('order_rejected for this order: rejected card shown', async () => {
     mockFetchOnce(baseOrder({ status: 'auth_success' }))
-    render(<App />)
+    renderWithQuery(<App />)
     await waitFor(() => expect(screen.getByTestId('order-status').textContent).toBe('Awaiting confirmation'))
 
     fireRealtimeEvent('order_rejected', { order_id: ORDER_ID })
@@ -123,21 +129,21 @@ describe('STORY-078 · Tracking page realtime status updates', () => {
 
   it('page title updates with status and emoji', async () => {
     mockFetchOnce(baseOrder({ status: 'preparing' }))
-    render(<App />)
+    renderWithQuery(<App />)
     await waitFor(() => expect(document.title).toBe('🟡 Being prepared — Your Order | Wolfchow'))
   })
 
   it('scheduled order not yet activated: pre-step message shown instead of stepper', async () => {
     const future = new Date(Date.now() + 60 * 60_000).toISOString()
     mockFetchOnce(baseOrder({ status: 'pending_payment', scheduled_for: future }))
-    render(<App />)
+    renderWithQuery(<App />)
 
     await waitFor(() => expect(screen.getByText(/we'll start preparing closer to your scheduled time/i)).toBeTruthy())
   })
 
   it('restaurant_name and payment_method rendered', async () => {
     mockFetchOnce(baseOrder({ payment_method: 'pickup' }))
-    render(<App />)
+    renderWithQuery(<App />)
 
     await waitFor(() => expect(screen.getByText('The Burger Place')).toBeTruthy())
     expect(screen.getByText('Pay at pickup')).toBeTruthy()
