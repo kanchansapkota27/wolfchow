@@ -327,7 +327,11 @@ async function invalidateAndBroadcast(
   restaurantId: string,
   broadcaster?: Broadcaster,
 ): Promise<void> {
-  const cache = new KvCache(env.SETTINGS_CACHE)
+  // The public menu route (src/routes/public/menu.ts) reads/writes this cache
+  // via MENU_CACHE, not SETTINGS_CACHE — deleting from the wrong binding is a
+  // silent no-op, leaving the public menu stale for up to KV_TTLS.menu (300s)
+  // after any edit.
+  const cache = new KvCache(env.MENU_CACHE)
   await cache.delete(buildKey('menu', restaurantId))
 
   if (broadcaster) {

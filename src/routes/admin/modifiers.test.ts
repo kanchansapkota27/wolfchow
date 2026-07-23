@@ -23,6 +23,11 @@ registerAdminRoutes(app, { broadcaster: { broadcast: mockBroadcast } })
 // ── Fake env ──────────────────────────────────────────────────────────────────
 
 const mockKv = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
+// Distinct from mockKv/SETTINGS_CACHE: the public menu route reads/writes the
+// 'menu:' cache key via MENU_CACHE specifically (src/routes/public/menu.ts) —
+// keeping these separate here so a regression (invalidating the wrong
+// binding) fails this suite instead of passing unnoticed.
+const mockMenuKv = { get: vi.fn(), put: vi.fn(), delete: vi.fn() }
 
 const env = {
   SUPABASE_URL: 'http://unused',
@@ -30,6 +35,7 @@ const env = {
   SUPABASE_SERVICE_ROLE_KEY: 'service',
   SUPABASE_JWT_SECRET: 'test-secret-at-least-32-characters-long-xx',
   SETTINGS_CACHE: mockKv,
+  MENU_CACHE: mockMenuKv,
   MEDIA_BUCKET: {},
   R2_ACCOUNT_ID: 'acc', R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'secret', R2_BUCKET_NAME: 'media',
@@ -108,6 +114,7 @@ beforeEach(() => {
   // Default: plan with item_modifiers enabled, no cap
   mockKv.get.mockResolvedValue({ feature_flags: { item_modifiers: true } })
   mockKv.delete.mockResolvedValue(undefined)
+  mockMenuKv.delete.mockResolvedValue(undefined)
 })
 
 describe('STORY-016 · Modifier groups & options', () => {
@@ -184,7 +191,7 @@ describe('STORY-016 · Modifier groups & options', () => {
     )
 
     expect(res.status).toBe(204)
-    expect(mockKv.delete).toHaveBeenCalledWith(`menu:${RESTAURANT_ID}`)
+    expect(mockMenuKv.delete).toHaveBeenCalledWith(`menu:${RESTAURANT_ID}`)
   })
 
   it('price_delta = -0.50: valid, stored as -50 cents', async () => {
