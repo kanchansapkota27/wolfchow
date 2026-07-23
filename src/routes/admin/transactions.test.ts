@@ -54,6 +54,9 @@ function chain(opts: ChainOpts = {}) {
     eq: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     range: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
@@ -83,6 +86,85 @@ describe('STORY-029 · Transaction history & refunds', () => {
     const body = await res.json() as { transactions: typeof txs; total: number }
     expect(body.transactions).toHaveLength(1)
     expect(body.total).toBe(1)
+  })
+
+  it('list transactions: q searches customer name/email and, if numeric, order_number', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: [], count: 0 }))
+
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?q=101', { headers: authHeaders(token) }, env)
+
+    expect(res.status).toBe(200)
+    const orCall = mockFrom.mock.results[0]?.value.or.mock.calls[0]?.[0] as string
+    expect(orCall).toContain('customer_name.ilike.%101%')
+    expect(orCall).toContain('customer_email.ilike.%101%')
+    expect(orCall).toContain('order_number.eq.101')
+  })
+
+  it('list transactions: q with letters does not add an order_number clause', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: [], count: 0 }))
+
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?q=jane', { headers: authHeaders(token) }, env)
+
+    expect(res.status).toBe(200)
+    const orCall = mockFrom.mock.results[0]?.value.or.mock.calls[0]?.[0] as string
+    expect(orCall).not.toContain('order_number')
+  })
+
+  it('list transactions: status filter applies .in() with the parsed list', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: [], count: 0 }))
+
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?status=completed,refunded', { headers: authHeaders(token) }, env)
+
+    expect(res.status).toBe(200)
+    expect(mockFrom.mock.results[0]?.value.in).toHaveBeenCalledWith('status', ['completed', 'refunded'])
+  })
+
+  it('list transactions: invalid status value: 422', async () => {
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?status=bogus', { headers: authHeaders(token) }, env)
+    expect(res.status).toBe(422)
+  })
+
+  it('list transactions: payment_method filter applies .in()', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: [], count: 0 }))
+
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?payment_method=card', { headers: authHeaders(token) }, env)
+
+    expect(res.status).toBe(200)
+    expect(mockFrom.mock.results[0]?.value.in).toHaveBeenCalledWith('payment_method', ['card'])
+  })
+
+  it('list transactions: from/to date range applied via gte/lte (from within the plan window)', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: [], count: 0 }))
+
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+    const token = await ownerToken()
+    const res = await app.request(`/admin/transactions?from=${yesterday}&to=2099-01-31`, { headers: authHeaders(token) }, env)
+
+    expect(res.status).toBe(200)
+    expect(mockFrom.mock.results[0]?.value.gte).toHaveBeenCalledWith('created_at', yesterday)
+    expect(mockFrom.mock.results[0]?.value.lte).toHaveBeenCalledWith('created_at', '2099-01-31')
+  })
+
+  it('list transactions: from earlier than the plan history window is clamped to the window', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: [], count: 0 }))
+
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?from=2000-01-01', { headers: authHeaders(token) }, env)
+
+    expect(res.status).toBe(200)
+    const gteArg = mockFrom.mock.results[0]?.value.gte.mock.calls[0]?.[1] as string
+    expect(new Date(gteArg).getFullYear()).toBeGreaterThan(2000)
+  })
+
+  it('list transactions: malformed date: 422', async () => {
+    const token = await ownerToken()
+    const res = await app.request('/admin/transactions?from=not-a-date', { headers: authHeaders(token) }, env)
+    expect(res.status).toBe(422)
   })
 
   it('list transactions: selects full order detail including items/modifiers, not just summary fields', async () => {
