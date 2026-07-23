@@ -16,7 +16,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
 
     const { data: order, error: orderError } = await admin
       .from('orders')
-      .select('id, tracking_token, status, payment_method, total, subtotal, tax_amount, promo_discount, tip_amount, created_at, scheduled_for, customer_name, restaurant_id')
+      .select('id, tracking_token, order_number, status, payment_method, total, subtotal, tax_amount, promo_discount, tip_amount, created_at, scheduled_for, customer_name, restaurant_id')
       .eq('tracking_token', trackingToken)
       .maybeSingle()
 
@@ -67,6 +67,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
     return c.json({
       order_id: or.id as string,
       tracking_token: trackingToken,
+      order_number: or.order_number as number | null,
       restaurant_id: restaurantId,
       restaurant_name: r.display_name as string,
       status: or.status as string,
@@ -140,7 +141,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
 
     const { data: order, error: orderError } = await admin
       .from('orders')
-      .select('id, tracking_token, status, payment_method, total, subtotal, tax_amount, promo_discount, tip_amount, created_at, scheduled_for, customer_name')
+      .select('id, tracking_token, order_number, status, payment_method, total, subtotal, tax_amount, promo_discount, tip_amount, created_at, scheduled_for, customer_name')
       .eq('tracking_token', trackingToken)
       .eq('restaurant_id', restaurantId)
       .maybeSingle()
@@ -166,6 +167,7 @@ export function registerPublicTrackingRoutes(app: Hono<HonoEnv>): void {
     return c.json({
       order_id: or.id as string,
       tracking_token: trackingToken,
+      order_number: or.order_number as number | null,
       restaurant_id: restaurantId,
       restaurant_name: r.display_name as string,
       status: or.status as string,

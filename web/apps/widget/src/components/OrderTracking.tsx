@@ -4,6 +4,10 @@ function formatPrice(amount: number, currency: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; step: number }> = {
   pending_payment: { label: 'Awaiting Payment', color: '#9ca3af', step: 0 },
   auth_success: { label: 'Order Received', color: '#f59e0b', step: 1 },
@@ -95,8 +99,8 @@ export function OrderTracking({ tracking, settings, onBack, onRefresh }: OrderTr
 
         {/* Order summary */}
         <div style={{ padding: '1rem', borderRadius: '0.75rem', background: '#f9fafb', border: '1px solid #e5e7eb' }}>
-          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.75rem', wordBreak: 'break-all' }}>
-            Order: {tracking.tracking_token}
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.75rem' }}>
+            {tracking.order_number !== null ? `Order #${tracking.order_number}` : 'Order'} · {formatDate(tracking.created_at)}
           </div>
 
           {tracking.items.map((item, i) => {
@@ -110,14 +114,12 @@ export function OrderTracking({ tracking, settings, onBack, onRefresh }: OrderTr
                   <span style={{ color: '#374151', fontWeight: 500 }}>
                     {item.quantity}× {displayName}{variantSuffix}
                   </span>
-                  <span style={{ color: '#374151' }}>{formatPrice(item.unit_price * item.quantity, currency)}</span>
                 </div>
                 {item.modifiers.length > 0 && (
                   <div style={{ paddingLeft: '1rem', marginTop: '0.125rem' }}>
                     {item.modifiers.map((mod, mi) => (
-                      <div key={mi} style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>+ {mod.name}</span>
-                        {mod.price_delta !== 0 && <span>{formatPrice(mod.price_delta, currency)}</span>}
+                      <div key={mi} style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                        + {mod.name}
                       </div>
                     ))}
                   </div>
