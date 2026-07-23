@@ -229,7 +229,12 @@ function KitchenCard({ order, onAdvance }: KitchenCardProps) {
   const [busy, setBusy] = useState(false)
   const elapsed = useElapsedTimer(order.updated_at)
   const elapsedMs = Date.now() - new Date(order.updated_at).getTime()
-  const isOverdue = elapsedMs > 20 * 60_000
+  // A scheduled order can legitimately sit here for hours ahead of its slot —
+  // the elapsed-since-accepted timer isn't a meaningful "running late" signal
+  // until the slot itself has arrived, so suppress the overdue/urgent
+  // treatment until then.
+  const isScheduledAhead = !!order.scheduled_for && new Date(order.scheduled_for).getTime() > Date.now()
+  const isOverdue = !isScheduledAhead && elapsedMs > 20 * 60_000
   const nextStatus = order.status === 'preparing' ? 'ready' : 'preparing'
   const actionLabel = order.status === 'preparing' ? 'READY FOR PICKUP' : 'START PREPARING'
 
@@ -238,8 +243,8 @@ function KitchenCard({ order, onAdvance }: KitchenCardProps) {
     try { onAdvance(order.id, nextStatus) } finally { setBusy(false) }
   }
 
-  const borderColor = isOverdue ? 'var(--md-error)' : 'var(--md-tertiary)'
-  const timerColor  = isOverdue ? 'var(--md-error)' : 'var(--md-tertiary)'
+  const borderColor = isOverdue ? 'var(--md-error)' : isScheduledAhead ? '#60a5fa' : 'var(--md-tertiary)'
+  const timerColor  = isOverdue ? 'var(--md-error)' : isScheduledAhead ? '#60a5fa' : 'var(--md-tertiary)'
 
   return (
     <div
@@ -284,6 +289,12 @@ function KitchenCard({ order, onAdvance }: KitchenCardProps) {
         </div>
       </div>
 
+      {order.scheduled_for && (
+        <p className="text-xs font-medium" style={{ color: '#60a5fa' }}>
+          📅 Scheduled {new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
+
       <div
         className="rounded-lg p-3 space-y-1.5"
         style={{ background: 'var(--md-surface-low)' }}
@@ -318,8 +329,8 @@ function KitchenCard({ order, onAdvance }: KitchenCardProps) {
         className="w-full rounded-lg font-bold transition-all active:scale-95 disabled:opacity-40"
         style={{
           padding: '14px 0',
-          background: isOverdue ? 'var(--md-error)' : 'var(--md-tertiary)',
-          color: isOverdue ? 'var(--md-on-error)' : 'var(--md-on-tertiary)',
+          background: isOverdue ? 'var(--md-error)' : isScheduledAhead ? '#60a5fa' : 'var(--md-tertiary)',
+          color: isOverdue ? 'var(--md-on-error)' : isScheduledAhead ? '#0c1c33' : 'var(--md-on-tertiary)',
           fontFamily: "'JetBrains Mono',monospace",
           fontSize: 13,
           letterSpacing: '0.04em',
@@ -373,6 +384,12 @@ function ReadyCard({ order, completing, onComplete }: ReadyCardProps) {
           {overdue ? 'warning' : 'check_circle'}
         </span>
       </div>
+
+      {order.scheduled_for && (
+        <p className="text-xs font-medium" style={{ color: '#60a5fa' }}>
+          📅 Scheduled {new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
 
       <div
         className="rounded-lg p-3 space-y-1"
@@ -478,9 +495,12 @@ export function OrderQueue() {
   const kitchenOrders = activeOrders.filter((o) => o.status === 'accepted' || o.status === 'preparing')
   const readyOrders   = activeOrders.filter((o) => o.status === 'ready')
 
-  const handleAccept  = useCallback(async (id: string) => {
+  // Scheduled orders stay at 'accepted' after Accept — kitchen decides when to
+  // start prep, closer to the actual scheduled time, via the KitchenCard's own
+  // "START PREPARING" button. ASAP orders skip straight to 'preparing' as before.
+  const handleAccept  = useCallback(async (id: string, scheduledFor: string | null) => {
     await accept(id)
-    await updateStatus(id, 'preparing')
+    if (!scheduledFor) await updateStatus(id, 'preparing')
   }, [accept, updateStatus])
   const handleReject  = useCallback(async (reason?: string) => {
     if (!rejectTarget) return
@@ -526,7 +546,7 @@ export function OrderQueue() {
                 <NewOrderCard
                   key={o.id}
                   order={o}
-                  onAccept={() => handleAccept(o.id)}
+                  onAccept={() => handleAccept(o.id, o.scheduled_for)}
                   onDecline={() => setRejectTarget(o)}
                 />
               ))

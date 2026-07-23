@@ -32,6 +32,15 @@ interface OrderTrackingProps {
 export function OrderTracking({ tracking, settings, onBack, onRefresh }: OrderTrackingProps) {
   const currency = settings.currency
   const status = STATUS_CONFIG[tracking.status] ?? { label: tracking.status, color: '#6b7280', step: 0 }
+  // Scheduled orders not yet at their slot: show a pre-step message instead of
+  // the live stepper (matches the standalone tracking app's behavior) — the
+  // normal "Received → Accepted → Preparing…" pipeline isn't meaningful yet
+  // when the kitchen intentionally hasn't started on it.
+  const isScheduledPending =
+    !!tracking.scheduled_for &&
+    new Date(tracking.scheduled_for).getTime() > Date.now() &&
+    status.step >= 0 &&
+    tracking.status !== 'completed'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -66,15 +75,34 @@ export function OrderTracking({ tracking, settings, onBack, onRefresh }: OrderTr
           }}>
             {status.label}
           </div>
-          {tracking.status !== 'rejected' && tracking.status !== 'missed' && tracking.status !== 'refunded' && tracking.status !== 'completed' && (
+          {tracking.scheduled_for && (
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.8125rem', fontWeight: 600, color: '#3b82f6' }}>
+              📅 Scheduled for {new Date(tracking.scheduled_for).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+            </p>
+          )}
+          {!isScheduledPending && tracking.status !== 'rejected' && tracking.status !== 'missed' && tracking.status !== 'refunded' && tracking.status !== 'completed' && (
             <p style={{ margin: 0, fontSize: '0.8125rem', color: '#6b7280' }}>
               Est. ready: {new Date(tracking.estimated_ready).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </p>
           )}
         </div>
 
-        {/* Progress steps */}
-        {status.step >= 0 && (
+        {/* Progress steps (or scheduled pre-step) */}
+        {isScheduledPending ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '1.25rem 1rem',
+            marginBottom: '1.5rem',
+            borderRadius: '0.75rem',
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+          }}>
+            <div style={{ fontSize: '1.75rem', marginBottom: '0.375rem' }}>📅</div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9375rem', color: '#1e3a8a' }}>
+              We'll start preparing closer to your scheduled time.
+            </p>
+          </div>
+        ) : status.step >= 0 && (
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
             {STEPS.map((step, i) => (
               <div key={step} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
