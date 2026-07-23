@@ -147,6 +147,19 @@ export interface CreateOrderResult {
   client_secret: string | null
   total: number
   currency: string
+  items: Array<{
+    item_name: string | null
+    variant_name: string | null
+    quantity: number
+    unit_price: number
+    modifiers: Array<{ name: string; price_delta: number }>
+    notes: string | null
+  }>
+  subtotal: number
+  promo_discount: number
+  tax_amount: number
+  tax_inclusive: boolean
+  tip_amount: number
 }
 
 export interface OrderTrackingResult {

@@ -535,6 +535,18 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
       }
     }
 
+    // Full itemized receipt for the immediate post-order response only — this
+    // is data the client already knows (it built the cart), unlike the
+    // token-only tracking endpoint which deliberately omits prices (SEC-010).
+    const receiptItems = orderItemsToInsert.map((item) => ({
+      item_name: item.item_name as string | null,
+      variant_name: item.variant_name as string | null,
+      quantity: item.quantity as number,
+      unit_price: item.unit_price as number,
+      modifiers: (item.modifiers as Array<{ name: string; price_delta: number }>) ?? [],
+      notes: item.notes as string | null,
+    }))
+
     return c.json({
       order_id: orderId,
       tracking_token: trackingToken,
@@ -543,6 +555,12 @@ export function registerPublicOrderRoutes(app: Hono<HonoEnv>, deps: PublicOrderR
       client_secret: clientSecret,
       total,
       currency,
+      items: receiptItems,
+      subtotal,
+      promo_discount: promoDiscount,
+      tax_amount: taxAmount,
+      tax_inclusive: taxInclusive,
+      tip_amount: tipAmount,
     }, 201)
   })
 
