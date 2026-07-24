@@ -209,25 +209,37 @@ export function registerAuthRoutes(app: Hono<HonoEnv>): void {
       c.env.SUPABASE_JWT_SECRET,
     )
 
+    // Both writes below must go through waitUntil (not `void ...`): a
+    // Supabase query builder is a lazy thenable that only issues its HTTP
+    // request when awaited/`.then()`'d — `void`ing the expression discards
+    // it before that ever happens, so neither write would ever actually fire.
     const admin = createAdminClient(c.env)
-    void admin.from('audit_log').insert({
-      restaurant_id: record.restaurant_id,
-      table_name: 'auth',
-      operation: 'DEVICE_LOGIN',
-      user_id: null,
-      new_data: { device_id: record.device_id, name: record.name },
-    })
+    c.executionCtx.waitUntil(
+      Promise.resolve(
+        admin.from('audit_log').insert({
+          restaurant_id: record.restaurant_id,
+          table_name: 'auth',
+          operation: 'DEVICE_LOGIN',
+          user_id: null,
+          new_data: { device_id: record.device_id, name: record.name },
+        }),
+      ).catch(() => {}),
+    )
 
     // Update device last_seen_at and capture platform/uuid on first login
     const deviceUpdate: Record<string, unknown> = { last_seen_at: new Date().toISOString() }
     if (parsed.data.device_uuid) deviceUpdate.device_uuid = parsed.data.device_uuid
     if (parsed.data.platform) deviceUpdate.platform = parsed.data.platform
-    void admin
-      .from('devices')
-      .update(deviceUpdate)
-      .eq('id', record.device_id)
-      .eq('restaurant_id', record.restaurant_id)
-      .is('revoked_at', null)
+    c.executionCtx.waitUntil(
+      Promise.resolve(
+        admin
+          .from('devices')
+          .update(deviceUpdate)
+          .eq('id', record.device_id)
+          .eq('restaurant_id', record.restaurant_id)
+          .is('revoked_at', null),
+      ).catch(() => {}),
+    )
 
     return c.json({
       access_token: accessToken,

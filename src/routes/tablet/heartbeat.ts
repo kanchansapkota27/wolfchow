@@ -11,14 +11,22 @@ export function registerHeartbeatRoute(app: Hono<HonoEnv>): void {
     // Only device sessions (tablet_device role) have a device_id
     if (!deviceId) return c.body(null, 204)
 
-    // Fire-and-forget — heartbeat failure must never surface to the tablet
+    // Fire-and-forget — heartbeat failure must never surface to the tablet.
+    // Must go through waitUntil (not `void ...`): a Supabase query builder is
+    // a lazy thenable that only issues its HTTP request when awaited/`.then()`'d
+    // — `void`ing the expression discards it before that ever happens, so the
+    // update silently never fires.
     const admin = createAdminClient(c.env)
-    void admin
-      .from('devices')
-      .update({ last_seen_at: new Date().toISOString() })
-      .eq('id', deviceId)
-      .eq('restaurant_id', restaurantId)
-      .is('revoked_at', null)
+    c.executionCtx.waitUntil(
+      Promise.resolve(
+        admin
+          .from('devices')
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq('id', deviceId)
+          .eq('restaurant_id', restaurantId)
+          .is('revoked_at', null),
+      ).catch(() => {}),
+    )
 
     return c.body(null, 204)
   })
