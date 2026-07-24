@@ -4,6 +4,7 @@ import * as QRCode from 'qrcode'
 import { ApiError } from '@wolfchow/api-client'
 import type { Device, DevicePermission, CreateDeviceInput } from '@wolfchow/api-client'
 import { useApi } from '../lib/api'
+import { isDeviceOnline } from '../lib/deviceStatus'
 
 const ALL_PERMISSIONS: Array<{ value: DevicePermission; label: string; description: string }> = [
   { value: 'orders:accept_reject', label: 'Accept / Reject', description: 'Approve or reject incoming orders' },
@@ -320,9 +321,7 @@ interface DeviceRowProps {
 }
 
 function DeviceRow({ device, onEdit, onRevoke, revoking }: DeviceRowProps) {
-  const isRecent = device.last_seen_at
-    ? Date.now() - new Date(device.last_seen_at).getTime() < 10 * 60 * 1000
-    : false
+  const isRecent = isDeviceOnline(device.last_seen_at)
 
   return (
     <div className="flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
