@@ -34,6 +34,8 @@ export interface SmtpCredentials {
 export interface EmailMessage {
   credentials: SmtpCredentials
   to: string
+  /** Additional recipients CC'd on the same email (visible to all recipients). */
+  cc?: string[]
   subject: string
   html: string
 }
@@ -68,6 +70,7 @@ type ResolvedCredentials = SmtpCredentials & { source: SmtpSource; monthly_limit
 export interface SendOptions {
   restaurant_id: string
   to: string
+  cc?: string[]
   subject: string
   html: string
 }
@@ -112,6 +115,7 @@ export class SmtpService {
           from_name: resolved.from_name,
         },
         to: opts.to,
+        cc: opts.cc,
         subject: opts.subject,
         html: opts.html,
       })
