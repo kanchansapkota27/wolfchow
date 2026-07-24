@@ -1,9 +1,10 @@
 import { z } from 'zod'
 import type { Hono } from 'hono'
-import type { HonoEnv } from '../../types'
+import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
 import { getStripeClient, VaultError } from '../../services/secrets'
+import type { NotificationService, NotificationOrderItem } from '../../services/notifications'
 
 const DEFAULT_HISTORY_DAYS = 30
 const PAGE_SIZE = 50
@@ -31,6 +32,7 @@ const historyQuerySchema = z.object({
 
 export interface TransactionRouteDeps {
   refundStripePayment?: (paymentIntentId: string, amountCents?: number) => Promise<{ id: string }>
+  notifier?: (env: Env) => NotificationService
 }
 
 async function parseBody(req: Request): Promise<unknown> {
@@ -125,7 +127,7 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
 
     const { data: order } = await admin
       .from('orders')
-      .select('id, status, total, stripe_intent_id, refund_id, payment_method')
+      .select('id, status, total, stripe_intent_id, refund_id, payment_method, tracking_token, customer_name, customer_email, notes, scheduled_for, items:order_items(*)')
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId)
       .single()
@@ -138,6 +140,12 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
       refund_id: string | null
       payment_method: string
       total: number
+      tracking_token: string
+      customer_name: string
+      customer_email: string
+      notes: string | null
+      scheduled_for: string | null
+      items: NotificationOrderItem[]
     }
 
     if (o.refund_id) return c.json({ error: 'already_refunded' }, 409)
@@ -174,6 +182,21 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
       .single()
 
     if (updateErr || !updated) return c.json({ error: 'already_refunded' }, 409)
+
+    if (deps.notifier) {
+      const refundAmount = parsed.data.amount_cents ? parsed.data.amount_cents / 100 : o.total
+      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderRefunded(restaurantId, {
+        id: orderId,
+        tracking_token: o.tracking_token,
+        customer_name: o.customer_name,
+        customer_email: o.customer_email,
+        total: o.total,
+        payment_method: o.payment_method,
+        items: o.items,
+        notes: o.notes,
+        scheduled_for: o.scheduled_for,
+      }, refundAmount))
+    }
 
     return c.json(updated)
   })

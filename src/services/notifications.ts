@@ -70,9 +70,7 @@ export class NotificationService {
     } else {
       await this.logSuppressed(restaurantId, order.customer_email, subject)
     }
-    for (const to of cfg.internalRecipients) {
-      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
-    }
+    await this.trySendInternal(restaurantId, cfg.internalRecipients, `[Internal] ${subject}`, html)
   }
 
   async sendOrderAccepted(restaurantId: string, order: NotificationOrder): Promise<void> {
@@ -84,9 +82,7 @@ export class NotificationService {
     } else {
       await this.logSuppressed(restaurantId, order.customer_email, subject)
     }
-    for (const to of cfg.internalRecipients) {
-      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
-    }
+    await this.trySendInternal(restaurantId, cfg.internalRecipients, `[Internal] ${subject}`, html)
   }
 
   async sendOrderRejected(restaurantId: string, order: NotificationOrder, reason?: string | null): Promise<void> {
@@ -98,9 +94,7 @@ export class NotificationService {
     } else {
       await this.logSuppressed(restaurantId, order.customer_email, subject)
     }
-    for (const to of cfg.internalRecipients) {
-      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
-    }
+    await this.trySendInternal(restaurantId, cfg.internalRecipients, `[Internal] ${subject}`, html)
   }
 
   async sendOrderReady(restaurantId: string, order: NotificationOrder): Promise<void> {
@@ -112,9 +106,43 @@ export class NotificationService {
     } else {
       await this.logSuppressed(restaurantId, order.customer_email, subject)
     }
-    for (const to of cfg.internalRecipients) {
-      await this.trySend(restaurantId, to, `[Internal] ${subject}`, html)
+    await this.trySendInternal(restaurantId, cfg.internalRecipients, `[Internal] ${subject}`, html)
+  }
+
+  async sendOrderCompleted(restaurantId: string, order: NotificationOrder): Promise<void> {
+    const cfg = await this.resolveConfig(restaurantId, 'completed')
+    const subject = `Order completed — #${shortId(order.id)}`
+    const html = completedHtml(order)
+    if (cfg.sendToCustomer) {
+      await this.trySend(restaurantId, order.customer_email, subject, html)
+    } else {
+      await this.logSuppressed(restaurantId, order.customer_email, subject)
     }
+    await this.trySendInternal(restaurantId, cfg.internalRecipients, `[Internal] ${subject}`, html)
+  }
+
+  async sendOrderRefunded(restaurantId: string, order: NotificationOrder, refundAmount: number): Promise<void> {
+    const cfg = await this.resolveConfig(restaurantId, 'refunded')
+    const subject = `Your order was refunded — #${shortId(order.id)}`
+    const html = refundedHtml(order, refundAmount)
+    if (cfg.sendToCustomer) {
+      await this.trySend(restaurantId, order.customer_email, subject, html)
+    } else {
+      await this.logSuppressed(restaurantId, order.customer_email, subject)
+    }
+    await this.trySendInternal(restaurantId, cfg.internalRecipients, `[Internal] ${subject}`, html)
+  }
+
+  /**
+   * System alert (not an order-trigger notification, so it bypasses
+   * notification_config entirely) — sent to the restaurant owner when every
+   * kitchen device has gone quiet for a while. Best-effort like everything
+   * else here; the cron sweep that calls this handles de-duplication.
+   */
+  async sendDeviceOfflineAlert(restaurantId: string, restaurantName: string, ownerEmail: string): Promise<void> {
+    const subject = `⚠️ No kitchen tablet is online — ${restaurantName}`
+    const html = deviceOfflineHtml(restaurantName)
+    await this.trySend(restaurantId, ownerEmail, subject, html)
   }
 
   async sendPreview(restaurantId: string, status: string, to: string): Promise<void> {
@@ -182,6 +210,22 @@ export class NotificationService {
   private async trySend(restaurantId: string, to: string, subject: string, html: string): Promise<void> {
     try {
       await this.smtp.send({ restaurant_id: restaurantId, to, subject, html })
+    } catch (err) {
+      if (err instanceof SmtpLimitExceededError || err instanceof NoSmtpConfigError) return
+      // Unknown transport errors are also swallowed — email is best-effort
+    }
+  }
+
+  /**
+   * Internal recipients get one email, not one-per-recipient: the first
+   * address is the primary "to", the rest are CC'd on the same message —
+   * cheaper than N separate sends and lets everyone see who else got it.
+   */
+  private async trySendInternal(restaurantId: string, recipients: string[], subject: string, html: string): Promise<void> {
+    if (recipients.length === 0) return
+    const [to, ...cc] = recipients
+    try {
+      await this.smtp.send({ restaurant_id: restaurantId, to: to!, cc: cc.length ? cc : undefined, subject, html })
     } catch (err) {
       if (err instanceof SmtpLimitExceededError || err instanceof NoSmtpConfigError) return
       // Unknown transport errors are also swallowed — email is best-effort
@@ -376,6 +420,53 @@ function readyHtml(order: NotificationOrder, widgetBaseUrl: string): string {
       </p>
       ${orderMeta(order)}
       ${tUrl ? trackingButton(tUrl) : ''}
+    `)}
+  `)
+}
+
+function completedHtml(order: NotificationOrder): string {
+  return emailWrap(`
+    ${header('#16a34a', '🎉', 'Order Complete')}
+    ${section(`
+      <p style="margin:0 0 16px;font-size:14px;color:#374151">
+        Hi <strong>${esc(order.customer_name)}</strong>, thanks for your order — hope you enjoyed it!
+      </p>
+      ${orderMeta(order)}
+      ${itemsTable(order.items ?? [])}
+    `)}
+  `)
+}
+
+function deviceOfflineHtml(restaurantName: string): string {
+  return emailWrap(`
+    ${header('#dc2626', '⚠️', 'No Kitchen Tablet Online')}
+    ${section(`
+      <p style="margin:0 0 16px;font-size:14px;color:#374151">
+        No device at <strong>${esc(restaurantName)}</strong> has been seen online for at least 2 minutes.
+        Incoming orders may not be visible to your kitchen right now.
+      </p>
+      <p style="margin:0;font-size:13px;color:#6b7280">
+        Check that a tablet is powered on, connected to the internet, and logged in.
+        You'll only get this alert once per outage — it resets once a device comes back online.
+      </p>
+    `)}
+  `)
+}
+
+function refundedHtml(order: NotificationOrder, refundAmount: number): string {
+  return emailWrap(`
+    ${header('#7c3aed', '💸', 'Order Refunded')}
+    ${section(`
+      <p style="margin:0 0 16px;font-size:14px;color:#374151">
+        Hi <strong>${esc(order.customer_name)}</strong>, your order has been refunded.
+      </p>
+      ${orderMeta(order)}
+      <p style="margin:12px 0 0;padding:10px 14px;background:#f5f3ff;border-radius:6px;font-size:13px;color:#4c1d95">
+        <strong>Refunded:</strong> ${fmt(refundAmount)}
+      </p>
+      <p style="margin:16px 0 0;font-size:13px;color:#6b7280">
+        This will appear on your original payment method within 3&ndash;5 business days.
+      </p>
     `)}
   `)
 }
