@@ -1,33 +1,24 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Eye, Monitor, Smartphone, Code2, CheckCircle2, Palette, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router'
-import { useApi } from '../lib/api'
+import { useApi, API_URL } from '../lib/api'
+import { buildEmbedCode, buildPreviewSrcDoc } from '../lib/widgetEmbed'
 
-const WIDGET_CDN = 'https://cdn.restroapi.com/widget.js'
+// ── Live widget preview ────────────────────────────────────────────────────────
+//
+// Mounts the real widget script against the real restaurant slug/API, inside
+// an iframe (isolates the widget's own DOM/CSS from the admin app) — this
+// shows the actual live menu and branding, not a static mockup.
 
-// ── Widget preview mockup ─────────────────────────────────────────────────────
-
-function WidgetPreviewCard({ displayName }: { displayName: string }) {
+function WidgetLivePreview({ slug }: { slug: string }) {
+  const srcDoc = buildPreviewSrcDoc(slug, API_URL)
   return (
-    <div className="mx-auto w-72 rounded-2xl border border-gray-200 bg-white p-8 shadow-lg">
-      <div className="mb-6 flex justify-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold text-white">
-          {(displayName[0] ?? 'R').toUpperCase()}
-        </div>
-      </div>
-      <h3 className="mb-1 text-center text-lg font-bold text-gray-900">{displayName}</h3>
-      <p className="mb-6 text-center text-xs text-gray-400">
-        This is a simulated preview of your ordering widget.
-      </p>
-      <button className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white">
-        START ORDER
-      </button>
-      <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-gray-300">
-        <CheckCircle2 size={11} />
-        SECURE CHECKOUT POWERED BY RESTROAPI
-      </p>
-    </div>
+    <iframe
+      title="Widget live preview"
+      srcDoc={srcDoc}
+      style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
+    />
   )
 }
 
@@ -47,7 +38,7 @@ export function Integrations() {
   if (status === 'pending') return <div className="py-16 text-center text-sm text-gray-400">Loading…</div>
   if (status === 'error' || !restaurant) return <div className="py-16 text-center text-sm text-red-500">Failed to load.</div>
 
-  const embedCode = `<script\n  src="${WIDGET_CDN}"\n  data-restaurant-slug="${restaurant.slug}"\n  async\n></script>\n<restro-widget></restro-widget>`
+  const embedCode = buildEmbedCode(restaurant.slug)
 
   async function handleCopy() {
     await navigator.clipboard.writeText(embedCode)
@@ -156,9 +147,12 @@ export function Integrations() {
               </div>
             </div>
 
-            <div className="flex items-center justify-center bg-gray-50 p-8">
-              <div className={previewMode === 'mobile' ? 'w-64' : 'w-full'}>
-                <WidgetPreviewCard displayName={restaurant.display_name} />
+            <div className="flex items-center justify-center bg-gray-50 p-6">
+              <div
+                className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
+                style={previewMode === 'mobile' ? { width: 320, height: 560 } : { width: '100%', height: 560 }}
+              >
+                <WidgetLivePreview slug={restaurant.slug} />
               </div>
             </div>
 

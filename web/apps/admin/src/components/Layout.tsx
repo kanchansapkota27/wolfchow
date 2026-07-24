@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useApi } from '../lib/api'
 import { useEffect } from 'react'
+import { DeviceOfflineBanner } from './DeviceOfflineBanner'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -171,6 +172,7 @@ export function Layout() {
 
         {/* Scrollable content */}
         <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8">
+          <DeviceOfflineBanner />
           <Outlet />
         </main>
       </div>
