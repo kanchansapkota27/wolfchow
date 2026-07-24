@@ -4,6 +4,7 @@ import type { HonoEnv, Env } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
 import type { NotificationService } from '../../services/notifications'
+import { VaultError } from '../../services/secrets'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -188,6 +189,10 @@ export function registerNotificationRoutes(app: Hono<HonoEnv>, deps: Notificatio
     try {
       await sender(restaurantId, status, adminEmail)
     } catch (err) {
+      if (err instanceof VaultError) {
+        console.error('[notifications/preview] vault error', err)
+        return c.json({ error: 'preview_failed', detail: 'configuration_error' }, 422)
+      }
       const detail = err instanceof Error ? err.message : 'send_failed'
       return c.json({ error: 'preview_failed', detail }, 422)
     }

@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { registerAdminRoutes } from './index'
 import { signJwt } from '../../services/tokens'
+import { VaultError } from '../../services/secrets'
 
 const mockFrom = vi.fn()
 
@@ -253,6 +254,58 @@ describe('STORY-029 · Transaction history & refunds', () => {
     expect(body.status).toBe('refunded')
     expect(body.refund_id).toBe('re_test_123')
     expect(mockRefund).toHaveBeenCalledWith('pi_test_abc', undefined)
+  })
+
+  it('refund fails with a VaultError: generic detail returned, not the raw vault message', async () => {
+    const order = {
+      id: ORDER_ID,
+      status: 'completed',
+      total_cents: 2500,
+      stripe_intent_id: 'pi_test_abc',
+      refund_id: null,
+      payment_method: 'card',
+    }
+    mockFrom.mockReturnValueOnce(chain({ data: order }))
+    mockRefund.mockRejectedValue(new VaultError('vault.get: secret is null'))
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const token = await ownerToken()
+    const res = await app.request(`/admin/transactions/${ORDER_ID}/refund`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({}),
+    }, env)
+
+    expect(res.status).toBe(502)
+    const body = await res.json() as { error: string; detail: string }
+    expect(body.detail).not.toContain('vault')
+    expect(body.detail).toBe('payment_configuration_error')
+    expect(consoleSpy).toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
+
+  it('refund fails with a non-vault error: raw message still returned (unchanged behavior)', async () => {
+    const order = {
+      id: ORDER_ID,
+      status: 'completed',
+      total_cents: 2500,
+      stripe_intent_id: 'pi_test_abc',
+      refund_id: null,
+      payment_method: 'card',
+    }
+    mockFrom.mockReturnValueOnce(chain({ data: order }))
+    mockRefund.mockRejectedValue(new Error('stripe: card declined'))
+
+    const token = await ownerToken()
+    const res = await app.request(`/admin/transactions/${ORDER_ID}/refund`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({}),
+    }, env)
+
+    expect(res.status).toBe(502)
+    const body = await res.json() as { error: string; detail: string }
+    expect(body.detail).toBe('stripe: card declined')
   })
 
   it('refund already-refunded order: 409', async () => {
