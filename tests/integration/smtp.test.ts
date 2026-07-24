@@ -206,4 +206,33 @@ describe('STORY-039 · SMTP send service', () => {
       .single()
     expect((audit.data?.new_data as { event: string }).event).toBe('smtp_limit_exceeded')
   })
+
+  it('cc option: passed through to the transport as a single send', async () => {
+    const restaurantId = await createRestaurant()
+    const ownVaultId = await secrets.put(`smtp:${restaurantId}:cc:${testRunId}`, 'own-secret')
+    await admin.from('smtp_config').insert({
+      restaurant_id: restaurantId,
+      host: 'smtp.own.example',
+      port: 587,
+      username: 'own@example.com',
+      password_vault_id: ownVaultId,
+      from_email: 'orders@own.example',
+      from_name: 'Own Restaurant',
+    })
+
+    const { sent, transport } = recordingTransport()
+    const svc = new SmtpService(makeEnv(), transport)
+
+    await svc.send({
+      restaurant_id: restaurantId,
+      to: 'primary@example.com',
+      cc: ['second@example.com', 'third@example.com'],
+      subject: 'Internal notification',
+      html: '<p>hi</p>',
+    })
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.to).toBe('primary@example.com')
+    expect(sent[0]?.cc).toEqual(['second@example.com', 'third@example.com'])
+  })
 })

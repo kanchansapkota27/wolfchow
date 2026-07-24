@@ -65,11 +65,25 @@ async function createUser(opts: {
   return { id, email }
 }
 
+// waitUntil() requires a real ExecutionContext — app.request() has none by
+// default. Collect the promises so tests can await background writes
+// (e.g. devices.last_seen_at) deterministically instead of racing them.
+const waitUntilPromises: Promise<unknown>[] = []
+const fakeExecutionCtx = {
+  waitUntil: (p: Promise<unknown>) => { waitUntilPromises.push(p) },
+  passThroughOnException: () => {},
+} as unknown as ExecutionContext
+
+async function flushWaitUntil(): Promise<void> {
+  await Promise.all(waitUntilPromises.splice(0))
+}
+
 function post(path: string, body: unknown): Promise<Response> {
   return app.request(
     path,
     { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
     env,
+    fakeExecutionCtx,
   )
 }
 
@@ -159,6 +173,39 @@ describe('STORY-NEW-A · auth shared backend', () => {
     expect(claims?.role).toBe('tablet_device')
     expect(claims?.restaurant_id).toBe(restaurantId)
     expect(claims?.device_id).toBe('kds-1')
+    await flushWaitUntil()
+  })
+
+  it('device token valid: last_seen_at is actually written to the devices row (not just built and discarded)', async () => {
+    const { data: device, error } = await admin
+      .from('devices')
+      .insert({ restaurant_id: restaurantId, name: 'Kitchen Display 2', permissions: ['orders:view'] })
+      .select('id')
+      .single()
+    if (error) throw error
+
+    deviceStore.set(
+      'device:tok-valid-2',
+      JSON.stringify({
+        restaurant_id: restaurantId,
+        device_id: device.id,
+        name: 'Kitchen Display 2',
+        permissions: ['orders:view'],
+      }),
+    )
+    const pwaUuid = randomUUID()
+    const res = await post('/auth/device', { device_token: 'tok-valid-2', device_uuid: pwaUuid, platform: 'iPad · Safari' })
+    expect(res.status).toBe(200)
+    await flushWaitUntil()
+
+    const { data: row } = await admin
+      .from('devices')
+      .select('last_seen_at, device_uuid, platform')
+      .eq('id', device.id as string)
+      .single()
+    expect(row?.last_seen_at).not.toBeNull()
+    expect(row?.device_uuid).toBe(pwaUuid)
+    expect(row?.platform).toBe('iPad · Safari')
   })
 
   it('device token invalid: 401', async () => {

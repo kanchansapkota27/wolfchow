@@ -21,21 +21,22 @@ export function createSmartTransport(): EmailTransport {
 async function sendViaHttp(msg: EmailMessage): Promise<void> {
   const { host, password, from_email, from_name } = msg.credentials
   const from = `${from_name} <${from_email}>`
+  const cc = msg.cc?.filter(Boolean) ?? []
 
   if (host.includes('resend.com')) {
-    return sendResend(msg.to, msg.subject, msg.html, from, password)
+    return sendResend(msg.to, cc, msg.subject, msg.html, from, password)
   }
   if (host.includes('postmarkapp.com')) {
-    return sendPostmark(msg.to, msg.subject, msg.html, from, password)
+    return sendPostmark(msg.to, cc, msg.subject, msg.html, from, password)
   }
   if (host.includes('mailgun.org') || host.includes('api.mailgun.net')) {
-    return sendMailgun(msg.to, msg.subject, msg.html, from, from_email, password)
+    return sendMailgun(msg.to, cc, msg.subject, msg.html, from, from_email, password)
   }
   if (host.includes('brevo.com') || host.includes('sendinblue.com')) {
-    return sendBrevo(msg.to, msg.subject, msg.html, from_name, from_email, password)
+    return sendBrevo(msg.to, cc, msg.subject, msg.html, from_name, from_email, password)
   }
   if (host.includes('sendgrid.net') || host.includes('sendgrid.com')) {
-    return sendSendGrid(msg.to, msg.subject, msg.html, from_name, from_email, password)
+    return sendSendGrid(msg.to, cc, msg.subject, msg.html, from_name, from_email, password)
   }
 
   throw new Error(
@@ -52,19 +53,19 @@ async function assertOk(res: Response, provider: string): Promise<void> {
   }
 }
 
-async function sendResend(to: string, subject: string, html: string, from: string, apiKey: string): Promise<void> {
+async function sendResend(to: string, cc: string[], subject: string, html: string, from: string, apiKey: string): Promise<void> {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from, to: [to], subject, html }),
+    body: JSON.stringify({ from, to: [to], ...(cc.length ? { cc } : {}), subject, html }),
   })
   await assertOk(res, 'resend')
 }
 
-async function sendPostmark(to: string, subject: string, html: string, from: string, serverToken: string): Promise<void> {
+async function sendPostmark(to: string, cc: string[], subject: string, html: string, from: string, serverToken: string): Promise<void> {
   const res = await fetch('https://api.postmarkapp.com/email', {
     method: 'POST',
     headers: {
@@ -72,29 +73,31 @@ async function sendPostmark(to: string, subject: string, html: string, from: str
       'Content-Type': 'application/json',
       'X-Postmark-Server-Token': serverToken,
     },
-    body: JSON.stringify({ From: from, To: to, Subject: subject, HtmlBody: html }),
+    body: JSON.stringify({ From: from, To: to, ...(cc.length ? { Cc: cc.join(',') } : {}), Subject: subject, HtmlBody: html }),
   })
   await assertOk(res, 'postmark')
 }
 
 async function sendMailgun(
-  to: string, subject: string, html: string,
+  to: string, cc: string[], subject: string, html: string,
   from: string, fromEmail: string, apiKey: string,
 ): Promise<void> {
   const domain = fromEmail.split('@')[1] ?? ''
+  const params = new URLSearchParams({ from, to, subject, html })
+  if (cc.length) params.set('cc', cc.join(','))
   const res = await fetch(`https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`, {
     method: 'POST',
     headers: {
       'Authorization': `Basic ${btoa(`api:${apiKey}`)}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({ from, to, subject, html }).toString(),
+    body: params.toString(),
   })
   await assertOk(res, 'mailgun')
 }
 
 async function sendBrevo(
-  to: string, subject: string, html: string,
+  to: string, cc: string[], subject: string, html: string,
   fromName: string, fromEmail: string, apiKey: string,
 ): Promise<void> {
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -107,6 +110,7 @@ async function sendBrevo(
     body: JSON.stringify({
       sender: { name: fromName, email: fromEmail },
       to: [{ email: to }],
+      ...(cc.length ? { cc: cc.map((email) => ({ email })) } : {}),
       subject,
       htmlContent: html,
     }),
@@ -115,7 +119,7 @@ async function sendBrevo(
 }
 
 async function sendSendGrid(
-  to: string, subject: string, html: string,
+  to: string, cc: string[], subject: string, html: string,
   fromName: string, fromEmail: string, apiKey: string,
 ): Promise<void> {
   const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -125,7 +129,7 @@ async function sendSendGrid(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }] }],
+      personalizations: [{ to: [{ email: to }], ...(cc.length ? { cc: cc.map((email) => ({ email })) } : {}) }],
       from: { email: fromEmail, name: fromName },
       subject,
       content: [{ type: 'text/html', value: html }],

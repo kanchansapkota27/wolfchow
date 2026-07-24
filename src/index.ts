@@ -12,7 +12,7 @@ import { registerPublicRoutes } from './routes/public'
 import { jwtMiddleware } from './middleware/jwt'
 import { createSmartTransport } from './services/email-transport'
 import { NotificationService } from './services/notifications'
-import { runInventoryRestore, runAutoReject } from './services/cron'
+import { runInventoryRestore, runAutoReject, runDeviceOfflineAlert } from './services/cron'
 
 const app = new Hono<HonoEnv>()
 
@@ -121,6 +121,7 @@ const appWithCron = Object.assign(app, {
       Promise.all([
         runInventoryRestore(env, ctx),
         runAutoReject(env, ctx),
+        runDeviceOfflineAlert(env, notifier),
       ]),
     )
   },

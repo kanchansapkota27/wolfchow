@@ -2,7 +2,7 @@ import type { Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import type { Broadcaster } from '../../services/realtime'
-import type { NotificationService } from '../../services/notifications'
+import type { NotificationService, NotificationOrderItem } from '../../services/notifications'
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   accepted: ['preparing'],
@@ -77,18 +77,24 @@ export function registerStatusRoutes(app: Hono<HonoEnv>, deps: StatusRouteDeps =
       {} as ExecutionContext,
     )
 
-    if (newStatus === 'ready' && deps.notifier) {
+    if ((newStatus === 'ready' || newStatus === 'completed') && deps.notifier) {
       const u = updated as Record<string, unknown>
-      c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderReady(restaurantId, {
+      const orderPayload = {
         id: orderId,
         tracking_token: u.tracking_token as string,
         customer_name: u.customer_name as string,
         customer_email: u.customer_email as string,
         total: u.total as number,
         payment_method: u.payment_method as string,
+        items: u.items as NotificationOrderItem[] | undefined,
         notes: (u.notes as string | null) ?? null,
         scheduled_for: (u.scheduled_for as string | null) ?? null,
-      }))
+      }
+      if (newStatus === 'ready') {
+        c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderReady(restaurantId, orderPayload))
+      } else {
+        c.executionCtx.waitUntil(deps.notifier(c.env).sendOrderCompleted(restaurantId, orderPayload))
+      }
     }
 
     return c.json(updated)
