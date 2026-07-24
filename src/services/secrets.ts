@@ -4,6 +4,21 @@ import { createAdminClient } from './supabase'
 import { StripeService } from './stripe'
 
 /**
+ * Thrown for any Supabase Vault RPC failure. Callers that echo a caught
+ * error's message back to the client (e.g. SMTP test / refund endpoints)
+ * must check for this and substitute a generic message instead — the raw
+ * message ("vault.get: secret is null", underlying Postgres error text,
+ * etc.) is an internal implementation detail, not something a restaurant
+ * admin's browser should ever see. Always log the original error server-side.
+ */
+export class VaultError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'VaultError'
+  }
+}
+
+/**
  * Thin wrapper over Supabase Vault for per-tenant secrets.
  *
  * Secrets are encrypted by Supabase with keys held outside the database —
@@ -35,7 +50,7 @@ export class SecretsService {
       p_secret: plaintext,
       p_name: name,
     })
-    if (error || !data) throw new Error(`vault.put failed: ${error?.message ?? 'no id returned'}`)
+    if (error || !data) throw new VaultError(`vault.put failed: ${error?.message ?? 'no id returned'}`)
     return data as string
   }
 
@@ -48,7 +63,7 @@ export class SecretsService {
       p_id: vaultId,
       p_secret: plaintext,
     })
-    if (error) throw new Error(`vault.rotate failed: ${error.message}`)
+    if (error) throw new VaultError(`vault.rotate failed: ${error.message}`)
   }
 
   /**
@@ -57,15 +72,15 @@ export class SecretsService {
    */
   async get(vaultId: string): Promise<string> {
     const { data, error } = await this.client.rpc('vault_get_secret', { p_id: vaultId })
-    if (error) throw new Error(`vault.get failed: ${error.message}`)
-    if (data === null || data === undefined) throw new Error('vault.get: secret is null')
+    if (error) throw new VaultError(`vault.get failed: ${error.message}`)
+    if (data === null || data === undefined) throw new VaultError('vault.get: secret is null')
     return data as string
   }
 
   /** Delete a secret from Vault (called when the referencing row is deleted). */
   async delete(vaultId: string): Promise<void> {
     const { error } = await this.client.rpc('vault_delete_secret', { p_id: vaultId })
-    if (error) throw new Error(`vault.delete failed: ${error.message}`)
+    if (error) throw new VaultError(`vault.delete failed: ${error.message}`)
   }
 
   /**
@@ -76,7 +91,7 @@ export class SecretsService {
    */
   async findByName(name: string): Promise<string | null> {
     const { data, error } = await this.client.rpc('vault_find_secret_id', { p_name: name })
-    if (error) throw new Error(`vault.findByName failed: ${error.message}`)
+    if (error) throw new VaultError(`vault.findByName failed: ${error.message}`)
     return (data as string | null) ?? null
   }
 }

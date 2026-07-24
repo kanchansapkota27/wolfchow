@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, useNavigate, useSearchParams } from 'react-router'
 import { AuthProvider, type AuthNavigator } from '@wolfchow/auth'
 import { createLocalStorageSession } from '@wolfchow/api-client'
-import { ToastProvider } from '@wolfchow/ui'
+import { ToastProvider, ErrorBoundary } from '@wolfchow/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ApiProvider, buildApiClient } from './lib/api'
 import { ImpersonationHandoff } from './lib/impersonationHandoff'
@@ -60,8 +60,10 @@ const root = document.getElementById('root')
 if (!root) throw new Error('Root element #root not found')
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
-      <Providers />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Providers />
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 )

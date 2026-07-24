@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { registerAdminRoutes } from './index'
 import { signJwt } from '../../services/tokens'
+import { VaultError } from '../../services/secrets'
 
 // ── Supabase mock ─────────────────────────────────────────────────────────────
 
@@ -175,6 +176,42 @@ describe('STORY-023 · SMTP configuration', () => {
     expect(body.detail).toBe('authentication failed')
     // Nothing saved
     expect(mockPutSmtpPassword).not.toHaveBeenCalled()
+  })
+
+  it('POST /admin/smtp/test fails with a VaultError: generic detail returned, not the raw vault message', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: { email: 'owner@example.com' } }))
+    mockSendTestEmail.mockRejectedValue(new VaultError('vault.get: secret is null'))
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/smtp/test',
+      { method: 'POST', headers: authHeaders(token) },
+      env,
+    )
+
+    expect(res.status).toBe(422)
+    const body = await res.json() as { error: string; detail: string }
+    expect(body.detail).not.toContain('vault')
+    expect(body.detail).toBe('configuration_error')
+    expect(consoleSpy).toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
+
+  it('POST /admin/smtp/test fails with a non-vault error: raw message still returned (unchanged behavior)', async () => {
+    mockFrom.mockReturnValueOnce(chain({ data: { email: 'owner@example.com' } }))
+    mockSendTestEmail.mockRejectedValue(new Error('connection timed out'))
+
+    const token = await ownerToken()
+    const res = await app.request(
+      '/admin/smtp/test',
+      { method: 'POST', headers: authHeaders(token) },
+      env,
+    )
+
+    expect(res.status).toBe(422)
+    const body = await res.json() as { error: string; detail: string }
+    expect(body.detail).toBe('connection timed out')
   })
 
   it('GET /admin/smtp: password absent, smtp_source=own when own row exists', async () => {

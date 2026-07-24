@@ -3,7 +3,7 @@ import type { Hono } from 'hono'
 import type { HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
-import { getStripeClient } from '../../services/secrets'
+import { getStripeClient, VaultError } from '../../services/secrets'
 
 const DEFAULT_HISTORY_DAYS = 30
 const PAGE_SIZE = 50
@@ -158,6 +158,10 @@ export function registerTransactionRoutes(app: Hono<HonoEnv>, deps: TransactionR
         refund = await stripe.refundPaymentIntent(o.stripe_intent_id, parsed.data.amount_cents)
       }
     } catch (err) {
+      if (err instanceof VaultError) {
+        console.error('[refund] vault error', err)
+        return c.json({ error: 'refund_failed', detail: 'payment_configuration_error' }, 502)
+      }
       return c.json({ error: 'refund_failed', detail: (err as Error).message }, 502)
     }
 

@@ -3,7 +3,7 @@ import type { Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
 import { resolvePlan } from '../../services/plan'
-import { SecretsService } from '../../services/secrets'
+import { SecretsService, VaultError } from '../../services/secrets'
 import { SmtpService, type EmailTransport } from '../../services/smtp'
 import { requireRole } from '../../middleware/guards'
 
@@ -224,6 +224,10 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
     try {
       await sender(restaurantId, toEmail)
     } catch (err) {
+      if (err instanceof VaultError) {
+        console.error('[smtp/test] vault error', err)
+        return c.json({ error: 'smtp_test_failed', detail: 'configuration_error' }, 422)
+      }
       const detail = err instanceof Error ? err.message : 'send_failed'
       return c.json({ error: 'smtp_test_failed', detail }, 422)
     }

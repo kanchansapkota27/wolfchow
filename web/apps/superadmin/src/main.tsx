@@ -4,7 +4,7 @@ import { BrowserRouter, useNavigate, useSearchParams } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, type AuthNavigator } from '@wolfchow/auth'
 import { createLocalStorageSession } from '@wolfchow/api-client'
-import { ToastProvider } from '@wolfchow/ui'
+import { ToastProvider, ErrorBoundary } from '@wolfchow/ui'
 import { ApiProvider, buildApiClient } from './lib/api'
 import { createQueryClient } from './lib/queryClient'
 import { App } from './App'
@@ -55,8 +55,10 @@ const root = document.getElementById('root')
 if (!root) throw new Error('Root element #root not found')
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
-      <Providers />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Providers />
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 )

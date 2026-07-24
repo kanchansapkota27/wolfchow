@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono'
 import type { Env, HonoEnv } from '../../types'
 import { createAdminClient } from '../../services/supabase'
-import { SecretsService } from '../../services/secrets'
+import { SecretsService, VaultError } from '../../services/secrets'
 import { NoSmtpConfigError, SmtpService, type EmailTransport } from '../../services/smtp'
 import { smtpGlobalSchema, smtpOverrideSchema } from './schemas'
 
@@ -139,6 +139,10 @@ export function registerSmtpRoutes(app: Hono<HonoEnv>, deps: SmtpRouteDeps = {})
       await svc.sendGlobalTest(toEmail, 'RestroAPI SMTP test', '<p>Your global SMTP configuration works.</p>')
     } catch (err) {
       if (err instanceof NoSmtpConfigError) return c.json({ error: 'no_global_config' }, 400)
+      if (err instanceof VaultError) {
+        console.error('[superadmin/smtp/test] vault error', err)
+        return c.json({ error: 'send_failed', detail: 'configuration_error' }, 422)
+      }
       const detail = err instanceof Error ? err.message : 'send_failed'
       return c.json({ error: 'send_failed', detail }, 422)
     }
