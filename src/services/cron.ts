@@ -3,6 +3,7 @@ import { createAdminClient } from './supabase'
 import { buildKey, KvCache } from './kv'
 import { RealtimeService } from './realtime'
 import { getStripeClient } from './secrets'
+import type { NotificationService } from './notifications'
 
 // ── Inventory restore ─────────────────────────────────────────────────────────
 
@@ -110,5 +111,72 @@ export async function runAutoReject(env: Env, ctx: ExecutionContext): Promise<vo
     for (const orderId of orderIds) {
       realtime.broadcast(restaurantId, 'order_rejected', { order_id: orderId }, ctx)
     }
+  }
+}
+
+// ── Device-offline owner alert ──────────────────────────────────────────────
+
+const DEVICE_OFFLINE_THRESHOLD_MS = 2 * 60_000
+
+/**
+ * Runs every minute (same cron trigger as the rest of this file). For every
+ * restaurant that has at least one non-revoked device, checks whether ANY of
+ * them has heartbeated within the last 2 minutes. If none have, and the
+ * restaurant hasn't already been alerted for this outage
+ * (`device_offline_alert_sent_at`), emails the owner once. The flag is
+ * cleared as soon as any device reports back online, so the next outage
+ * triggers a fresh alert instead of staying silent forever.
+ *
+ * Restaurants with zero devices ever configured are intentionally not
+ * alerted here — that's a setup/onboarding state, not an outage.
+ */
+export async function runDeviceOfflineAlert(env: Env, notifier: (env: Env) => NotificationService): Promise<void> {
+  const admin = createAdminClient(env)
+  const now = Date.now()
+
+  const { data: devices } = await admin
+    .from('devices')
+    .select('restaurant_id, last_seen_at')
+    .is('revoked_at', null)
+
+  if (!devices?.length) return
+
+  const anyOnlineByRestaurant = new Map<string, boolean>()
+  for (const d of devices as Array<{ restaurant_id: string; last_seen_at: string | null }>) {
+    const online = d.last_seen_at !== null && now - new Date(d.last_seen_at).getTime() < DEVICE_OFFLINE_THRESHOLD_MS
+    anyOnlineByRestaurant.set(d.restaurant_id, (anyOnlineByRestaurant.get(d.restaurant_id) ?? false) || online)
+  }
+
+  for (const [restaurantId, anyOnline] of anyOnlineByRestaurant) {
+    const { data: restaurant } = await admin
+      .from('restaurants')
+      .select('display_name, device_offline_alert_sent_at')
+      .eq('id', restaurantId)
+      .maybeSingle()
+    if (!restaurant) continue
+    const r = restaurant as { display_name: string; device_offline_alert_sent_at: string | null }
+
+    if (anyOnline) {
+      if (r.device_offline_alert_sent_at) {
+        await admin.from('restaurants').update({ device_offline_alert_sent_at: null }).eq('id', restaurantId)
+      }
+      continue
+    }
+
+    // All devices offline — but don't re-alert if we already have for this outage.
+    if (r.device_offline_alert_sent_at) continue
+
+    const { data: owner } = await admin
+      .from('users')
+      .select('email')
+      .eq('restaurant_id', restaurantId)
+      .eq('role', 'restaurant_owner')
+      .eq('active', true)
+      .maybeSingle()
+    const ownerEmail = (owner as { email: string } | null)?.email
+    if (!ownerEmail) continue
+
+    await notifier(env).sendDeviceOfflineAlert(restaurantId, r.display_name, ownerEmail)
+    await admin.from('restaurants').update({ device_offline_alert_sent_at: new Date().toISOString() }).eq('id', restaurantId)
   }
 }
