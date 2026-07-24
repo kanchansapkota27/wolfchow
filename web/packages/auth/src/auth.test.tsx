@@ -257,6 +257,64 @@ describe('STORY-048 · auth flows', () => {
     expect(screen.queryByRole('tab')).not.toBeInTheDocument()
   })
 
+  it('expired token on mount: session cleared, state resolves to signed-out', async () => {
+    const expiredToken = makeToken({
+      sub: 'u1',
+      role: 'restaurant_owner',
+      restaurant_id: 'r1',
+      permissions: [],
+      exp: Math.floor(Date.now() / 1000) - 60, // expired 1 minute ago
+    })
+    const { wrapper, session } = makeHarness({ token: expiredToken, role: 'restaurant_owner', initialToken: expiredToken })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(session.getAccessToken()).toBeNull()
+    expect(result.current.role).toBeNull()
+    expect(result.current.user).toBeNull()
+  })
+
+  it('unexpired token on mount: not cleared, state resolves to signed-in', async () => {
+    const validToken = makeToken({
+      sub: 'u1',
+      role: 'restaurant_owner',
+      restaurant_id: 'r1',
+      permissions: [],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    })
+    const { wrapper, session } = makeHarness({ token: validToken, role: 'restaurant_owner', initialToken: validToken })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(session.getAccessToken()).toBe(validToken)
+    expect(result.current.role).toBe('restaurant_owner')
+  })
+
+  it('tab regains visibility with an expired token: state resyncs to signed-out without a manual refresh', async () => {
+    const validToken = makeToken({
+      sub: 'u1',
+      role: 'restaurant_owner',
+      restaurant_id: 'r1',
+      permissions: [],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    })
+    const { wrapper, session } = makeHarness({ token: validToken, role: 'restaurant_owner', initialToken: validToken })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.role).toBe('restaurant_owner')
+
+    // Simulate the token going stale/expired while the tab was backgrounded
+    // (e.g. cleared by a 401 elsewhere, or simply past its exp) — the
+    // provider has no way to know this happened until it re-checks.
+    session.clear()
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    await waitFor(() => expect(result.current.role).toBeNull())
+  })
+
   it('LoginPage default: both method tabs shown', async () => {
     const token = makeToken({ sub: 'u1', role: 'superadmin', restaurant_id: null, permissions: [] })
     const { wrapper } = makeHarness({ token, role: 'superadmin' })

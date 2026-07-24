@@ -102,7 +102,20 @@ export function AuthProvider({
   const [state, setState] = useState<AuthState>(EMPTY)
 
   const deriveAndSet = useCallback(async () => {
-    const token = session.getAccessToken()
+    let token = session.getAccessToken()
+    if (token) {
+      const claims = decodeJwtClaims(token)
+      // A token that expired while the tab was backgrounded is unusable —
+      // clear it now so this provider's state doesn't keep reporting
+      // "authenticated" against a token every API call would 401 on. Left
+      // unchecked, a still-mounted protected page can render against stale
+      // query data during the resulting refetch-on-focus error storm and
+      // throw with no error boundary above it — a blank screen on refocus.
+      if (claims?.exp != null && claims.exp * 1000 <= Date.now()) {
+        session.clear()
+        token = null
+      }
+    }
     const base = deriveFromToken(token)
     let suspended = false
     if (token && probeSuspended) {
@@ -117,6 +130,18 @@ export function AuthProvider({
 
   useEffect(() => {
     void deriveAndSet()
+  }, [deriveAndSet])
+
+  // Re-derive auth state whenever the tab regains visibility — the stored
+  // token may have expired (or been cleared by a 401 elsewhere) while the
+  // tab was backgrounded, and without this the provider's state would stay
+  // stale until some unrelated re-render happened to trigger deriveAndSet.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') void deriveAndSet()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [deriveAndSet])
 
   const hasPermission = useCallback(
