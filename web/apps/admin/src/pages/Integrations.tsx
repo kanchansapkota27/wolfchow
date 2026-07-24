@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Eye, Code2, CheckCircle2, Palette, ArrowRight } from 'lucide-react'
+import { Eye, Monitor, Smartphone, Code2, CheckCircle2, Palette, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { useApi, API_URL } from '../lib/api'
 import { buildEmbedCode, buildPreviewSrcDoc } from '../lib/widgetEmbed'
@@ -27,6 +27,7 @@ function WidgetLivePreview({ slug }: { slug: string }) {
 export function Integrations() {
   const api = useApi()
   const [copied, setCopied] = useState(false)
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
 
   const { status, data: restaurant } = useQuery({
     queryKey: ['restaurant'],
@@ -115,10 +116,10 @@ export function Integrations() {
         <ArrowRight size={16} className="shrink-0 text-blue-400" />
       </Link>
 
-      {/* Live preview — full width, below the embed card. The widget is a
-          fixed-layout app panel (it doesn't reflow at different container
-          widths), so there's no meaningful "desktop vs mobile" view to
-          toggle between — just show it at its natural size. */}
+      {/* Live preview — full width, below the embed card. The widget itself
+          is a fixed-layout app panel (it doesn't reflow internally at
+          different widths), so this toggle only changes the surrounding
+          frame size, not the widget's own layout. */}
       <div className="rounded-2xl border border-gray-200 bg-white">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -126,6 +127,22 @@ export function Integrations() {
             <span className="text-xs font-bold tracking-widest text-gray-700 uppercase">Live Preview</span>
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex gap-1">
+              <button
+                onClick={() => setPreviewMode('desktop')}
+                className={`rounded-md p-1.5 transition-colors ${previewMode === 'desktop' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                aria-label="Desktop preview"
+              >
+                <Monitor size={15} />
+              </button>
+              <button
+                onClick={() => setPreviewMode('mobile')}
+                className={`rounded-md p-1.5 transition-colors ${previewMode === 'mobile' ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                aria-label="Mobile preview"
+              >
+                <Smartphone size={15} />
+              </button>
+            </div>
             <span className="flex items-center gap-1.5 text-xs text-green-600">
               <CheckCircle2 size={13} />
               Mobile Optimized
@@ -140,7 +157,7 @@ export function Integrations() {
         <div className="flex items-center justify-center bg-gray-50 p-6">
           <div
             className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
-            style={{ width: 390, height: 720 }}
+            style={previewMode === 'mobile' ? { width: 390, height: 720 } : { width: '100%', maxWidth: 900, height: 720 }}
           >
             <WidgetLivePreview slug={restaurant.slug} />
           </div>
